@@ -8,17 +8,10 @@ use crate::audit;
 use crate::error::AppError;
 use crate::fsops::{self, DirEntry, FileHash, ListDirFilter};
 use crate::locking::{self, LockStatus};
+use crate::session::{Session, SessionView};
 use crate::users::{self, UserInfo};
 use crate::workspace::{self, WorkspaceInfo};
 use crate::AppState;
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionInfo {
-    pub workspace: Option<WorkspaceInfo>,
-    pub user: Option<UserInfo>,
-    pub machine_id: String,
-}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -141,7 +134,16 @@ pub fn login(
 ) -> Result<UserInfo, AppError> {
     let root = state.root()?;
     let user = users::authenticate(&root, &login, &password)?;
-    state.set_user(user.clone());
+    users::touch_last_login(&root, &user.id)?;
+    state.set_session(Session {
+        user_id: user.id.clone(),
+        login: user.login.clone(),
+        display_name: user.display_name.clone(),
+        role_id: user.role_id.clone(),
+        avatar_color: user.avatar_color.clone(),
+        must_change_password: user.must_change_password,
+        login_at: audit::now_rfc3339(),
+    });
     audit::emit(
         &user.login,
         "auth.login",
@@ -154,13 +156,13 @@ pub fn login(
 
 #[tauri::command(rename = "logout")]
 pub fn logout(state: State<'_, AppState>) {
-    let actor = state.actor();
-    state.clear_user();
+    let actor = state.actor().label();
+    state.clear_session();
     audit::emit(&actor, "auth.logout", "user", &actor, serde_json::json!({}));
 }
 
 #[tauri::command(rename = "getSession")]
-pub fn get_session(state: State<'_, AppState>) -> SessionInfo {
+pub fn get_session(state: State<'_, AppState>) -> Result<SessionView, AppError> {
     state.session()
 }
 

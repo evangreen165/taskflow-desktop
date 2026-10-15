@@ -20,14 +20,12 @@ pub const ALL: [&str; 16] = [
     "workspace.settings",
 ];
 
-#[allow(dead_code)]
 pub fn is_valid(perm: &str) -> bool {
     ALL.contains(&perm)
 }
 
 /// Keeps only known permissions, preserving first-seen order and dropping
 /// duplicates.
-#[allow(dead_code)]
 pub fn filter_valid<I>(perms: I) -> Vec<String>
 where
     I: IntoIterator<Item = String>,

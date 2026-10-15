@@ -90,7 +90,6 @@ pub fn default_roles() -> Vec<Role> {
     ]
 }
 
-#[allow(dead_code)]
 fn role_path(root: &Path, role_id: &str) -> PathBuf {
     root.join("roles").join(format!("{role_id}.json"))
 }
@@ -118,7 +117,6 @@ pub fn list(root: &Path) -> Result<Vec<Role>, AppError> {
 }
 
 /// Reads one role; a missing file is `ROLE_NOT_FOUND` (never an empty role).
-#[allow(dead_code)]
 pub fn get(root: &Path, role_id: &str) -> Result<Role, AppError> {
     let path = role_path(root, role_id);
     if !path.is_file() {
@@ -133,7 +131,6 @@ pub fn get(root: &Path, role_id: &str) -> Result<Role, AppError> {
 /// Resolves the effective permissions of a role. Reads the role from disk on
 /// every call so role edits take effect per-call. A missing role file is a hard
 /// `ROLE_NOT_FOUND` — it must never silently grant permissions.
-#[allow(dead_code)]
 pub fn permissions_for(root: &Path, role_id: &str) -> Result<Vec<String>, AppError> {
     let role = get(root, role_id)?;
     Ok(permissions::filter_valid(role.permissions))
