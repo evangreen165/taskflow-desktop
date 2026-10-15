@@ -109,7 +109,8 @@ impl AppState {
     }
 
     /// `AUTH_REQUIRED` + the session's role must grant `perm`. On a missing
-    /// role file, emits `role.missing` and returns `ROLE_NOT_FOUND`.
+    /// role file, emits `role.missing` (at most once per session) and returns
+    /// `ROLE_NOT_FOUND`.
     #[allow(dead_code)]
     pub fn require_perm(&self, perm: &str) -> Result<Session, AppError> {
         let session = self.require_auth()?;
@@ -126,16 +127,21 @@ impl AppState {
                 }
             }
             Err(e) if e.code == "ROLE_NOT_FOUND" => {
-                audit::emit(
-                    &session::ActorId::User(session.user_id.clone()).label(),
-                    "role.missing",
-                    "role",
-                    &session.role_id,
-                    serde_json::json!({
-                        "userId": session.user_id,
-                        "roleId": session.role_id,
-                    }),
-                );
+                if !session.role_missing_reported {
+                    audit::emit(
+                        &session::ActorId::User(session.user_id.clone()),
+                        "role.missing",
+                        "role",
+                        &session.role_id,
+                        serde_json::json!({
+                            "userId": session.user_id,
+                            "roleId": session.role_id,
+                        }),
+                    );
+                    if let Some(active) = self.inner.lock().session.as_mut() {
+                        active.role_missing_reported = true;
+                    }
+                }
                 Err(e)
             }
             Err(e) => Err(e),
@@ -236,6 +242,8 @@ mod tests {
     use crate::users;
     use crate::workspace;
     use tempfile::tempdir;
+    use tracing::Dispatch;
+    use tracing_subscriber::{layer::SubscriberExt, registry::Registry};
 
     fn session_for(user_id: &str, role_id: &str, must_change: bool) -> Session {
         Session {
@@ -246,7 +254,22 @@ mod tests {
             avatar_color: "#5b5bd6".to_string(),
             must_change_password: must_change,
             login_at: "2026-10-15T00:00:00Z".to_string(),
+            role_missing_reported: false,
         }
+    }
+
+    fn install_audit_layer(state: &AppState) -> tracing::dispatcher::DefaultGuard {
+        let layer = audit::AuditLayer::new(state.audit_root.clone());
+        let dispatch = Dispatch::new(Registry::default().with(layer));
+        tracing::dispatcher::set_default(&dispatch)
+    }
+
+    fn last_audit_line(root: &std::path::Path) -> serde_json::Value {
+        let month = chrono::Utc::now().format("%Y-%m").to_string();
+        let content = std::fs::read_to_string(root.join("audit").join(format!("{month}.log")))
+            .expect("audit log exists");
+        let lines: Vec<&str> = content.lines().collect();
+        serde_json::from_str(lines.last().expect("has lines")).unwrap()
     }
 
     #[test]
@@ -317,5 +340,70 @@ mod tests {
 
         state.set_session(session_for(&user.id, "admin", false));
         assert!(state.require_writable().is_ok());
+    }
+
+    #[test]
+    fn role_missing_is_deduplicated_per_session() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "Dedup").unwrap();
+        let user = users::create(dir.path(), "ex", "password123", "E", "observer", None).unwrap();
+        std::fs::remove_file(dir.path().join("roles").join("observer.json")).unwrap();
+
+        let state = AppState::new("m".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+        state.set_session(session_for(&user.id, "observer", false));
+        let _guard = install_audit_layer(&state);
+
+        for _ in 0..5 {
+            assert_eq!(
+                state.require_perm("task.view").unwrap_err().code,
+                "ROLE_NOT_FOUND"
+            );
+        }
+        let month = chrono::Utc::now().format("%Y-%m").to_string();
+        let content =
+            std::fs::read_to_string(dir.path().join("audit").join(format!("{month}.log"))).unwrap();
+        let count = content.lines().filter(|l| l.contains("role.missing")).count();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn init_workspace_audits_system_actor_reason() {
+        let dir = tempdir().unwrap();
+        let state = AppState::new("m".into());
+        let _guard = install_audit_layer(&state);
+        crate::commands::init_workspace_impl(&state, dir.path().to_path_buf(), "Init WS").unwrap();
+        let line = last_audit_line(dir.path());
+        assert_eq!(line["userId"], "s:init");
+        assert_eq!(line["action"], "workspace.create");
+        assert_ne!(line["userId"], "s:anonymous");
+    }
+
+    #[test]
+    fn logout_audits_the_logged_in_user_not_anonymous() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "Logout").unwrap();
+        let admin = users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+
+        let state = AppState::new("m".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+        let _guard = install_audit_layer(&state);
+
+        crate::commands::login_impl(&state, "admin", "password123").unwrap();
+        crate::commands::logout_impl(&state);
+
+        let month = chrono::Utc::now().format("%Y-%m").to_string();
+        let content =
+            std::fs::read_to_string(dir.path().join("audit").join(format!("{month}.log"))).unwrap();
+        let lines: Vec<serde_json::Value> = content
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0]["action"], "auth.login");
+        assert_eq!(lines[0]["userId"], format!("u:{}", admin.id));
+        assert_eq!(lines[1]["action"], "auth.logout");
+        assert_eq!(lines[1]["userId"], format!("u:{}", admin.id));
+        assert_ne!(lines[1]["userId"], "s:anonymous");
     }
 }

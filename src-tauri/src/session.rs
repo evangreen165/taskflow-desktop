@@ -15,6 +15,8 @@ pub struct Session {
     pub avatar_color: String,
     pub must_change_password: bool,
     pub login_at: String,
+    /// Dedup flag: `role.missing` is emitted at most once per session.
+    pub role_missing_reported: bool,
 }
 
 /// Role summary exposed over IPC (id, display name, color).
@@ -53,6 +55,14 @@ impl ActorId {
         match self {
             ActorId::User(id) => format!("u:{id}"),
             ActorId::System(reason) => format!("s:{reason}"),
+        }
+    }
+
+    /// Entity id for audit events: the raw user id, or the system reason.
+    pub fn id(&self) -> String {
+        match self {
+            ActorId::User(id) => id.clone(),
+            ActorId::System(reason) => reason.to_string(),
         }
     }
 }

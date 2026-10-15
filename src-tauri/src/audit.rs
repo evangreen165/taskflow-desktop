@@ -12,6 +12,7 @@ use tracing_subscriber::layer::{Context, Layer};
 
 use crate::error::AppError;
 use crate::fsops;
+use crate::session::ActorId;
 
 pub use crate::locking::now_rfc3339;
 
@@ -24,14 +25,15 @@ pub const AUDIT_TARGET: &str = "taskflow_audit";
 struct JournalEvent<'a> {
     id: String,
     ts: String,
-    actor: &'a str,
+    actor: String,
     kind: &'a str,
     entity: &'a str,
     entity_id: &'a str,
     data: &'a Value,
 }
 
-/// Append-only change journal: one immutable file per event.
+/// Append-only change journal: one immutable file per event. `actor` is the
+/// serialized `ActorId` label (`u:{userId}` / `s:{reason}`).
 pub fn write_event(
     root: &Path,
     actor: &str,
@@ -46,7 +48,7 @@ pub fn write_event(
     let event = JournalEvent {
         id: uuid::Uuid::new_v4().to_string(),
         ts: now_rfc3339(),
-        actor,
+        actor: actor.to_string(),
         kind,
         entity,
         entity_id,
@@ -55,14 +57,15 @@ pub fn write_event(
     fsops::write_json_atomic(&path, &event)
 }
 
-/// Appends one JSON line to the monthly user-action audit log.
+/// Appends one JSON line to the monthly user-action audit log. `actor` is the
+/// serialized `ActorId` label (`u:{userId}` / `s:{reason}`).
 pub fn append_audit(
     root: &Path,
     actor: &str,
     action: &str,
     entity: &str,
     entity_id: &str,
-    detail: Value,
+    meta: Value,
 ) -> Result<(), AppError> {
     let month = chrono::Utc::now().format("%Y-%m").to_string();
     let path = crate::path::resolve_rel(root, &format!("audit/{month}.log"))?;
@@ -71,11 +74,11 @@ pub fn append_audit(
     }
     let line = serde_json::json!({
         "ts": now_rfc3339(),
-        "actor": actor,
+        "userId": actor,
         "action": action,
         "entity": entity,
         "entityId": entity_id,
-        "detail": detail,
+        "meta": meta,
     });
     let mut text = serde_json::to_string(&line)?;
     text.push('\n');
@@ -91,15 +94,16 @@ pub fn append_audit(
 
 /// Emits a user-action audit event through `tracing`. The `AuditLayer`
 /// installed by the app writes it to the workspace `audit/` log.
-pub fn emit(actor: &str, action: &str, entity: &str, entity_id: &str, detail: Value) {
-    let detail = detail.to_string();
+pub fn emit(actor: &ActorId, action: &str, entity: &str, entity_id: &str, meta: Value) {
+    let label = actor.label();
+    let meta = meta.to_string();
     tracing::info!(
         target: AUDIT_TARGET,
-        actor = actor,
+        userId = label.as_str(),
         action = action,
         entity = entity,
-        entity_id = entity_id,
-        detail = detail.as_str()
+        entityId = entity_id,
+        meta = meta.as_str()
     );
 }
 
@@ -115,11 +119,11 @@ struct AuditFields {
 impl AuditFields {
     fn set(&mut self, name: &str, value: String) {
         match name {
-            "actor" => self.actor = Some(value),
+            "userId" => self.actor = Some(value),
             "action" => self.action = Some(value),
             "entity" => self.entity = Some(value),
-            "entity_id" => self.entity_id = Some(value),
-            "detail" => self.detail = Some(value),
+            "entityId" => self.entity_id = Some(value),
+            "meta" => self.detail = Some(value),
             _ => {}
         }
     }
@@ -160,18 +164,18 @@ impl<S: Subscriber> Layer<S> for AuditLayer {
             Some(root) => root,
             None => return,
         };
-        let detail: Value = fields
+        let meta: Value = fields
             .detail
             .as_deref()
             .and_then(|raw| serde_json::from_str(raw).ok())
             .unwrap_or(Value::Null);
         let _ = append_audit(
             &root,
-            fields.actor.as_deref().unwrap_or("system"),
+            fields.actor.as_deref().unwrap_or("s:anonymous"),
             fields.action.as_deref().unwrap_or("event"),
             fields.entity.as_deref().unwrap_or(""),
             fields.entity_id.as_deref().unwrap_or(""),
-            detail,
+            meta,
         );
     }
 }
@@ -185,10 +189,24 @@ mod tests {
     fn write_event_creates_unique_files() {
         let dir = tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("events")).unwrap();
-        write_event(dir.path(), "alice", "task.created", "task", "T-1", serde_json::json!({ "x": 1 }))
-            .unwrap();
-        write_event(dir.path(), "alice", "task.created", "task", "T-2", serde_json::json!({}))
-            .unwrap();
+        write_event(
+            dir.path(),
+            "u:alice",
+            "task.created",
+            "task",
+            "T-1",
+            serde_json::json!({ "x": 1 }),
+        )
+        .unwrap();
+        write_event(
+            dir.path(),
+            "u:alice",
+            "task.created",
+            "task",
+            "T-2",
+            serde_json::json!({}),
+        )
+        .unwrap();
         let files: Vec<_> = std::fs::read_dir(dir.path().join("events")).unwrap().collect();
         assert_eq!(files.len(), 2);
     }
@@ -197,16 +215,36 @@ mod tests {
     fn append_audit_writes_jsonl() {
         let dir = tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("audit")).unwrap();
-        append_audit(dir.path(), "alice", "task.create", "task", "T-1", serde_json::json!({})).unwrap();
-        append_audit(dir.path(), "bob", "task.edit", "task", "T-1", serde_json::json!({})).unwrap();
+        append_audit(
+            dir.path(),
+            "u:alice",
+            "task.create",
+            "task",
+            "T-1",
+            serde_json::json!({}),
+        )
+        .unwrap();
+        append_audit(
+            dir.path(),
+            "s:init",
+            "workspace.create",
+            "workspace",
+            "W-1",
+            serde_json::json!({}),
+        )
+        .unwrap();
         let month = chrono::Utc::now().format("%Y-%m").to_string();
         let content =
             std::fs::read_to_string(dir.path().join("audit").join(format!("{month}.log"))).unwrap();
         let lines: Vec<_> = content.lines().collect();
         assert_eq!(lines.len(), 2);
         let first: Value = serde_json::from_str(lines[0]).unwrap();
-        assert_eq!(first["actor"], "alice");
+        assert_eq!(first["userId"], "u:alice");
         assert_eq!(first["action"], "task.create");
         assert_eq!(first["entityId"], "T-1");
+        let second: Value = serde_json::from_str(lines[1]).unwrap();
+        assert_eq!(second["userId"], "s:init");
+        assert!(second.get("actor").is_none());
+        assert!(second.get("detail").is_none());
     }
 }

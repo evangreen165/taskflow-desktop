@@ -8,7 +8,7 @@ use crate::audit;
 use crate::error::AppError;
 use crate::fsops::{self, DirEntry, FileHash, ListDirFilter};
 use crate::locking::{self, LockStatus};
-use crate::session::{Session, SessionView};
+use crate::session::{ActorId, Session, SessionView};
 use crate::users::{self, UserInfo};
 use crate::workspace::{self, WorkspaceInfo};
 use crate::AppState;
@@ -28,6 +28,24 @@ pub struct FolderInspection {
 // Workspace lifecycle
 // ---------------------------------------------------------------------------
 
+/// Testable body of `initWorkspace`.
+pub fn init_workspace_impl(
+    state: &AppState,
+    root: PathBuf,
+    name: &str,
+) -> Result<WorkspaceInfo, AppError> {
+    let info = workspace::init(&root, name)?;
+    state.set_workspace(root, info.clone());
+    audit::emit(
+        &ActorId::System("init"),
+        "workspace.create",
+        "workspace",
+        &info.workspace_id,
+        serde_json::json!({ "name": info.name }),
+    );
+    Ok(info)
+}
+
 /// Creates a workspace at `path` and activates it. `path` is the absolute
 /// workspace root chosen by the user; it is the only place absolute paths are
 /// accepted and it is never stored inside data files.
@@ -37,15 +55,22 @@ pub fn init_workspace(
     path: String,
     name: String,
 ) -> Result<WorkspaceInfo, AppError> {
-    let root = PathBuf::from(&path);
-    let info = workspace::init(&root, &name)?;
+    init_workspace_impl(&state, PathBuf::from(&path), &name)
+}
+
+/// Testable body of `activateWorkspace`.
+pub fn activate_workspace_impl(
+    state: &AppState,
+    root: PathBuf,
+) -> Result<WorkspaceInfo, AppError> {
+    let info = workspace::validate(&root)?;
     state.set_workspace(root, info.clone());
     audit::emit(
-        "system",
-        "workspace.create",
+        &ActorId::System("activate"),
+        "workspace.activate",
         "workspace",
         &info.workspace_id,
-        serde_json::json!({ "name": info.name }),
+        serde_json::json!({}),
     );
     Ok(info)
 }
@@ -56,17 +81,7 @@ pub fn activate_workspace(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<WorkspaceInfo, AppError> {
-    let root = PathBuf::from(&path);
-    let info = workspace::validate(&root)?;
-    state.set_workspace(root, info.clone());
-    audit::emit(
-        "system",
-        "workspace.activate",
-        "workspace",
-        &info.workspace_id,
-        serde_json::json!({}),
-    );
-    Ok(info)
+    activate_workspace_impl(&state, PathBuf::from(&path))
 }
 
 /// Inspects a candidate folder without activating it (used by onboarding).
@@ -110,14 +125,14 @@ pub fn create_admin(
     let info = users::create_admin(&root, &login, &password, &full_name)?;
     audit::write_event(
         &root,
-        "system",
+        &ActorId::System("bootstrap").label(),
         "user.created",
         "user",
         &info.login,
         serde_json::json!({ "role": info.role_id }),
     )?;
     audit::emit(
-        "system",
+        &ActorId::System("bootstrap"),
         "user.create",
         "user",
         &info.login,
@@ -126,14 +141,14 @@ pub fn create_admin(
     Ok(info)
 }
 
-#[tauri::command(rename = "login")]
-pub fn login(
-    state: State<'_, AppState>,
-    login: String,
-    password: String,
+/// Testable body of `login`.
+pub fn login_impl(
+    state: &AppState,
+    login: &str,
+    password: &str,
 ) -> Result<UserInfo, AppError> {
     let root = state.root()?;
-    let user = users::authenticate(&root, &login, &password)?;
+    let user = users::authenticate(&root, login, password)?;
     users::touch_last_login(&root, &user.id)?;
     state.set_session(Session {
         user_id: user.id.clone(),
@@ -143,22 +158,44 @@ pub fn login(
         avatar_color: user.avatar_color.clone(),
         must_change_password: user.must_change_password,
         login_at: audit::now_rfc3339(),
+        role_missing_reported: false,
     });
     audit::emit(
-        &user.login,
+        &ActorId::User(user.id.clone()),
         "auth.login",
         "user",
-        &user.login,
+        &user.id,
         serde_json::json!({}),
     );
     Ok(user)
 }
 
+#[tauri::command(rename = "login")]
+pub fn login(
+    state: State<'_, AppState>,
+    login: String,
+    password: String,
+) -> Result<UserInfo, AppError> {
+    login_impl(&state, &login, &password)
+}
+
+/// Testable body of `logout`. The actor is captured **before** the session is
+/// cleared so the audit line names the user, never `s:anonymous`.
+pub fn logout_impl(state: &AppState) {
+    let actor = state.actor();
+    state.clear_session();
+    audit::emit(
+        &actor,
+        "auth.logout",
+        "user",
+        &actor.id(),
+        serde_json::json!({}),
+    );
+}
+
 #[tauri::command(rename = "logout")]
 pub fn logout(state: State<'_, AppState>) {
-    let actor = state.actor().label();
-    state.clear_session();
-    audit::emit(&actor, "auth.logout", "user", &actor, serde_json::json!({}));
+    logout_impl(&state);
 }
 
 #[tauri::command(rename = "getSession")]

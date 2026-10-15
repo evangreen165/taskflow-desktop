@@ -122,7 +122,7 @@ pub fn init(root: &Path, name: &str) -> Result<WorkspaceInfo, AppError> {
 
     crate::audit::write_event(
         root,
-        "system",
+        &crate::session::ActorId::System("init").label(),
         "workspace.created",
         "workspace",
         &cfg.workspace_id,
