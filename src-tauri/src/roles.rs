@@ -144,7 +144,6 @@ pub fn permissions_for(root: &Path, role_id: &str) -> Result<Vec<String>, AppErr
     Ok(permissions::filter_valid(role.permissions))
 }
 
-#[allow(dead_code)]
 fn is_valid_role_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 32
@@ -153,7 +152,6 @@ fn is_valid_role_id(id: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
-#[allow(dead_code)]
 fn validate_role_input(name: &str) -> Result<(), AppError> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 80 {
@@ -166,7 +164,6 @@ fn validate_role_input(name: &str) -> Result<(), AppError> {
 }
 
 /// Creates a custom role (never overwrites; exclusive create).
-#[allow(dead_code)]
 pub fn create(
     root: &Path,
     id: &str,
@@ -200,7 +197,6 @@ pub fn create(
 }
 
 /// Editable fields for `rolesUpdate`.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RolePatch {
@@ -211,7 +207,6 @@ pub struct RolePatch {
 }
 
 /// Applies a role patch. `admin` permissions are fixed to the full registry.
-#[allow(dead_code)]
 pub fn update(root: &Path, role_id: &str, patch: RolePatch) -> Result<Role, AppError> {
     let mut role = get(root, role_id)?;
     if role.is_system && role.id == "admin" && patch.permissions.is_some() {
@@ -239,13 +234,11 @@ pub fn update(root: &Path, role_id: &str, patch: RolePatch) -> Result<Role, AppE
 }
 
 /// True when at least one user references the role.
-#[allow(dead_code)]
 pub fn is_referenced(root: &Path, role_id: &str) -> Result<bool, AppError> {
     Ok(crate::users::list(root)?.iter().any(|u| u.role_id == role_id))
 }
 
 /// Deletes a custom role. System roles and referenced roles are blocked.
-#[allow(dead_code)]
 pub fn delete(root: &Path, role_id: &str) -> Result<(), AppError> {
     let role = get(root, role_id)?;
     if role.is_system {

@@ -112,7 +112,6 @@ impl AppState {
     /// `AUTH_REQUIRED` + the session's role must grant `perm`. A missing role
     /// file emits `role.missing` (at most once per session) and returns
     /// `ROLE_NOT_FOUND`; an empty role returns `ROLE_EMPTY`.
-    #[allow(dead_code)]
     pub fn require_perm(&self, perm: &str) -> Result<Session, AppError> {
         let session = self.require_auth()?;
         let root = self.root()?;
@@ -158,7 +157,6 @@ impl AppState {
 
     /// `AUTH_REQUIRED` + the session must not be forced to change its
     /// password (`PASSWORD_CHANGE_REQUIRED`).
-    #[allow(dead_code)]
     pub fn require_writable(&self) -> Result<Session, AppError> {
         let session = self.require_auth()?;
         if session.must_change_password {
@@ -222,9 +220,20 @@ pub fn run() {
             commands::activate_workspace,
             commands::inspect_folder,
             commands::create_admin,
-            commands::login,
-            commands::logout,
-            commands::get_session,
+            commands::auth_login,
+            commands::auth_logout,
+            commands::auth_change_password,
+            commands::auth_register,
+            commands::auth_reset_password,
+            commands::auth_refresh_session,
+            commands::users_list,
+            commands::users_update,
+            commands::users_deactivate,
+            commands::roles_list,
+            commands::roles_create,
+            commands::roles_update,
+            commands::roles_delete,
+            commands::permissions_list,
             commands::read_json,
             commands::write_json_atomic,
             commands::read_text,
@@ -436,5 +445,126 @@ mod tests {
         state.set_session(session_for(&user.id, "nodata", false));
         assert_eq!(state.require_perm("task.view").unwrap_err().code, "ROLE_EMPTY");
         assert_eq!(state.require_perm("users.manage").unwrap_err().code, "ROLE_EMPTY");
+    }
+
+    #[test]
+    fn write_commands_block_must_change_password() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "WriteGuard").unwrap();
+        let user = users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+
+        let state = AppState::new("m".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+        state.set_session(session_for(&user.id, "admin", true));
+
+        macro_rules! expect_pw {
+            ($name:literal, $expr:expr) => {{
+                let result = $expr;
+                assert_eq!(
+                    result.unwrap_err().code,
+                    "PASSWORD_CHANGE_REQUIRED",
+                    "{} must be blocked for mustChangePassword sessions",
+                    $name
+                );
+            }};
+        }
+
+        expect_pw!("writeJsonAtomic", crate::commands::write_json_atomic_impl(
+            &state, "a.json".to_string(), serde_json::Value::Null
+        ));
+        expect_pw!("writeTextAtomic", crate::commands::write_text_atomic_impl(
+            &state, "a.txt".to_string(), "x".to_string()
+        ));
+        expect_pw!("createExclusive", crate::commands::create_exclusive_impl(
+            &state, "a.json".to_string()
+        ));
+        expect_pw!("removePath", crate::commands::remove_path_impl(
+            &state, "a.json".to_string()
+        ));
+        expect_pw!("acquireLock", crate::commands::acquire_lock_impl(
+            &state, "task-T-1".to_string(), 60
+        ));
+        expect_pw!("releaseLock", crate::commands::release_lock_impl(
+            &state, "task-T-1".to_string(), "tok".to_string()
+        ));
+        expect_pw!("usersUpdate", crate::commands::users_update_impl(
+            &state, "u1".to_string(), crate::users::UserPatch::default()
+        ));
+        expect_pw!("usersDeactivate", crate::commands::users_deactivate_impl(
+            &state, "u1".to_string()
+        ));
+        expect_pw!("authResetPassword", crate::commands::auth_reset_password_impl(
+            &state, "u1".to_string(), "newpass1".to_string()
+        ));
+        expect_pw!("authRegister", crate::commands::auth_register_impl(
+            &state,
+            "u2".to_string(),
+            "password123".to_string(),
+            "N".to_string(),
+            "observer".to_string(),
+            None,
+        ));
+        expect_pw!("rolesCreate", crate::commands::roles_create_impl(
+            &state, "r1".to_string(), "R".to_string(), "".to_string(), "#000000".to_string(), vec![]
+        ));
+        expect_pw!("rolesUpdate", crate::commands::roles_update_impl(
+            &state, "r1".to_string(), crate::roles::RolePatch::default()
+        ));
+        expect_pw!("rolesDelete", crate::commands::roles_delete_impl(
+            &state, "r1".to_string()
+        ));
+    }
+
+    #[test]
+    fn login_failed_hashes_the_login() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "LoginFail").unwrap();
+        users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+
+        let state = AppState::new("m".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+        let _guard = install_audit_layer(&state);
+
+        let err = crate::commands::auth_login_impl(&state, "Admin", "wrong-password").unwrap_err();
+        assert_eq!(err.code, "AUTH_FAILED");
+
+        let month = chrono::Utc::now().format("%Y-%m").to_string();
+        let content =
+            std::fs::read_to_string(dir.path().join("audit").join(format!("{month}.log"))).unwrap();
+        let line: serde_json::Value =
+            serde_json::from_str(content.lines().last().unwrap()).unwrap();
+        assert_eq!(line["action"], "auth.login_failed");
+        assert_eq!(line["userId"], "s:anonymous");
+        let hash = line["meta"]["loginHash"].as_str().unwrap();
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(b"admin");
+        assert_eq!(hash, hex::encode(hasher.finalize()));
+        assert!(!content.contains("Admin"));
+        assert!(!content.contains("wrong-password"));
+    }
+
+    #[test]
+    fn audit_output_never_leaks_credentials() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "NoLeak").unwrap();
+        users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+
+        let state = AppState::new("m".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+        let _guard = install_audit_layer(&state);
+
+        crate::commands::login_impl(&state, "admin", "password123").unwrap();
+        let _ = crate::commands::auth_change_password_impl(&state, "password123", "new-password-1");
+        let _ = crate::commands::auth_login_impl(&state, "admin", "wrong-pass");
+
+        let month = chrono::Utc::now().format("%Y-%m").to_string();
+        let content =
+            std::fs::read_to_string(dir.path().join("audit").join(format!("{month}.log"))).unwrap();
+        assert!(!content.contains("passwordHash"));
+        assert!(!content.contains("passwordSalt"));
+        assert!(!content.contains("password123"));
+        assert!(!content.contains("new-password-1"));
+        assert!(!content.contains("wrong-pass"));
     }
 }

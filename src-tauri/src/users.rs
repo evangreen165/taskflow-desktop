@@ -66,7 +66,6 @@ impl From<&User> for UserInfo {
 
 /// Editable fields for `usersUpdate` — a patch that never touches password
 /// fields.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserPatch {
@@ -125,14 +124,12 @@ fn user_path(root: &Path, login: &str) -> PathBuf {
     root.join("users").join(format!("{login}.json"))
 }
 
-#[allow(dead_code)]
 fn write_user(root: &Path, user: &User) -> Result<(), AppError> {
     fsops::write_json_atomic(&user_path(root, &user.login), user)
 }
 
 /// Resolves an account by its `id`, scanning `users/` (the filename is the
 /// immutable login).
-#[allow(dead_code)]
 pub fn find_by_id(root: &Path, id: &str) -> Result<User, AppError> {
     for entry in std::fs::read_dir(root.join("users"))
         .map_err(|e| AppError::io("list users", e))?
@@ -231,7 +228,6 @@ pub fn authenticate(root: &Path, login: &str, password: &str) -> Result<UserInfo
 
 /// Self-service password change: old password must verify; on success the
 /// forced-change flag is cleared.
-#[allow(dead_code)]
 pub fn change_password(
     root: &Path,
     user_id: &str,
@@ -250,7 +246,6 @@ pub fn change_password(
 }
 
 /// Admin password reset: forces the user to change it on next login.
-#[allow(dead_code)]
 pub fn reset_password(
     root: &Path,
     user_id: &str,
@@ -265,7 +260,6 @@ pub fn reset_password(
 }
 
 /// Records the successful login timestamp.
-#[allow(dead_code)]
 pub fn touch_last_login(root: &Path, user_id: &str) -> Result<UserInfo, AppError> {
     let mut user = find_by_id(root, user_id)?;
     user.last_login_at = Some(now_rfc3339());
@@ -274,7 +268,6 @@ pub fn touch_last_login(root: &Path, user_id: &str) -> Result<UserInfo, AppError
 }
 
 /// Lists every account, sanitized, sorted by login.
-#[allow(dead_code)]
 pub fn list(root: &Path) -> Result<Vec<UserInfo>, AppError> {
     let dir = root.join("users");
     if !dir.is_dir() {
@@ -296,7 +289,6 @@ pub fn list(root: &Path) -> Result<Vec<UserInfo>, AppError> {
     Ok(out)
 }
 
-#[allow(dead_code)]
 fn count_active_admins_excluding(root: &Path, exclude_id: &str) -> usize {
     list(root)
         .map(|users| {
@@ -317,7 +309,6 @@ pub fn count_active_admins(root: &Path) -> usize {
 }
 
 /// Applies a patch. The last active admin cannot be deactivated or demoted.
-#[allow(dead_code)]
 pub fn update(root: &Path, user_id: &str, patch: UserPatch) -> Result<UserInfo, AppError> {
     let mut user = find_by_id(root, user_id)?;
     let was_active_admin = user.is_active && user.role_id == "admin";
@@ -366,7 +357,6 @@ pub fn update(root: &Path, user_id: &str, patch: UserPatch) -> Result<UserInfo, 
 }
 
 /// Deactivates an account (guarded by the last-active-admin rule).
-#[allow(dead_code)]
 pub fn deactivate(root: &Path, user_id: &str) -> Result<UserInfo, AppError> {
     let mut user = find_by_id(root, user_id)?;
     let was_active_admin = user.is_active && user.role_id == "admin";
