@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+src-tauri/target/
+
+# Tauri generated
+src-tauri/gen/
+
+# Editor
+.vscode/
+.idea/
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local test workspaces (never commit tempfile/scratch data)
+scratch/
+*.taskflow-*.tmp
