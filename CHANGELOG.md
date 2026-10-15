@@ -4,8 +4,6 @@ All notable changes to TaskFlow are documented in this file.
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-10-15
-
 ### Added
 
 - Authentication and in-memory sessions
@@ -21,3 +19,13 @@ All notable changes to TaskFlow are documented in this file.
 ### Security
 
 - Audit log: auth.login_failed stores loginHash, not plaintext login
+
+## [0.1.0] - 2026-10-15
+
+### Added
+
+- Tauri 2 + React 18 + TypeScript + Vite application shell
+- SMB-safe storage primitives: atomic writes, exclusive creates, locks, watcher, hashing
+- Workspace init / validate / activate and folder inspection
+- Argon2id password hashing (PHC) and admin onboarding
+- Monthly audit log and immutable event journal via tracing
