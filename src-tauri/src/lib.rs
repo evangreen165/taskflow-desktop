@@ -6,6 +6,8 @@ mod identity;
 mod locking;
 mod logging;
 mod path;
+mod permissions;
+mod roles;
 mod users;
 mod watcher;
 mod workspace;
