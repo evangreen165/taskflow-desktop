@@ -642,6 +642,132 @@ mod tests {
     }
 
     #[test]
+    fn write_commands_block_sensitive_paths() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "WritePath").unwrap();
+        let admin = users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+        let executor =
+            users::create(dir.path(), "ex", "password123", "E", "executor", None).unwrap();
+
+        let state = AppState::new("m".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+
+        // anonymous write into a sensitive path still reports AUTH_REQUIRED
+        assert_eq!(
+            crate::commands::write_json_atomic_impl(
+                &state,
+                "users/executor.json".to_string(),
+                serde_json::Value::Null,
+            )
+            .unwrap_err()
+            .code,
+            "AUTH_REQUIRED"
+        );
+
+        state.set_session(session_for(&executor.id, "executor", false));
+
+        let pw = "FORBIDDEN_PATH";
+        assert_eq!(
+            crate::commands::write_json_atomic_impl(
+                &state,
+                "users/executor.json".to_string(),
+                serde_json::json!({ "roleId": "admin" }),
+            )
+            .unwrap_err()
+            .code,
+            pw
+        );
+        assert_eq!(
+            crate::commands::write_json_atomic_impl(
+                &state,
+                "config.json".to_string(),
+                serde_json::Value::Null,
+            )
+            .unwrap_err()
+            .code,
+            pw
+        );
+        assert_eq!(
+            crate::commands::write_text_atomic_impl(
+                &state,
+                "roles/x.json".to_string(),
+                "x".to_string(),
+            )
+            .unwrap_err()
+            .code,
+            pw
+        );
+        assert_eq!(
+            crate::commands::create_exclusive_impl(&state, "users/new.json".to_string())
+                .unwrap_err()
+                .code,
+            pw
+        );
+        assert_eq!(
+            crate::commands::remove_path_impl(&state, "users/admin.json".to_string())
+                .unwrap_err()
+                .code,
+            pw
+        );
+        assert_eq!(
+            crate::commands::exists_impl(&state, "users/admin.json".to_string())
+                .unwrap_err()
+                .code,
+            pw
+        );
+        assert_eq!(
+            crate::commands::hash_file_impl(&state, "users/admin.json".to_string())
+                .unwrap_err()
+                .code,
+            pw
+        );
+
+        // admins are blocked from generic storage too
+        state.set_session(session_for(&admin.id, "admin", false));
+        assert_eq!(
+            crate::commands::write_json_atomic_impl(
+                &state,
+                "users/admin.json".to_string(),
+                serde_json::Value::Null,
+            )
+            .unwrap_err()
+            .code,
+            pw
+        );
+
+        // legitimate generic write still works
+        std::fs::create_dir_all(dir.path().join("tasks")).unwrap();
+        crate::commands::write_json_atomic_impl(
+            &state,
+            "tasks/abc.json".to_string(),
+            serde_json::json!({ "x": 1 }),
+        )
+        .unwrap();
+        let written: serde_json::Value =
+            crate::fsops::read_json(&dir.path().join("tasks").join("abc.json")).unwrap();
+        assert_eq!(written["x"], 1);
+
+        // typed command path still works for admins
+        let target =
+            users::create(dir.path(), "bob", "password123", "Bob", "observer", None).unwrap();
+        let updated = crate::commands::users_update_impl(
+            &state,
+            target.id.clone(),
+            crate::users::UserPatch {
+                display_name: Some("Боб".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.display_name, "Боб");
+        assert_eq!(
+            crate::fsops::read_json::<serde_json::Value>(&dir.path().join("users").join("bob.json"))
+                .unwrap()["displayName"],
+            "Боб"
+        );
+    }
+
+    #[test]
     fn login_failed_hashes_the_login() {
         let dir = tempdir().unwrap();
         let info = workspace::init(dir.path(), "LoginFail").unwrap();

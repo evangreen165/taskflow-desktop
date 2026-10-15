@@ -8,12 +8,19 @@ use crate::fsops::{self, DirEntry, FileHash, ListDirFilter};
 use crate::locking::{self, LockStatus};
 use crate::AppState;
 
-/// Paths that must never be read directly over IPC; they have dedicated
-/// commands (`usersList`, `rolesList`, `permissionsList`) or are internal.
+/// Paths that must never be read or written directly over IPC; they have
+/// dedicated commands (`usersList`, `rolesList`, `usersUpdate`, …) or are
+/// internal. Blocks `users/`, `roles/`, `audit/`, `events/` prefixes and the
+/// exact `config.json`.
 fn check_forbidden_path(path: &str) -> Result<(), AppError> {
     let normalized = path.trim_start_matches('/').replace('\\', "/");
+    let normalized = if let Some(rest) = normalized.strip_prefix("./") {
+        rest.to_string()
+    } else {
+        normalized
+    };
     let first = normalized.split('/').next().unwrap_or("");
-    if matches!(first, "users" | "roles" | "audit" | "events") {
+    if matches!(first, "users" | "roles" | "audit" | "events") || normalized == "config.json" {
         return Err(AppError::new(
             "FORBIDDEN_PATH",
             format!("'{path}' is restricted"),
@@ -22,13 +29,18 @@ fn check_forbidden_path(path: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Auth-first wrapper: a session is required, then the path is validated.
+fn require_authenticated_read(state: &AppState, path: &str) -> Result<(), AppError> {
+    state.require_auth()?;
+    check_forbidden_path(path)
+}
+
 // ---------------------------------------------------------------------------
 // Reads (require an authenticated session; sensitive prefixes are blocked)
 // ---------------------------------------------------------------------------
 
 pub fn read_json_impl(state: &AppState, path: String) -> Result<Value, AppError> {
-    state.require_auth()?;
-    check_forbidden_path(&path)?;
+    require_authenticated_read(state, &path)?;
     let root = state.root()?;
     let full = crate::path::resolve_rel(&root, &path)?;
     fsops::read_json(&full)
@@ -40,8 +52,7 @@ pub fn read_json(state: State<'_, AppState>, path: String) -> Result<Value, AppE
 }
 
 pub fn read_text_impl(state: &AppState, path: String) -> Result<String, AppError> {
-    state.require_auth()?;
-    check_forbidden_path(&path)?;
+    require_authenticated_read(state, &path)?;
     let root = state.root()?;
     let full = crate::path::resolve_rel(&root, &path)?;
     fsops::read_text(&full)
@@ -53,7 +64,7 @@ pub fn read_text(state: State<'_, AppState>, path: String) -> Result<String, App
 }
 
 pub fn exists_impl(state: &AppState, path: String) -> Result<bool, AppError> {
-    state.require_auth()?;
+    require_authenticated_read(state, &path)?;
     let root = state.root()?;
     let full = crate::path::resolve_rel(&root, &path)?;
     Ok(fsops::path_exists(&full))
@@ -69,8 +80,7 @@ pub fn list_dir_impl(
     path: String,
     filter: Option<ListDirFilter>,
 ) -> Result<Vec<DirEntry>, AppError> {
-    state.require_auth()?;
-    check_forbidden_path(&path)?;
+    require_authenticated_read(state, &path)?;
     let root = state.root()?;
     fsops::list_dir(&root, &path, &filter.unwrap_or_default())
 }
@@ -85,7 +95,7 @@ pub fn list_dir(
 }
 
 pub fn hash_file_impl(state: &AppState, path: String) -> Result<FileHash, AppError> {
-    state.require_auth()?;
+    require_authenticated_read(state, &path)?;
     let root = state.root()?;
     let full = crate::path::resolve_rel(&root, &path)?;
     fsops::hash_file(&full)
@@ -106,6 +116,7 @@ pub fn write_json_atomic_impl(
     value: Value,
 ) -> Result<(), AppError> {
     state.require_writable()?;
+    check_forbidden_path(&path)?;
     let root = state.root()?;
     let full = crate::path::resolve_rel(&root, &path)?;
     fsops::write_json_atomic(&full, &value)
@@ -126,6 +137,7 @@ pub fn write_text_atomic_impl(
     content: String,
 ) -> Result<(), AppError> {
     state.require_writable()?;
+    check_forbidden_path(&path)?;
     let root = state.root()?;
     let full = crate::path::resolve_rel(&root, &path)?;
     fsops::write_text_atomic(&full, &content)
@@ -143,6 +155,7 @@ pub fn write_text_atomic(
 /// Creates an empty file exclusively (O_CREAT|O_EXCL semantics).
 pub fn create_exclusive_impl(state: &AppState, path: String) -> Result<(), AppError> {
     state.require_writable()?;
+    check_forbidden_path(&path)?;
     let root = state.root()?;
     let full = crate::path::resolve_rel(&root, &path)?;
     fsops::create_exclusive(&full, b"")
@@ -155,6 +168,7 @@ pub fn create_exclusive(state: State<'_, AppState>, path: String) -> Result<(), 
 
 pub fn remove_path_impl(state: &AppState, path: String) -> Result<(), AppError> {
     state.require_writable()?;
+    check_forbidden_path(&path)?;
     let root = state.root()?;
     let full = crate::path::resolve_rel(&root, &path)?;
     fsops::remove_path(&full)
