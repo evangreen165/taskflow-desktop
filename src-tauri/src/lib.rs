@@ -109,15 +109,22 @@ impl AppState {
         session::view(&root, &session)
     }
 
-    /// `AUTH_REQUIRED` + the session's role must grant `perm`. On a missing
-    /// role file, emits `role.missing` (at most once per session) and returns
-    /// `ROLE_NOT_FOUND`.
+    /// `AUTH_REQUIRED` + the session's role must grant `perm`. A missing role
+    /// file emits `role.missing` (at most once per session) and returns
+    /// `ROLE_NOT_FOUND`; an empty role returns `ROLE_EMPTY`.
     #[allow(dead_code)]
     pub fn require_perm(&self, perm: &str) -> Result<Session, AppError> {
         let session = self.require_auth()?;
         let root = self.root()?;
-        match roles::permissions_for(&root, &session.role_id) {
-            Ok(perms) => {
+        match roles::get(&root, &session.role_id) {
+            Ok(role) => {
+                if role.empty {
+                    return Err(AppError::new(
+                        "ROLE_EMPTY",
+                        format!("role '{}' has no permissions", role.id),
+                    ));
+                }
+                let perms = roles::permissions_for(&root, &session.role_id)?;
                 if perms.iter().any(|p| p == perm) {
                     Ok(session)
                 } else {
@@ -406,5 +413,28 @@ mod tests {
         assert_eq!(lines[1]["action"], "auth.logout");
         assert_eq!(lines[1]["userId"], format!("u:{}", admin.id));
         assert_ne!(lines[1]["userId"], "s:anonymous");
+    }
+
+    #[test]
+    fn empty_role_returns_role_empty_not_forbidden() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "EmptyRole").unwrap();
+        let role =
+            crate::roles::create(dir.path(), "nodata", "No Data", "", "#000000", vec!["custom.perm".to_string()])
+                .unwrap();
+        assert!(role.empty);
+        assert!(serde_json::to_string(&role).unwrap().contains("\"empty\":true"));
+        assert!(
+            !serde_json::to_string(&crate::roles::default_roles()[0])
+                .unwrap()
+                .contains("\"empty\"")
+        );
+        let user = users::create(dir.path(), "u1", "password123", "U", "nodata", None).unwrap();
+
+        let state = AppState::new("m".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+        state.set_session(session_for(&user.id, "nodata", false));
+        assert_eq!(state.require_perm("task.view").unwrap_err().code, "ROLE_EMPTY");
+        assert_eq!(state.require_perm("users.manage").unwrap_err().code, "ROLE_EMPTY");
     }
 }

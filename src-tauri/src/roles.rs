@@ -15,6 +15,14 @@ pub struct Role {
     pub permissions: Vec<String>,
     pub is_system: bool,
     pub color: String,
+    /// Set when the role has no effective permissions (serialized only when
+    /// true).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub empty: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 fn role(id: &str, name: &str, description: &str, color: &str, permissions: &[&str]) -> Role {
@@ -25,6 +33,7 @@ fn role(id: &str, name: &str, description: &str, color: &str, permissions: &[&st
         permissions: permissions.iter().map(|p| p.to_string()).collect(),
         is_system: true,
         color: color.to_string(),
+        empty: false,
     }
 }
 
@@ -133,6 +142,125 @@ pub fn get(root: &Path, role_id: &str) -> Result<Role, AppError> {
 pub fn permissions_for(root: &Path, role_id: &str) -> Result<Vec<String>, AppError> {
     let role = get(root, role_id)?;
     Ok(permissions::filter_valid(role.permissions))
+}
+
+#[allow(dead_code)]
+fn is_valid_role_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 32
+        && id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
+#[allow(dead_code)]
+fn validate_role_input(name: &str) -> Result<(), AppError> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 80 {
+        return Err(AppError::new(
+            "INVALID_INPUT",
+            "role name must be between 1 and 80 characters",
+        ));
+    }
+    Ok(())
+}
+
+/// Creates a custom role (never overwrites; exclusive create).
+#[allow(dead_code)]
+pub fn create(
+    root: &Path,
+    id: &str,
+    name: &str,
+    description: &str,
+    color: &str,
+    permissions: Vec<String>,
+) -> Result<Role, AppError> {
+    let id = id.trim();
+    if !is_valid_role_id(id) {
+        return Err(AppError::new(
+            "INVALID_INPUT",
+            "role id must be 1-32 lowercase letters, digits or '_'",
+        ));
+    }
+    validate_role_input(name)?;
+    let permissions = permissions::filter_valid(permissions);
+    let role = Role {
+        id: id.to_string(),
+        name: name.trim().to_string(),
+        description: description.trim().to_string(),
+        permissions: permissions.clone(),
+        is_system: false,
+        color: color.trim().to_string(),
+        empty: permissions.is_empty(),
+    };
+    let mut bytes = serde_json::to_vec_pretty(&role)?;
+    bytes.push(b'\n');
+    fsops::create_exclusive(&role_path(root, id), &bytes)?;
+    Ok(role)
+}
+
+/// Editable fields for `rolesUpdate`.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RolePatch {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub color: Option<String>,
+    pub permissions: Option<Vec<String>>,
+}
+
+/// Applies a role patch. `admin` permissions are fixed to the full registry.
+#[allow(dead_code)]
+pub fn update(root: &Path, role_id: &str, patch: RolePatch) -> Result<Role, AppError> {
+    let mut role = get(root, role_id)?;
+    if role.is_system && role.id == "admin" && patch.permissions.is_some() {
+        return Err(AppError::new(
+            "ROLE_FIXED",
+            "admin role permissions are fixed",
+        ));
+    }
+    if let Some(name) = patch.name {
+        validate_role_input(&name)?;
+        role.name = name.trim().to_string();
+    }
+    if let Some(description) = patch.description {
+        role.description = description;
+    }
+    if let Some(color) = patch.color {
+        role.color = color;
+    }
+    if let Some(permissions) = patch.permissions {
+        role.permissions = permissions::filter_valid(permissions);
+        role.empty = role.permissions.is_empty();
+    }
+    fsops::write_json_atomic(&role_path(root, &role.id), &role)?;
+    Ok(role)
+}
+
+/// True when at least one user references the role.
+#[allow(dead_code)]
+pub fn is_referenced(root: &Path, role_id: &str) -> Result<bool, AppError> {
+    Ok(crate::users::list(root)?.iter().any(|u| u.role_id == role_id))
+}
+
+/// Deletes a custom role. System roles and referenced roles are blocked.
+#[allow(dead_code)]
+pub fn delete(root: &Path, role_id: &str) -> Result<(), AppError> {
+    let role = get(root, role_id)?;
+    if role.is_system {
+        return Err(AppError::new(
+            "ROLE_SYSTEM",
+            "system roles cannot be deleted",
+        ));
+    }
+    if is_referenced(root, role_id)? {
+        return Err(AppError::new(
+            "ROLE_IN_USE",
+            format!("role '{role_id}' is assigned to users"),
+        ));
+    }
+    fsops::remove_path(&role_path(root, role_id))
 }
 
 #[cfg(test)]
