@@ -12,9 +12,17 @@ use crate::roles;
 use crate::session::ActorId;
 use crate::workspace::{self, WorkspaceConfig};
 
-const MIGRATION_TTL_SEC: u64 = 60;
 const MIGRATION_RENEW_INTERVAL: Duration = Duration::from_secs(20);
 const MIGRATION_LOCK_KEY: &str = "workspace-migration";
+
+/// Migration lock TTL in seconds. Overridable via `TASKFLOW_MIGRATION_TTL`
+/// (default 60) so tests can shrink the expiry window.
+fn migration_ttl_sec() -> u64 {
+    std::env::var("TASKFLOW_MIGRATION_TTL")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60)
+}
 
 /// Migrates a v1 workspace to v2 (users get `id`/`email`/`isActive`/…, roles
 /// are whitelisted to the Stage 2 registry). Idempotent: files that already
@@ -49,7 +57,8 @@ fn run_with_options(
         return Ok(false);
     }
 
-    let lock = locking::acquire(root, MIGRATION_LOCK_KEY, MIGRATION_TTL_SEC, machine_id)?;
+    let ttl = migration_ttl_sec();
+    let lock = locking::acquire(root, MIGRATION_LOCK_KEY, ttl, machine_id)?;
     if !lock.acquired {
         return Err(AppError::new(
             "MIGRATION_LOCKED",
@@ -57,7 +66,7 @@ fn run_with_options(
         ));
     }
     let token = lock.token.clone().unwrap_or_default();
-    let mut heartbeat = LockHeartbeat::new(root, token.clone(), MIGRATION_TTL_SEC, interval);
+    let mut heartbeat = LockHeartbeat::new(root, token.clone(), ttl, interval);
     let result = migrate_workspace(root, &mut heartbeat, per_file_delay);
     let _ = locking::release(root, MIGRATION_LOCK_KEY, &token);
     match result {
@@ -498,41 +507,43 @@ mod tests {
 
     #[test]
     fn slow_migration_renews_the_lock() {
+        let old_ttl = std::env::var("TASKFLOW_MIGRATION_TTL").ok();
+        std::env::set_var("TASKFLOW_MIGRATION_TTL", "2");
+
         let dir = tempdir().unwrap();
         write_v1_workspace(dir.path());
-
-        let lock = locking::acquire(dir.path(), MIGRATION_LOCK_KEY, MIGRATION_TTL_SEC, "m1")
-            .unwrap();
+        let ttl = migration_ttl_sec();
+        let lock = locking::acquire(dir.path(), MIGRATION_LOCK_KEY, ttl, "m1").unwrap();
         assert!(lock.acquired);
         let token = lock.token.unwrap();
         let mut heartbeat = LockHeartbeat::new(
             dir.path(),
             token.clone(),
-            MIGRATION_TTL_SEC,
-            MIGRATION_RENEW_INTERVAL,
+            ttl,
+            Duration::from_millis(400),
         );
 
-        // 3 files x 30s sleep = ~90s, one renewal check before each file.
-        migrate_workspace(dir.path(), &mut heartbeat, Some(Duration::from_secs(30))).unwrap();
+        // 3 files x 500ms delay; the 400ms heartbeat renews before each one.
+        migrate_workspace(dir.path(), &mut heartbeat, Some(Duration::from_millis(500))).unwrap();
 
         assert!(heartbeat.renewals >= 2);
         assert_eq!(config_schema(dir.path()), 2);
         let _ = locking::release(dir.path(), MIGRATION_LOCK_KEY, &token);
+
+        match old_ttl {
+            Some(v) => std::env::set_var("TASKFLOW_MIGRATION_TTL", v),
+            None => std::env::remove_var("TASKFLOW_MIGRATION_TTL"),
+        }
     }
 
     #[test]
     fn heartbeat_detects_lock_loss() {
         let dir = tempdir().unwrap();
         write_v1_workspace(dir.path());
-        let lock = locking::acquire(dir.path(), MIGRATION_LOCK_KEY, MIGRATION_TTL_SEC, "m1")
-            .unwrap();
+        let ttl = migration_ttl_sec();
+        let lock = locking::acquire(dir.path(), MIGRATION_LOCK_KEY, ttl, "m1").unwrap();
         let token = lock.token.unwrap();
-        let mut heartbeat = LockHeartbeat::new(
-            dir.path(),
-            token.clone(),
-            MIGRATION_TTL_SEC,
-            Duration::from_millis(10),
-        );
+        let mut heartbeat = LockHeartbeat::new(dir.path(), token.clone(), ttl, Duration::from_millis(10));
 
         std::thread::sleep(Duration::from_millis(15));
         std::fs::remove_file(dir.path().join("locks").join("workspace-migration.lock")).unwrap();

@@ -22,6 +22,23 @@ pub fn users_update_impl(
     state.require_writable()?;
     let session = state.require_perm("users.manage")?;
     let root = state.root()?;
+    let target = users::find_by_id(&root, &id)?;
+    if target.role_id == "admin" && target.is_active && users::count_active_admins(&root) == 1 {
+        if let Some(new_role) = &patch.role_id {
+            if new_role != "admin" {
+                return Err(AppError::new(
+                    "LAST_ADMIN",
+                    "the last active administrator cannot be demoted",
+                ));
+            }
+        }
+        if patch.is_active == Some(false) {
+            return Err(AppError::new(
+                "LAST_ADMIN",
+                "the last active administrator cannot be deactivated",
+            ));
+        }
+    }
     let info = users::update(&root, &id, patch)?;
     audit::emit(
         &ActorId::User(session.user_id),
@@ -46,6 +63,13 @@ pub fn users_deactivate_impl(state: &AppState, id: String) -> Result<UserInfo, A
     state.require_writable()?;
     let session = state.require_perm("users.manage")?;
     let root = state.root()?;
+    let target = users::find_by_id(&root, &id)?;
+    if target.role_id == "admin" && target.is_active && users::count_active_admins(&root) == 1 {
+        return Err(AppError::new(
+            "LAST_ADMIN",
+            "the last active administrator cannot be deactivated",
+        ));
+    }
     let info = users::deactivate(&root, &id)?;
     audit::emit(
         &ActorId::User(session.user_id),

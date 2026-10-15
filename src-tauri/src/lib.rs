@@ -481,12 +481,6 @@ mod tests {
         expect_pw!("removePath", crate::commands::remove_path_impl(
             &state, "a.json".to_string()
         ));
-        expect_pw!("acquireLock", crate::commands::acquire_lock_impl(
-            &state, "task-T-1".to_string(), 60
-        ));
-        expect_pw!("releaseLock", crate::commands::release_lock_impl(
-            &state, "task-T-1".to_string(), "tok".to_string()
-        ));
         expect_pw!("usersUpdate", crate::commands::users_update_impl(
             &state, "u1".to_string(), crate::users::UserPatch::default()
         ));
@@ -513,6 +507,138 @@ mod tests {
         expect_pw!("rolesDelete", crate::commands::roles_delete_impl(
             &state, "r1".to_string()
         ));
+    }
+
+    #[test]
+    fn must_change_password_can_lock_but_not_write() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "LockGuard").unwrap();
+        let user = users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+
+        let state = AppState::new("m".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+        state.set_session(session_for(&user.id, "admin", true));
+
+        let lock = crate::commands::acquire_lock_impl(&state, "task-T-9".to_string(), 60).unwrap();
+        assert!(lock.acquired);
+        let token = lock.token.unwrap();
+        assert!(
+            crate::commands::release_lock_impl(&state, "task-T-9".to_string(), token).is_ok()
+        );
+
+        let err = crate::commands::write_json_atomic_impl(
+            &state,
+            "x.json".to_string(),
+            serde_json::Value::Null,
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "PASSWORD_CHANGE_REQUIRED");
+    }
+
+    #[test]
+    fn read_commands_require_auth_and_block_sensitive_paths() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "ReadGuard").unwrap();
+        users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+        let executor =
+            users::create(dir.path(), "ex", "password123", "E", "executor", None).unwrap();
+
+        let state = AppState::new("m".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+
+        assert_eq!(
+            crate::commands::read_json_impl(&state, "users/admin.json".to_string())
+                .unwrap_err()
+                .code,
+            "AUTH_REQUIRED"
+        );
+
+        state.set_session(session_for(&executor.id, "executor", false));
+        assert_eq!(
+            crate::commands::read_json_impl(&state, "users/admin.json".to_string())
+                .unwrap_err()
+                .code,
+            "FORBIDDEN_PATH"
+        );
+        assert_eq!(
+            crate::commands::read_json_impl(&state, "roles/admin.json".to_string())
+                .unwrap_err()
+                .code,
+            "FORBIDDEN_PATH"
+        );
+        assert_eq!(
+            crate::commands::read_json_impl(&state, "audit/2026-10.log".to_string())
+                .unwrap_err()
+                .code,
+            "FORBIDDEN_PATH"
+        );
+        assert_eq!(
+            crate::commands::list_dir_impl(&state, "users".to_string(), None)
+                .unwrap_err()
+                .code,
+            "FORBIDDEN_PATH"
+        );
+
+        std::fs::create_dir_all(dir.path().join("tasks")).unwrap();
+        fsops::write_json_atomic(
+            &dir.path().join("tasks").join("abc.json"),
+            &serde_json::json!({ "x": 1 }),
+        )
+        .unwrap();
+        let value =
+            crate::commands::read_json_impl(&state, "tasks/abc.json".to_string()).unwrap();
+        assert_eq!(value["x"], 1);
+    }
+
+    #[test]
+    fn last_active_admin_guard_in_commands() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "LastAdmin").unwrap();
+        let only = users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+
+        let state = AppState::new("m".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+        state.set_session(session_for(&only.id, "admin", false));
+
+        let err = crate::commands::users_deactivate_impl(&state, only.id.clone()).unwrap_err();
+        assert_eq!(err.code, "LAST_ADMIN");
+
+        let err = crate::commands::users_update_impl(
+            &state,
+            only.id.clone(),
+            crate::users::UserPatch {
+                role_id: Some("observer".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "LAST_ADMIN");
+
+        let err = crate::commands::users_update_impl(
+            &state,
+            only.id.clone(),
+            crate::users::UserPatch {
+                is_active: Some(false),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "LAST_ADMIN");
+
+        // second admin: deactivating the first succeeds
+        let second = users::create(
+            dir.path(),
+            "admin2",
+            "password123",
+            "Second",
+            "admin",
+            None,
+        )
+        .unwrap();
+        let deactivated =
+            crate::commands::users_deactivate_impl(&state, only.id.clone()).unwrap();
+        assert!(!deactivated.is_active);
+        assert!(second.is_active);
     }
 
     #[test]

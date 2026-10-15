@@ -8,29 +8,71 @@ use crate::fsops::{self, DirEntry, FileHash, ListDirFilter};
 use crate::locking::{self, LockStatus};
 use crate::AppState;
 
+/// Paths that must never be read directly over IPC; they have dedicated
+/// commands (`usersList`, `rolesList`, `permissionsList`) or are internal.
+fn check_forbidden_path(path: &str) -> Result<(), AppError> {
+    let normalized = path.trim_start_matches('/').replace('\\', "/");
+    let first = normalized.split('/').next().unwrap_or("");
+    if matches!(first, "users" | "roles" | "audit" | "events") {
+        return Err(AppError::new(
+            "FORBIDDEN_PATH",
+            format!("'{path}' is restricted"),
+        ));
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
-// Reads
+// Reads (require an authenticated session; sensitive prefixes are blocked)
 // ---------------------------------------------------------------------------
 
-#[tauri::command(rename = "readJson")]
-pub fn read_json(state: State<'_, AppState>, path: String) -> Result<Value, AppError> {
+pub fn read_json_impl(state: &AppState, path: String) -> Result<Value, AppError> {
+    state.require_auth()?;
+    check_forbidden_path(&path)?;
     let root = state.root()?;
     let full = crate::path::resolve_rel(&root, &path)?;
     fsops::read_json(&full)
 }
 
-#[tauri::command(rename = "readText")]
-pub fn read_text(state: State<'_, AppState>, path: String) -> Result<String, AppError> {
+#[tauri::command(rename = "readJson")]
+pub fn read_json(state: State<'_, AppState>, path: String) -> Result<Value, AppError> {
+    read_json_impl(&state, path)
+}
+
+pub fn read_text_impl(state: &AppState, path: String) -> Result<String, AppError> {
+    state.require_auth()?;
+    check_forbidden_path(&path)?;
     let root = state.root()?;
     let full = crate::path::resolve_rel(&root, &path)?;
     fsops::read_text(&full)
 }
 
-#[tauri::command(rename = "exists")]
-pub fn exists(state: State<'_, AppState>, path: String) -> Result<bool, AppError> {
+#[tauri::command(rename = "readText")]
+pub fn read_text(state: State<'_, AppState>, path: String) -> Result<String, AppError> {
+    read_text_impl(&state, path)
+}
+
+pub fn exists_impl(state: &AppState, path: String) -> Result<bool, AppError> {
+    state.require_auth()?;
     let root = state.root()?;
     let full = crate::path::resolve_rel(&root, &path)?;
     Ok(fsops::path_exists(&full))
+}
+
+#[tauri::command(rename = "exists")]
+pub fn exists(state: State<'_, AppState>, path: String) -> Result<bool, AppError> {
+    exists_impl(&state, path)
+}
+
+pub fn list_dir_impl(
+    state: &AppState,
+    path: String,
+    filter: Option<ListDirFilter>,
+) -> Result<Vec<DirEntry>, AppError> {
+    state.require_auth()?;
+    check_forbidden_path(&path)?;
+    let root = state.root()?;
+    fsops::list_dir(&root, &path, &filter.unwrap_or_default())
 }
 
 #[tauri::command(rename = "listDir")]
@@ -39,15 +81,19 @@ pub fn list_dir(
     path: String,
     filter: Option<ListDirFilter>,
 ) -> Result<Vec<DirEntry>, AppError> {
+    list_dir_impl(&state, path, filter)
+}
+
+pub fn hash_file_impl(state: &AppState, path: String) -> Result<FileHash, AppError> {
+    state.require_auth()?;
     let root = state.root()?;
-    fsops::list_dir(&root, &path, &filter.unwrap_or_default())
+    let full = crate::path::resolve_rel(&root, &path)?;
+    fsops::hash_file(&full)
 }
 
 #[tauri::command(rename = "hashFile")]
 pub fn hash_file(state: State<'_, AppState>, path: String) -> Result<FileHash, AppError> {
-    let root = state.root()?;
-    let full = crate::path::resolve_rel(&root, &path)?;
-    fsops::hash_file(&full)
+    hash_file_impl(&state, path)
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +166,8 @@ pub fn remove_path(state: State<'_, AppState>, path: String) -> Result<(), AppEr
 }
 
 // ---------------------------------------------------------------------------
-// Locks
+// Locks (infrastructure: require auth, NOT writable — a mustChangePassword
+// user may take locks but still cannot write user data)
 // ---------------------------------------------------------------------------
 
 pub fn acquire_lock_impl(
@@ -128,13 +175,13 @@ pub fn acquire_lock_impl(
     key: String,
     ttl_sec: u64,
 ) -> Result<LockStatus, AppError> {
-    state.require_writable()?;
+    state.require_auth()?;
     let root = state.root()?;
     let owner = state.machine_id();
     locking::acquire(&root, &key, ttl_sec, &owner)
 }
 
-#[write_command(rename = "acquireLock")]
+#[tauri::command(rename = "acquireLock")]
 pub fn acquire_lock(
     state: State<'_, AppState>,
     key: String,
@@ -144,12 +191,12 @@ pub fn acquire_lock(
 }
 
 pub fn release_lock_impl(state: &AppState, key: String, token: String) -> Result<(), AppError> {
-    state.require_writable()?;
+    state.require_auth()?;
     let root = state.root()?;
     locking::release(&root, &key, &token)
 }
 
-#[write_command(rename = "releaseLock")]
+#[tauri::command(rename = "releaseLock")]
 pub fn release_lock(
     state: State<'_, AppState>,
     key: String,

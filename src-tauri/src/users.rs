@@ -301,7 +301,6 @@ fn count_active_admins_excluding(root: &Path, exclude_id: &str) -> usize {
 }
 
 /// Number of active administrators (guard rail for the last-active-admin rule).
-#[allow(dead_code)]
 pub fn count_active_admins(root: &Path) -> usize {
     list(root)
         .map(|users| users.iter().filter(|u| u.is_active && u.role_id == "admin").count())
@@ -347,7 +346,7 @@ pub fn update(root: &Path, user_id: &str, patch: UserPatch) -> Result<UserInfo, 
         && count_active_admins_excluding(root, user_id) == 0
     {
         return Err(AppError::new(
-            "LAST_ACTIVE_ADMIN",
+            "LAST_ADMIN",
             "cannot deactivate or demote the last active administrator",
         ));
     }
@@ -363,7 +362,7 @@ pub fn deactivate(root: &Path, user_id: &str) -> Result<UserInfo, AppError> {
     user.is_active = false;
     if was_active_admin && count_active_admins_excluding(root, user_id) == 0 {
         return Err(AppError::new(
-            "LAST_ACTIVE_ADMIN",
+            "LAST_ADMIN",
             "cannot deactivate or demote the last active administrator",
         ));
     }
@@ -531,7 +530,7 @@ mod tests {
     fn deactivate_and_last_active_admin_guard() {
         let dir = ws();
         let a = admin(&dir);
-        assert_eq!(deactivate(dir.path(), &a.id).unwrap_err().code, "LAST_ACTIVE_ADMIN");
+        assert_eq!(deactivate(dir.path(), &a.id).unwrap_err().code, "LAST_ADMIN");
 
         let second = second_admin(&dir);
         deactivate(dir.path(), &a.id).unwrap();
@@ -548,7 +547,7 @@ mod tests {
             )
             .unwrap_err()
             .code,
-            "LAST_ACTIVE_ADMIN"
+            "LAST_ADMIN"
         );
     }
 
