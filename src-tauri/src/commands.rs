@@ -28,13 +28,15 @@ pub struct FolderInspection {
 // Workspace lifecycle
 // ---------------------------------------------------------------------------
 
-/// Testable body of `initWorkspace`.
+/// Testable body of `initWorkspace`. A fresh workspace is already schema v2, so
+/// migration is a no-op here (kept for the ordered flow).
 pub fn init_workspace_impl(
     state: &AppState,
     root: PathBuf,
     name: &str,
 ) -> Result<WorkspaceInfo, AppError> {
     let info = workspace::init(&root, name)?;
+    let _migrated = crate::migrate::run(&root, &state.machine_id())?;
     state.set_workspace(root, info.clone());
     audit::emit(
         &ActorId::System("init"),
@@ -58,13 +60,27 @@ pub fn init_workspace(
     init_workspace_impl(&state, PathBuf::from(&path), &name)
 }
 
-/// Testable body of `activateWorkspace`.
+/// Testable body of `activateWorkspace`. Runs the v1 → v2 migration when
+/// needed; a migrated workspace with an active session clears the session and
+/// reports `SESSION_INVALIDATED` (the UI sends the user to `/login`).
 pub fn activate_workspace_impl(
     state: &AppState,
     root: PathBuf,
 ) -> Result<WorkspaceInfo, AppError> {
     let info = workspace::validate(&root)?;
+    let had_session = state.require_auth().is_ok();
+    let machine_id = state.machine_id();
+    let migrated = crate::migrate::run(&root, &machine_id)?;
     state.set_workspace(root, info.clone());
+    if migrated {
+        audit::emit(
+            &ActorId::System("migrate"),
+            "workspace.migrate",
+            "workspace",
+            &info.workspace_id,
+            serde_json::json!({}),
+        );
+    }
     audit::emit(
         &ActorId::System("activate"),
         "workspace.activate",
@@ -72,6 +88,13 @@ pub fn activate_workspace_impl(
         &info.workspace_id,
         serde_json::json!({}),
     );
+    if had_session && migrated {
+        state.clear_session();
+        return Err(AppError::new(
+            "SESSION_INVALIDATED",
+            "the workspace was migrated and the active session was invalidated",
+        ));
+    }
     Ok(info)
 }
 

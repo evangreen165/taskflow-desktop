@@ -95,7 +95,6 @@ fn role_path(root: &Path, role_id: &str) -> PathBuf {
 }
 
 /// Lists every role file in `roles/`, sorted by id.
-#[allow(dead_code)]
 pub fn list(root: &Path) -> Result<Vec<Role>, AppError> {
     let dir = root.join("roles");
     if !dir.is_dir() {

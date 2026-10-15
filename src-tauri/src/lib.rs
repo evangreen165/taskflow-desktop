@@ -5,6 +5,7 @@ mod fsops;
 mod identity;
 mod locking;
 mod logging;
+mod migrate;
 mod path;
 mod permissions;
 mod roles;

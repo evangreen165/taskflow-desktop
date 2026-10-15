@@ -7,7 +7,7 @@ use crate::error::AppError;
 use crate::fsops;
 use crate::roles;
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Directories created for every workspace (the SMB data layout).
 pub const WORKSPACE_DIRS: [&str; 9] = [
