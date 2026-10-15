@@ -3,7 +3,8 @@ import { create } from "zustand";
 import { AppError } from "@/lib/errors";
 import { ConfigService } from "@/services/config";
 import { StorageService } from "@/services/storage";
-import { WorkspaceService, type WorkspaceInfo } from "@/services/workspace";
+import type { WorkspaceInfo } from "@/services/types";
+import { WorkspaceService } from "@/services/workspace";
 
 import { useAuthStore } from "./useAuthStore";
 
@@ -16,18 +17,20 @@ interface AppState {
   error: AppError | null;
   /** Boots the app: restores the saved workspace path or shows onboarding. */
   boot: () => Promise<void>;
-  /** Persists the chosen workspace and switches to the workspace phase. */
+  /** Persists the chosen workspace and switches into it. */
   activateAndPersist: (workspace: WorkspaceInfo) => Promise<void>;
-  /** Called after a successful login to enter the workspace. */
-  completeLogin: () => void;
-  /** Returns to the login screen (used on logout). */
-  requireLogin: () => void;
   /** Forgets the saved path and returns to onboarding. */
   chooseDifferentFolder: () => Promise<void>;
 }
 
 async function startWatcherSafely(): Promise<void> {
   await StorageService.startWatcher();
+}
+
+/** Sessions are in-memory, so a fresh boot always lands on /login. */
+async function resolvePhase(): Promise<AppPhase> {
+  await useAuthStore.getState().refreshSession();
+  return useAuthStore.getState().session ? "workspace" : "login";
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -57,44 +60,23 @@ export const useAppStore = create<AppState>((set) => ({
       return;
     }
 
-    const session = await WorkspaceService.getSession();
-    const user = session.ok ? session.value.user : null;
     await startWatcherSafely();
-    useAuthStore.getState().setUser(user);
-    set({
-      phase: user ? "workspace" : "login",
-      workspace: activated.value,
-      machineId: session.ok ? session.value.machineId : null,
-      error: null,
-    });
+    const phase = await resolvePhase();
+    set({ phase, workspace: activated.value, error: null });
   },
 
   activateAndPersist: async (workspace) => {
     await ConfigService.setWorkspacePath(workspace.path);
     await startWatcherSafely();
-    const session = await WorkspaceService.getSession();
-    useAuthStore.getState().setUser(session.ok ? session.value.user : null);
-    set({
-      phase: "workspace",
-      workspace,
-      machineId: session.ok ? session.value.machineId : null,
-      error: null,
-    });
-  },
-
-  completeLogin: () => {
-    set({ phase: "workspace", error: null });
-  },
-
-  requireLogin: () => {
-    set({ phase: "login", error: null });
+    const phase = await resolvePhase();
+    set({ phase, workspace, error: null });
   },
 
   chooseDifferentFolder: async () => {
     try {
       await ConfigService.clear();
     } finally {
-      useAuthStore.getState().setUser(null);
+      useAuthStore.getState().setSession(null);
       set({ phase: "onboarding", workspace: null, error: null });
     }
   },

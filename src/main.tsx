@@ -1,8 +1,14 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { RouterProvider } from "react-router-dom";
 
-import App from "@/App";
+import { router } from "@/App";
+import Toaster from "@/components/Toast/Toaster";
+import { setAppNavigator } from "@/lib/navigate";
+import { setupAuthWatcher } from "@/stores/useAuthStore";
 import "@/styles/global.css";
+
+setAppNavigator((path) => void router.navigate(path));
 
 const container = document.getElementById("root");
 if (!container) {
@@ -11,6 +17,9 @@ if (!container) {
 
 ReactDOM.createRoot(container).render(
   <React.StrictMode>
-    <App />
+    <RouterProvider router={router} />
+    <Toaster />
   </React.StrictMode>,
 );
+
+setupAuthWatcher();

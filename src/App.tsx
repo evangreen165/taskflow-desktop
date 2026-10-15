@@ -1,71 +1,45 @@
-import { useEffect } from "react";
+import { createHashRouter, Navigate } from "react-router-dom";
 
-import LoginScreen from "@/components/auth/LoginScreen";
+import NoAccess from "@/components/auth/NoAccess";
+import RequireAuth from "@/components/auth/RequireAuth";
+import RequirePerm from "@/components/auth/RequirePerm";
+import BootGate from "@/components/boot/BootGate";
 import Onboarding from "@/components/onboarding/Onboarding";
-import WorkspacePage from "@/pages/WorkspacePage";
-import { useAppStore } from "@/stores/useAppStore";
+import AdminPage from "@/pages/admin/AdminPage";
+import LoginScreen from "@/pages/auth/LoginScreen";
+import WorkspaceLayout from "@/pages/layout/WorkspaceLayout";
+import ProfilePage from "@/pages/profile/ProfilePage";
+import TasksPage from "@/pages/tasks/TasksPage";
 
-export default function App(): JSX.Element {
-  const phase = useAppStore((s) => s.phase);
-  const error = useAppStore((s) => s.error);
-  const boot = useAppStore((s) => s.boot);
-  const chooseDifferentFolder = useAppStore((s) => s.chooseDifferentFolder);
-
-  useEffect(() => {
-    void boot();
-  }, [boot]);
-
-  if (phase === "loading") {
-    return (
-      <div
-        style={{
-          height: "100vh",
-          display: "grid",
-          placeItems: "center",
-          color: "var(--text-muted)",
-          fontSize: 13,
-        }}
-      >
-        Загрузка TaskFlow…
-      </div>
-    );
-  }
-
-  if (phase === "workspace-error") {
-    return (
-      <div
-        style={{
-          height: "100vh",
-          display: "grid",
-          placeItems: "center",
-          padding: 32,
-        }}
-      >
-        <div style={{ maxWidth: 480, textAlign: "center" }}>
-          <h1 style={{ fontSize: 18, marginBottom: 8 }}>Не удалось открыть workspace</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 18 }}>
-            {error?.message ??
-              "Сохранённая папка недоступна. Проверьте подключение к SMB-шаре или выберите другую папку."}
-          </p>
-          <button
-            className="btn-primary"
-            type="button"
-            onClick={() => void chooseDifferentFolder()}
-          >
-            Выбрать другую папку
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === "onboarding") {
-    return <Onboarding />;
-  }
-
-  if (phase === "login") {
-    return <LoginScreen />;
-  }
-
-  return <WorkspacePage />;
-}
+/**
+ * Hash router (Tauri serves from a custom protocol; BrowserRouter breaks on
+ * reload). Exported so the global error handler can navigate via the router
+ * instance.
+ */
+export const router = createHashRouter([
+  { path: "/", element: <BootGate /> },
+  { path: "/onboarding", element: <Onboarding /> },
+  { path: "/login", element: <LoginScreen /> },
+  {
+    path: "/app",
+    element: (
+      <RequireAuth>
+        <WorkspaceLayout />
+      </RequireAuth>
+    ),
+    children: [
+      { index: true, element: <Navigate to="/app/tasks" replace /> },
+      { path: "tasks", element: <TasksPage /> },
+      {
+        path: "admin",
+        element: (
+          <RequirePerm perm="users.manage" fallback={<NoAccess />}>
+            <AdminPage />
+          </RequirePerm>
+        ),
+      },
+      { path: "profile", element: <ProfilePage /> },
+    ],
+  },
+  { path: "*", element: <Navigate to="/" replace /> },
+]);

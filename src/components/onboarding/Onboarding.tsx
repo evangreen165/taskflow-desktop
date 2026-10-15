@@ -1,34 +1,22 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useNavigate } from "react-router-dom";
 
+import { AuthService } from "@/services/auth";
+import type { FolderInspection, WorkspaceInfo } from "@/services/types";
+import { WorkspaceService } from "@/services/workspace";
 import { useAppStore } from "@/stores/useAppStore";
-import { useAuthStore } from "@/stores/useAuthStore";
-import { StorageService } from "@/services/storage";
-import {
-  AuthService,
-  WorkspaceService,
-  type FolderInspection,
-  type WorkspaceInfo,
-} from "@/services/workspace";
 
 import styles from "./Onboarding.module.css";
 
-type Step = "folder" | "workspace" | "admin" | "login";
+type Step = "folder" | "workspace" | "admin";
 
 const LOGIN_PATTERN = /^[a-z][a-z0-9._-]{0,63}$/;
 const MIN_PASSWORD = 8;
 
-async function resolveWorkspaceInfo(current: WorkspaceInfo | null): Promise<WorkspaceInfo | null> {
-  if (current) {
-    return current;
-  }
-  const session = await WorkspaceService.getSession();
-  return session.ok ? session.value.workspace : null;
-}
-
 export default function Onboarding(): JSX.Element {
   const activateAndPersist = useAppStore((s) => s.activateAndPersist);
-  const login = useAuthStore((s) => s.login);
+  const navigate = useNavigate();
 
   const [step, setStep] = useState<Step>("folder");
   const [path, setPath] = useState("");
@@ -44,9 +32,7 @@ export default function Onboarding(): JSX.Element {
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [fullName, setFullName] = useState("");
 
-  const isExisting = inspection?.isWorkspace === true;
-  const labels = isExisting ? ["Папка", "Вход"] : ["Папка", "Workspace", "Администратор"];
-  const activeIndex = step === "folder" ? 0 : step === "login" ? 1 : step === "workspace" ? 1 : 2;
+  const activeIndex = step === "folder" ? 0 : step === "workspace" ? 1 : 2;
 
   function resetMessages(): void {
     setError(null);
@@ -83,20 +69,20 @@ export default function Onboarding(): JSX.Element {
     await inspect(selected);
   }
 
+  /** Existing workspace: activate it, then go to login (has users) or admin. */
   async function openExisting(): Promise<void> {
     setBusy(true);
     resetMessages();
     const activated = await WorkspaceService.activateWorkspace(path);
+    setBusy(false);
     if (!activated.ok) {
-      setBusy(false);
       setError(activated.error.message);
       return;
     }
     setWorkspaceInfo(activated.value);
-    const users = await StorageService.listDir("users", { extensions: ["json"] });
-    setBusy(false);
-    if (users.ok && users.value.length > 0) {
-      setStep("login");
+    await activateAndPersist(activated.value);
+    if (inspection?.hasUsers) {
+      navigate("/login");
     } else {
       setStep("admin");
     }
@@ -125,7 +111,7 @@ export default function Onboarding(): JSX.Element {
     if (password !== passwordConfirm) {
       return "Пароли не совпадают.";
     }
-    if (step === "admin" && !fullName.trim()) {
+    if (!fullName.trim()) {
       return "Укажите ФИО администратора.";
     }
     return null;
@@ -140,36 +126,15 @@ export default function Onboarding(): JSX.Element {
     setBusy(true);
     resetMessages();
     const created = await AuthService.createAdmin(loginName, password, fullName.trim());
+    setBusy(false);
     if (!created.ok) {
-      setBusy(false);
       setError(created.error.message);
       return;
     }
-    useAuthStore.getState().setUser(created.value);
-    const info = await resolveWorkspaceInfo(workspaceInfo);
-    setBusy(false);
-    if (info) {
-      await activateAndPersist(info);
+    if (workspaceInfo) {
+      await activateAndPersist(workspaceInfo);
     }
-  }
-
-  async function submitLogin(): Promise<void> {
-    if (!loginName.trim() || !password) {
-      setError("Введите логин и пароль.");
-      return;
-    }
-    setBusy(true);
-    resetMessages();
-    const result = await login(loginName.trim(), password);
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.error.message);
-      return;
-    }
-    const info = await resolveWorkspaceInfo(workspaceInfo);
-    if (info) {
-      await activateAndPersist(info);
-    }
+    navigate("/login");
   }
 
   function backToFolder(): void {
@@ -193,13 +158,13 @@ export default function Onboarding(): JSX.Element {
         </div>
 
         <div className={styles.steps}>
-          {labels.map((label, index) => (
+          {["Папка", "Workspace", "Администратор"].map((label, index) => (
             <StepItem
               key={label}
               label={label}
               index={index}
               activeIndex={activeIndex}
-              last={index === labels.length - 1}
+              last={index === 2}
             />
           ))}
         </div>
@@ -244,8 +209,12 @@ export default function Onboarding(): JSX.Element {
 
         {step === "admin" ? (
           <CredentialsStep
-            title="Первый администратор"
-            subtitle="Учётная запись администратора workspace. Пароль хранится только в виде хеша Argon2."
+            title={inspection?.hasUsers ? "Дополнительный администратор" : "Первый администратор"}
+            subtitle={
+              inspection?.hasUsers
+                ? "В workspace уже есть пользователи. Создайте учётную запись администратора."
+                : "Учётная запись администратора workspace. Пароль хранится только в виде хеша Argon2."
+            }
             submitLabel="Создать администратора"
             busy={busy}
             login={loginName}
@@ -258,25 +227,6 @@ export default function Onboarding(): JSX.Element {
             onFullNameChange={setFullName}
             onBack={backToFolder}
             onSubmit={() => void submitAdmin()}
-          />
-        ) : null}
-
-        {step === "login" ? (
-          <CredentialsStep
-            title="Вход в workspace"
-            subtitle={`Workspace «${inspection?.workspaceName ?? ""}» уже существует. Войдите под своей учётной записью.`}
-            submitLabel="Войти"
-            busy={busy}
-            login={loginName}
-            password={password}
-            passwordConfirm={null}
-            fullName={null}
-            onLoginChange={setLoginName}
-            onPasswordChange={setPassword}
-            onPasswordConfirmChange={() => undefined}
-            onFullNameChange={() => undefined}
-            onBack={backToFolder}
-            onSubmit={() => void submitLogin()}
           />
         ) : null}
 
@@ -351,7 +301,11 @@ function FolderStep(props: FolderStepProps): JSX.Element {
           }`}
         >
           {inspection.isWorkspace
-            ? `Найден workspace «${inspection.workspaceName ?? ""}» (schema v${inspection.schemaVersion ?? "?"}).`
+            ? `Найден workspace «${inspection.workspaceName ?? ""}» (schema v${inspection.schemaVersion ?? "?"}). ${
+                inspection.hasUsers
+                  ? "В нём уже есть пользователи — потребуется вход."
+                  : "Пользователей пока нет — создайте администратора."
+              }`
             : inspection.isDir
               ? "Папка существует и пуста — здесь можно создать новый workspace."
               : "Папка не найдена. Проверьте путь и доступ к шарe."}
@@ -447,8 +401,8 @@ interface CredentialsStepProps {
   busy: boolean;
   login: string;
   password: string;
-  passwordConfirm: string | null;
-  fullName: string | null;
+  passwordConfirm: string;
+  fullName: string;
   onLoginChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
   onPasswordConfirmChange: (value: string) => void;
@@ -487,30 +441,26 @@ function CredentialsStep(props: CredentialsStepProps): JSX.Element {
         <span className="hint">Не менее 8 символов.</span>
       </div>
 
-      {props.passwordConfirm !== null ? (
-        <div className="field">
-          <label htmlFor="password-confirm">Повторите пароль</label>
-          <input
-            id="password-confirm"
-            type="password"
-            value={props.passwordConfirm}
-            autoComplete="new-password"
-            onChange={(event) => props.onPasswordConfirmChange(event.target.value)}
-          />
-        </div>
-      ) : null}
+      <div className="field">
+        <label htmlFor="password-confirm">Повторите пароль</label>
+        <input
+          id="password-confirm"
+          type="password"
+          value={props.passwordConfirm}
+          autoComplete="new-password"
+          onChange={(event) => props.onPasswordConfirmChange(event.target.value)}
+        />
+      </div>
 
-      {props.fullName !== null ? (
-        <div className="field">
-          <label htmlFor="full-name">ФИО</label>
-          <input
-            id="full-name"
-            type="text"
-            value={props.fullName}
-            onChange={(event) => props.onFullNameChange(event.target.value)}
-          />
-        </div>
-      ) : null}
+      <div className="field">
+        <label htmlFor="full-name">ФИО</label>
+        <input
+          id="full-name"
+          type="text"
+          value={props.fullName}
+          onChange={(event) => props.onFullNameChange(event.target.value)}
+        />
+      </div>
 
       <div className={styles.actions}>
         <button className="btn-ghost" type="button" onClick={props.onBack}>
