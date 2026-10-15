@@ -121,14 +121,14 @@ pub fn create_admin(
         "user.created",
         "user",
         &info.login,
-        serde_json::json!({ "role": info.role }),
+        serde_json::json!({ "role": info.role_id }),
     )?;
     audit::emit(
         "system",
         "user.create",
         "user",
         &info.login,
-        serde_json::json!({ "role": info.role }),
+        serde_json::json!({ "role": info.role_id }),
     );
     Ok(info)
 }
@@ -140,7 +140,7 @@ pub fn login(
     password: String,
 ) -> Result<UserInfo, AppError> {
     let root = state.root()?;
-    let user = users::login(&root, &login, &password)?;
+    let user = users::authenticate(&root, &login, &password)?;
     state.set_user(user.clone());
     audit::emit(
         &user.login,
