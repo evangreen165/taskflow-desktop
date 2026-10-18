@@ -21,7 +21,7 @@ export const useToastStore = create<ToastState>((set) => ({
   push: (message, kind = "error") => {
     const id = nextId++;
     set((state) => ({ toasts: [...state.toasts, { id, message, kind }] }));
-    window.setTimeout(() => {
+    setTimeout(() => {
       set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) }));
     }, TOAST_LIFETIME_MS);
   },

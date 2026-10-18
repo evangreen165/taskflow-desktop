@@ -1,14 +1,19 @@
 /**
- * Programmatic navigation hook for code outside the React tree (the global
- * error handler). Registered once in `main.tsx` with the router instance.
+ * Programmatic navigation hook for code outside the React tree (stores, the
+ * global error handler). Registered once in `main.tsx` with the router.
  */
 
-let navigateFn: ((path: string) => void) | null = null;
+export interface AppNavigateOptions {
+  state?: unknown;
+  replace?: boolean;
+}
 
-export function setAppNavigator(fn: (path: string) => void): void {
+let navigateFn: ((path: string, options?: AppNavigateOptions) => void) | null = null;
+
+export function setAppNavigator(fn: (path: string, options?: AppNavigateOptions) => void): void {
   navigateFn = fn;
 }
 
-export function appNavigate(path: string): void {
-  navigateFn?.(path);
+export function appNavigate(path: string, options?: AppNavigateOptions): void {
+  navigateFn?.(path, options);
 }

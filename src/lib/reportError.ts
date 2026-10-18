@@ -10,10 +10,15 @@ import { useToastStore } from "@/stores/useToastStore";
  */
 export function reportAppError(error: AppError): void {
   switch (error.code) {
-    case "AUTH_REQUIRED":
-      void useAuthStore.getState().logout();
+    case "AUTH_REQUIRED": {
+      // Cold boot / unauthenticated calls must stay silent: only invalidate a
+      // session that actually existed (avoids a spurious audit `auth.logout`).
+      if (useAuthStore.getState().session !== null) {
+        void useAuthStore.getState().logout();
+      }
       appNavigate("/login");
       break;
+    }
     case "SESSION_INVALIDATED":
       void useAuthStore.getState().logout();
       useToastStore.getState().push(messageForCode("SESSION_INVALIDATED"));

@@ -325,4 +325,80 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn custom_role_create_and_delete() {
+        let dir = tempdir().unwrap();
+        let role = create(
+            dir.path(),
+            "qa_lead",
+            "QA Lead",
+            "Тестировщики",
+            "#123456",
+            vec!["task.view".to_string()],
+        )
+        .unwrap();
+        assert!(!role.is_system);
+        assert!(!role.empty);
+        assert!(get(dir.path(), "qa_lead").is_ok());
+
+        delete(dir.path(), "qa_lead").unwrap();
+        assert_eq!(get(dir.path(), "qa_lead").unwrap_err().code, "ROLE_NOT_FOUND");
+    }
+
+    #[test]
+    fn delete_blocks_system_and_in_use_roles() {
+        let dir = tempdir().unwrap();
+        for role in default_roles() {
+            write_role(dir.path(), &role);
+        }
+        assert_eq!(delete(dir.path(), "executor").unwrap_err().code, "ROLE_SYSTEM");
+
+        create(
+            dir.path(),
+            "qa_lead",
+            "QA Lead",
+            "",
+            "#123456",
+            vec!["task.view".to_string()],
+        )
+        .unwrap();
+        crate::users::create(dir.path(), "bob", "password123", "Bob", "qa_lead", None).unwrap();
+        assert_eq!(delete(dir.path(), "qa_lead").unwrap_err().code, "ROLE_IN_USE");
+
+        let users = crate::users::list(dir.path()).unwrap();
+        let bob = users.iter().find(|u| u.login == "bob").unwrap();
+        crate::users::update(
+            dir.path(),
+            &bob.id,
+            crate::users::UserPatch {
+                role_id: Some("observer".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        delete(dir.path(), "qa_lead").unwrap();
+    }
+
+    #[test]
+    fn create_without_permissions_marks_empty() {
+        let dir = tempdir().unwrap();
+        let role = create(dir.path(), "blank", "Blank", "", "#000000", vec![]).unwrap();
+        assert!(role.empty);
+    }
+
+    #[test]
+    fn create_rejects_invalid_ids() {
+        let dir = tempdir().unwrap();
+        let err = create(
+            dir.path(),
+            "QA-Lead",
+            "QA",
+            "",
+            "#000000",
+            vec!["task.view".to_string()],
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "INVALID_INPUT");
+    }
 }

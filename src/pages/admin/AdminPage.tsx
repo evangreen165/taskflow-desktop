@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { PERMISSION_GROUPS, PERMISSION_LABELS } from "@/lib/permissions";
+import { canDeleteRole, slugifyRoleId, validateRoleDraft } from "@/lib/roleForm";
 import { AuthService } from "@/services/auth";
 import { PermissionsService } from "@/services/permissions";
 import { RolesService } from "@/services/roles";
@@ -11,7 +12,7 @@ import styles from "./AdminPage.module.css";
 
 type Tab = "users" | "roles";
 
-const AVATAR_COLORS = ["#5b5bd6", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
+const COLOR_PRESETS = ["#5b5bd6", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
 
 function formatDate(value: string | null): string {
   if (!value) {
@@ -306,6 +307,27 @@ function UsersTab(): JSX.Element {
                         value={draft.displayName}
                         onChange={(e) => setDraft({ ...draft, displayName: e.target.value })}
                       />
+                      <div className={styles.colorRow}>
+                        {COLOR_PRESETS.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            className={`${styles.swatch} ${
+                              draft.avatarColor === color ? styles.swatchActive : ""
+                            }`}
+                            style={{ background: color }}
+                            title={color}
+                            onClick={() => setDraft({ ...draft, avatarColor: color })}
+                          />
+                        ))}
+                        <input
+                          type="color"
+                          className={styles.colorInput}
+                          value={draft.avatarColor}
+                          title="Выбрать свой цвет"
+                          onChange={(e) => setDraft({ ...draft, avatarColor: e.target.value })}
+                        />
+                      </div>
                     </td>
                     <td>{user.login}</td>
                     <td>
@@ -457,7 +479,12 @@ function RolesTab(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [create, setCreate] = useState({ id: "", name: "", description: "", color: "#5b5bd6" });
+  const [create, setCreate] = useState({
+    name: "",
+    description: "",
+    color: "#5b5bd6",
+    permissions: [] as string[],
+  });
 
   const load = useCallback(async () => {
     const [rolesResult, permsResult] = await Promise.all([
@@ -512,26 +539,40 @@ function RolesTab(): JSX.Element {
     await load();
   }
 
+  function toggleCreatePermission(perm: string): void {
+    setCreate((prev) => ({
+      ...prev,
+      permissions: prev.permissions.includes(perm)
+        ? prev.permissions.filter((p) => p !== perm)
+        : [...prev.permissions, perm],
+    }));
+  }
+
   async function submitCreate(): Promise<void> {
-    if (!create.id.trim() || !create.name.trim()) {
-      setError("Укажите id и имя роли.");
+    const validation = validateRoleDraft(create);
+    if (validation) {
+      setError(validation);
       return;
     }
     setBusy(true);
     setError(null);
+    const id = slugifyRoleId(
+      create.name,
+      roles.map((role) => role.id),
+    );
     const result = await RolesService.create(
-      create.id.trim(),
+      id,
       create.name.trim(),
       create.description.trim(),
       create.color,
-      [],
+      create.permissions,
     );
     setBusy(false);
     if (!result.ok) {
       setError(result.error.message);
       return;
     }
-    setCreate({ id: "", name: "", description: "", color: "#5b5bd6" });
+    setCreate({ name: "", description: "", color: "#5b5bd6", permissions: [] });
     await load();
   }
 
@@ -559,16 +600,6 @@ function RolesTab(): JSX.Element {
         <h3>Новая роль</h3>
         <div className={styles.formGrid}>
           <div className="field">
-            <label htmlFor="nr-id">ID (латиницей)</label>
-            <input
-              id="nr-id"
-              type="text"
-              value={create.id}
-              spellCheck={false}
-              onChange={(e) => setCreate({ ...create, id: e.target.value })}
-            />
-          </div>
-          <div className="field">
             <label htmlFor="nr-name">Название</label>
             <input
               id="nr-name"
@@ -578,20 +609,62 @@ function RolesTab(): JSX.Element {
             />
           </div>
           <div className="field">
-            <label htmlFor="nr-color">Цвет</label>
-            <select
-              id="nr-color"
-              value={create.color}
-              onChange={(e) => setCreate({ ...create, color: e.target.value })}
-            >
-              {AVATAR_COLORS.map((color) => (
-                <option key={color} value={color}>
-                  {color}
-                </option>
+            <label htmlFor="nr-description">Описание</label>
+            <input
+              id="nr-description"
+              type="text"
+              value={create.description}
+              onChange={(e) => setCreate({ ...create, description: e.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label>Цвет</label>
+            <div className={styles.colorRow}>
+              {COLOR_PRESETS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  className={`${styles.swatch} ${create.color === color ? styles.swatchActive : ""}`}
+                  style={{ background: color }}
+                  title={color}
+                  onClick={() => setCreate({ ...create, color })}
+                />
               ))}
-            </select>
+              <input
+                type="color"
+                className={styles.colorInput}
+                value={create.color}
+                title="Выбрать свой цвет"
+                onChange={(e) => setCreate({ ...create, color: e.target.value })}
+              />
+              <span className={styles.muted}>{create.color}</span>
+            </div>
           </div>
         </div>
+
+        <div className="field">
+          <label>Права</label>
+          <div className={styles.permissionPicker}>
+            {PERMISSION_GROUPS.map((group) => (
+              <div key={group.id} className={styles.permGroupBlock}>
+                <div className={styles.permGroupTitle}>{group.label}</div>
+                {group.permissions
+                  .filter((perm) => permissions.includes(perm))
+                  .map((perm) => (
+                    <label key={perm} className={styles.permOption}>
+                      <input
+                        type="checkbox"
+                        checked={create.permissions.includes(perm)}
+                        onChange={() => toggleCreatePermission(perm)}
+                      />
+                      {PERMISSION_LABELS[perm] ?? perm}
+                    </label>
+                  ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
         <button
           className="btn-primary"
           type="button"
@@ -630,9 +703,7 @@ function RolesTab(): JSX.Element {
               <span className={styles.dot} style={{ background: role.color }} />
               {role.name}
               {role.empty ? " ⚠" : ""}
-              {role.isSystem ? (
-                ""
-              ) : (
+              {canDeleteRole(role) ? (
                 <button
                   className={styles.chipDelete}
                   type="button"
@@ -642,7 +713,7 @@ function RolesTab(): JSX.Element {
                 >
                   ✕
                 </button>
-              )}
+              ) : null}
             </span>
           ))}
         </div>

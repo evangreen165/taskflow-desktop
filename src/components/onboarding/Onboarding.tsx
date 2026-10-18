@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { AuthService } from "@/services/auth";
 import type { FolderInspection, WorkspaceInfo } from "@/services/types";
@@ -17,6 +17,8 @@ const MIN_PASSWORD = 8;
 export default function Onboarding(): JSX.Element {
   const activateAndPersist = useAppStore((s) => s.activateAndPersist);
   const navigate = useNavigate();
+  const location = useLocation();
+  const autoPickDone = useRef(false);
 
   const [step, setStep] = useState<Step>("folder");
   const [path, setPath] = useState("");
@@ -68,6 +70,17 @@ export default function Onboarding(): JSX.Element {
     setWorkspaceInfo(null);
     await inspect(selected);
   }
+
+  // "Another folder" / "Change folder" navigates here with `autoPick` so the
+  // native folder picker opens immediately instead of appearing to do nothing.
+  useEffect(() => {
+    const state = location.state as { autoPick?: boolean } | null;
+    if (state?.autoPick && !autoPickDone.current) {
+      autoPickDone.current = true;
+      void pickFolder();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   /** Existing workspace: activate it, then go to login (has users) or admin. */
   async function openExisting(): Promise<void> {

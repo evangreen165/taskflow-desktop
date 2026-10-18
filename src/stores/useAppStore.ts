@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { AppError } from "@/lib/errors";
+import { appNavigate } from "@/lib/navigate";
 import { ConfigService } from "@/services/config";
 import { StorageService } from "@/services/storage";
 import type { WorkspaceInfo } from "@/services/types";
@@ -78,6 +79,9 @@ export const useAppStore = create<AppState>((set) => ({
     } finally {
       useAuthStore.getState().setSession(null);
       set({ phase: "onboarding", workspace: null, error: null });
+      // The route must change too: the caller may be on /login or /app, where
+      // the phase change alone does not re-render the onboarding screen.
+      appNavigate("/onboarding", { state: { autoPick: true } });
     }
   },
 }));

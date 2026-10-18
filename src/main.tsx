@@ -8,7 +8,7 @@ import { setAppNavigator } from "@/lib/navigate";
 import { setupAuthWatcher } from "@/stores/useAuthStore";
 import "@/styles/global.css";
 
-setAppNavigator((path) => void router.navigate(path));
+setAppNavigator((path, options) => void router.navigate(path, options));
 
 const container = document.getElementById("root");
 if (!container) {
