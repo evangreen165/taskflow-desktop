@@ -230,6 +230,7 @@ pub fn run() {
             commands::users_list,
             commands::users_update,
             commands::users_deactivate,
+            commands::users_summaries,
             commands::roles_list,
             commands::roles_create,
             commands::roles_update,

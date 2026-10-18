@@ -31,6 +31,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   ROLE_FIXED: "Права роли администратора зафиксированы",
   ROLE_SYSTEM: "Системные роли нельзя удалить",
   ROLE_IN_USE: "Роль назначена пользователям",
+  VERSION_CONFLICT: "Задача была изменена другим пользователем",
 };
 
 export function messageForCode(code: string, fallback?: string): string {

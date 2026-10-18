@@ -1,0 +1,68 @@
+import type { TaskPriority, TaskStatus } from "@/services/tasks";
+
+export interface KanbanColumn {
+  status: TaskStatus;
+  label: string;
+}
+
+/** Column order for the board (matches the prototype). */
+export const KANBAN_COLUMNS: KanbanColumn[] = [
+  { status: "new", label: "Новая" },
+  { status: "in_progress", label: "В работе" },
+  { status: "review", label: "На проверке" },
+  { status: "done", label: "Готово" },
+  { status: "rejected", label: "Отклонена" },
+];
+
+export const PRIORITY_LABELS: Record<TaskPriority, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
+};
+
+export function statusLabel(status: TaskStatus): string {
+  return KANBAN_COLUMNS.find((column) => column.status === status)?.label ?? status;
+}
+
+/** Short date like `18 окт.`; `null` for missing/invalid dates. */
+export function formatDueDate(iso: string | null): string | null {
+  if (!iso) {
+    return null;
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "short" }).format(date);
+}
+
+/** A task is overdue when its due date is in the past and it is not done. */
+export function isOverdue(iso: string | null, status: TaskStatus): boolean {
+  if (!iso || status === "done") {
+    return false;
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+  return date.getTime() < Date.now();
+}
+
+export function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.charAt(0) ?? "?";
+  const second = parts[1]?.charAt(0) ?? "";
+  return (first + second).toUpperCase();
+}
+
+const AVATAR_COLORS = ["#5b5bd6", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
+
+/** Deterministic fallback color when a user summary is not available yet. */
+export function avatarColorFor(id: string): string {
+  let sum = 0;
+  for (let i = 0; i < id.length; i += 1) {
+    sum += id.charCodeAt(i);
+  }
+  return AVATAR_COLORS[sum % AVATAR_COLORS.length] ?? "#5b5bd6";
+}

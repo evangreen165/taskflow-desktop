@@ -1,0 +1,103 @@
+.board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(240px, 1fr));
+  gap: 16px;
+  align-items: start;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.column {
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  padding: 12px;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 200px);
+  transition: outline-color 0.12s;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+}
+
+.column.over {
+  outline-color: var(--accent);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.new {
+  background: var(--blue);
+}
+
+.in_progress {
+  background: var(--amber);
+}
+
+.review {
+  background: var(--accent);
+}
+
+.done {
+  background: var(--green);
+}
+
+.rejected {
+  background: var(--red);
+}
+
+.label {
+  white-space: nowrap;
+}
+
+.count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface);
+  padding: 1px 7px;
+  border-radius: 20px;
+}
+
+.plus {
+  margin-left: auto;
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.plus:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.cards {
+  flex: 1;
+  min-height: 40px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.drag {
+  touch-action: none;
+}
