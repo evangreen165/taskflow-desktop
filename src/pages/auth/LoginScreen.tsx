@@ -1,18 +1,16 @@
 import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import styles from "@/components/onboarding/Onboarding.module.css";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 
-/**
- * Shown when a workspace is active but no user is logged in (e.g. after a
- * restart). Authentication is required before the workspace is usable.
- */
 export default function LoginScreen(): JSX.Element {
   const workspace = useAppStore((s) => s.workspace);
-  const completeLogin = useAppStore((s) => s.completeLogin);
   const chooseDifferentFolder = useAppStore((s) => s.chooseDifferentFolder);
   const login = useAuthStore((s) => s.login);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
@@ -32,7 +30,8 @@ export default function LoginScreen(): JSX.Element {
       setError(result.error.message);
       return;
     }
-    completeLogin();
+    const from = (location.state as { from?: string } | null)?.from;
+    navigate(from && from.startsWith("/app") ? from : "/app/tasks", { replace: true });
   }
 
   return (

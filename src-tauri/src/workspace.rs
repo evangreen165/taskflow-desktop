@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::audit::now_rfc3339;
 use crate::error::AppError;
 use crate::fsops;
+use crate::roles;
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Directories created for every workspace (the SMB data layout).
 pub const WORKSPACE_DIRS: [&str; 9] = [
@@ -38,111 +39,6 @@ pub struct WorkspaceInfo {
     pub workspace_id: String,
     pub schema_version: u32,
     pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Role {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub permissions: Vec<String>,
-    pub is_system: bool,
-    pub color: String,
-}
-
-fn role(id: &str, name: &str, description: &str, color: &str, permissions: &[&str]) -> Role {
-    Role {
-        id: id.to_string(),
-        name: name.to_string(),
-        description: description.to_string(),
-        permissions: permissions.iter().map(|p| p.to_string()).collect(),
-        is_system: true,
-        color: color.to_string(),
-    }
-}
-
-/// Seed roles mirror the permission matrix of the UI prototype.
-pub fn default_roles() -> Vec<Role> {
-    vec![
-        role(
-            "admin",
-            "Администратор",
-            "Полный доступ к workspace, пользователям и ролям",
-            "#5b5bd6",
-            &[
-                "task.view",
-                "task.create",
-                "task.edit",
-                "task.change_status",
-                "task.assign",
-                "task.delete",
-                "task.view_all",
-                "article.view",
-                "article.create",
-                "article.edit",
-                "article.publish",
-                "article.delete",
-                "attachments.add",
-                "users.manage",
-                "roles.manage",
-                "audit.view",
-                "workspace.manage",
-            ],
-        ),
-        role(
-            "manager",
-            "Руководитель",
-            "Создаёт и ведёт задачи, видит все задачи и аудит",
-            "#3b82f6",
-            &[
-                "task.view",
-                "task.create",
-                "task.edit",
-                "task.change_status",
-                "task.assign",
-                "task.view_all",
-                "article.view",
-                "attachments.add",
-                "audit.view",
-            ],
-        ),
-        role(
-            "executor",
-            "Исполнитель",
-            "Работает со своими задачами, меняет статусы",
-            "#10b981",
-            &["task.view", "task.change_status", "article.view", "attachments.add"],
-        ),
-        role(
-            "observer",
-            "Наблюдатель",
-            "Только просмотр задач и статей",
-            "#f59e0b",
-            &["task.view", "task.view_all", "article.view"],
-        ),
-        role(
-            "kb_author",
-            "Автор KB",
-            "Ведёт базу знаний",
-            "#8b5cf6",
-            &[
-                "task.view",
-                "article.view",
-                "article.create",
-                "article.edit",
-                "article.publish",
-                "attachments.add",
-            ],
-        ),
-        role(
-            "kb_reader",
-            "Читатель KB",
-            "Только чтение базы знаний",
-            "#6b7280",
-            &["article.view"],
-        ),
-    ]
 }
 
 fn info(root: &Path, cfg: &WorkspaceConfig) -> WorkspaceInfo {
@@ -207,7 +103,7 @@ pub fn init(root: &Path, name: &str) -> Result<WorkspaceInfo, AppError> {
             .map_err(|e| AppError::io(format!("create '{dir}'"), e))?;
     }
 
-    for role in default_roles() {
+    for role in roles::default_roles() {
         let role_path = root.join("roles").join(format!("{}.json", role.id));
         if !role_path.exists() {
             fsops::write_json_atomic(&role_path, &role)?;
@@ -226,7 +122,7 @@ pub fn init(root: &Path, name: &str) -> Result<WorkspaceInfo, AppError> {
 
     crate::audit::write_event(
         root,
-        "system",
+        &crate::session::ActorId::System("init").label(),
         "workspace.created",
         "workspace",
         &cfg.workspace_id,
@@ -251,7 +147,7 @@ mod tests {
         for d in WORKSPACE_DIRS {
             assert!(dir.path().join(d).is_dir(), "missing dir {d}");
         }
-        for r in default_roles() {
+        for r in roles::default_roles() {
             assert!(dir.path().join("roles").join(format!("{}.json", r.id)).exists());
         }
         // journal event written

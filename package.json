@@ -1,7 +1,7 @@
 {
   "name": "taskflow",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "TaskFlow — offline task tracker and knowledge base on a shared SMB folder",
   "scripts": {
@@ -13,6 +13,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "version:check": "node scripts/check-version.mjs",
+    "release:notes": "node scripts/changelog-snippet.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -21,6 +23,7 @@
     "@tauri-apps/plugin-store": "^2.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.4",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

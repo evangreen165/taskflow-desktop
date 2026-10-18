@@ -3296,6 +3296,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "taskflow-macros",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -3306,6 +3307,15 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "taskflow-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

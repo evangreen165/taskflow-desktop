@@ -23,4 +23,5 @@ logs/
 
 # Local test workspaces (never commit tempfile/scratch data)
 scratch/
+tmp/
 *.taskflow-*.tmp
