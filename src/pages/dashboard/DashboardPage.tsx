@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import { usePermissions } from "@/hooks/usePermissions";
 import { categoryIcon, formatDate } from "@/lib/kbMeta";
-import { PRIORITY_LABELS, priorityColor, formatDueDate } from "@/lib/taskMeta";
+import { formatDueDate, PRIORITY_LABELS, priorityColor, statusLabel } from "@/lib/taskMeta";
 import { DashboardService, type DashboardSummary } from "@/services/dashboard";
 import type { Task } from "@/services/tasks";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -58,7 +58,25 @@ export default function DashboardPage(): JSX.Element {
       {summary ? (
         <div className={styles.grid}>
           <section className={styles.widget}>
-            <h2>Мои задачи на сегодня</h2>
+            <h2>Мои активные задачи</h2>
+            {summary.myActiveTasks.length === 0 ? (
+              <div className={styles.muted}>Активных задач нет.</div>
+            ) : (
+              <div className={styles.list}>
+                {summary.myActiveTasks.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    showStatus
+                    onOpen={() => setSelectedTaskId(task.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className={styles.widget}>
+            <h2>Задачи на сегодня</h2>
             {summary.myTasksToday.length === 0 ? (
               <div className={styles.muted}>На сегодня задач нет.</div>
             ) : (
@@ -142,10 +160,12 @@ export default function DashboardPage(): JSX.Element {
 function TaskRow({
   task,
   overdue,
+  showStatus,
   onOpen,
 }: {
   task: Task;
   overdue?: boolean;
+  showStatus?: boolean;
   onOpen: () => void;
 }): JSX.Element {
   return (
@@ -159,6 +179,7 @@ function TaskRow({
         <span style={{ color: priorityColor(task.priority) }}>
           {PRIORITY_LABELS[task.priority]}
         </span>
+        {showStatus ? <span>{statusLabel(task.status)}</span> : null}
         {task.dueDate ? <span>📅 {formatDueDate(task.dueDate)}</span> : null}
       </span>
     </button>

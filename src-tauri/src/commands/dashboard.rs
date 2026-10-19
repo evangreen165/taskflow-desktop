@@ -19,6 +19,7 @@ pub struct DashboardStats {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DashboardSummary {
+    pub my_active_tasks: Vec<Task>,
     pub my_tasks_today: Vec<Task>,
     pub my_overdue_tasks: Vec<Task>,
     pub recent_articles: Vec<NoteMeta>,
@@ -55,6 +56,11 @@ pub fn dashboard_summary_impl(state: &AppState) -> Result<DashboardSummary, AppE
         .collect();
 
     let today = chrono::Local::now().date_naive();
+    let my_active_tasks: Vec<Task> = visible_tasks
+        .iter()
+        .filter(|task| !is_finished(task.status))
+        .cloned()
+        .collect();
     let mut my_tasks_today = Vec::new();
     let mut my_overdue_tasks = Vec::new();
     for task in &visible_tasks {
@@ -100,6 +106,7 @@ pub fn dashboard_summary_impl(state: &AppState) -> Result<DashboardSummary, AppE
     };
 
     Ok(DashboardSummary {
+        my_active_tasks,
         my_tasks_today,
         my_overdue_tasks,
         recent_articles,
@@ -186,6 +193,7 @@ mod tests {
             .to_string();
 
         let ex_id = fx.executor.id.clone();
+        make_task(&fx, "Без срока", "new", "", &[&ex_id]);
         make_task(&fx, "Сегодня", "new", &today, &[&ex_id]);
         make_task(&fx, "Просрочена", "new", &yesterday, &[&ex_id]);
         make_task(&fx, "Позже", "new", &tomorrow, &[&ex_id]);
@@ -193,13 +201,18 @@ mod tests {
 
         fx.state.set_session(session_for(&fx.executor.id, "executor"));
         let summary = dashboard_summary_impl(&fx.state).unwrap();
+        let active_titles: Vec<&str> =
+            summary.my_active_tasks.iter().map(|t| t.title.as_str()).collect();
+        assert!(active_titles.contains(&"Без срока"));
+        assert!(active_titles.contains(&"Позже"));
+        assert!(!active_titles.contains(&"Готова"));
         let today_titles: Vec<&str> =
             summary.my_tasks_today.iter().map(|t| t.title.as_str()).collect();
         let overdue_titles: Vec<&str> =
             summary.my_overdue_tasks.iter().map(|t| t.title.as_str()).collect();
         assert_eq!(today_titles, vec!["Сегодня"]);
         assert_eq!(overdue_titles, vec!["Просрочена"]);
-        assert_eq!(summary.stats.total_tasks, 4);
+        assert_eq!(summary.stats.total_tasks, 5);
         assert_eq!(summary.stats.in_progress, 0);
         assert_eq!(summary.stats.completed_this_week, 1);
     }

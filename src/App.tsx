@@ -12,6 +12,7 @@ import KbArticlePage from "@/pages/kb/KbArticlePage";
 import KbPage from "@/pages/kb/KbPage";
 import WorkspaceLayout from "@/pages/layout/WorkspaceLayout";
 import ProfilePage from "@/pages/profile/ProfilePage";
+import SettingsPage from "@/pages/settings/SettingsPage";
 import TasksPage from "@/pages/tasks/TasksPage";
 
 /**
@@ -45,6 +46,7 @@ export const router = createHashRouter([
         ),
       },
       { path: "profile", element: <ProfilePage /> },
+      { path: "settings", element: <SettingsPage /> },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },

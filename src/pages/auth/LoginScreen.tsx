@@ -31,7 +31,7 @@ export default function LoginScreen(): JSX.Element {
       return;
     }
     const from = (location.state as { from?: string } | null)?.from;
-    navigate(from && from.startsWith("/app") ? from : "/app/tasks", { replace: true });
+    navigate(from && from.startsWith("/app") ? from : "/app/dashboard", { replace: true });
   }
 
   return (

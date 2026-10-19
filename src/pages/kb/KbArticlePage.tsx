@@ -76,7 +76,7 @@ export default function KbArticlePage(): JSX.Element {
         <div className={styles.notFound}>
           <h1>Статья не найдена</h1>
           <button className="btn-primary" type="button" onClick={() => navigate("/app/kb")}>
-            Назад в Базу знаний
+            Назад в Заметки
           </button>
         </div>
       </div>
@@ -122,7 +122,7 @@ export default function KbArticlePage(): JSX.Element {
     <div className={styles.page}>
       <header className={styles.header}>
         <button className={styles.back} type="button" onClick={() => navigate("/app/kb")}>
-          ← База знаний
+          ← Заметки
         </button>
         <div className={styles.headerMeta}>
           <span className={styles.category}>

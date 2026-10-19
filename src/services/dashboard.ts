@@ -10,6 +10,7 @@ export interface DashboardStats {
 }
 
 export interface DashboardSummary {
+  myActiveTasks: Task[];
   myTasksToday: Task[];
   myOverdueTasks: Task[];
   recentArticles: NoteMeta[];
