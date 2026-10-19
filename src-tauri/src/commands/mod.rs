@@ -1,11 +1,15 @@
+mod attachments;
 mod auth;
+mod notes;
 mod roles;
 mod storage;
 mod tasks;
 mod users;
 mod workspace;
 
+pub use attachments::*;
 pub use auth::*;
+pub use notes::*;
 pub use roles::*;
 pub use storage::*;
 pub use tasks::*;

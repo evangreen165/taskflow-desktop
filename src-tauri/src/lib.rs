@@ -1,4 +1,5 @@
 mod audit;
+mod attachments;
 mod commands;
 mod error;
 mod fsops;
@@ -6,6 +7,7 @@ mod identity;
 mod locking;
 mod logging;
 mod migrate;
+mod notes;
 mod path;
 mod permissions;
 mod roles;
@@ -199,6 +201,7 @@ impl AppState {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
@@ -243,6 +246,21 @@ pub fn run() {
             commands::tasks_update,
             commands::tasks_change_status,
             commands::tasks_delete,
+            commands::notes_list,
+            commands::notes_get,
+            commands::notes_get_history,
+            commands::notes_create,
+            commands::notes_update,
+            commands::notes_publish,
+            commands::notes_delete,
+            commands::notes_restore_version,
+            commands::notes_list_categories,
+            commands::notes_create_category,
+            commands::notes_delete_category,
+            commands::attachment_add,
+            commands::attachment_get_base64,
+            commands::attachment_remove,
+            commands::attachment_open,
             commands::read_json,
             commands::write_json_atomic,
             commands::read_text,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
+import { usePermissions } from "@/hooks/usePermissions";
 import { useTaskEditor } from "@/hooks/useTaskEditor";
 import { KANBAN_COLUMNS, PRIORITY_LABELS, formatDateTime, initials } from "@/lib/taskMeta";
 import type { Comment, Task, TaskPriority, TaskStatus } from "@/services/tasks";
@@ -14,6 +15,7 @@ interface TaskDetailPanelProps {
 }
 
 type PreviewMode = "edit" | "preview";
+type ViewMode = "read" | "edit";
 
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 
@@ -21,6 +23,7 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
   const allUsers = useUserDirectory((s) => s.all);
   const directory = useUserDirectory((s) => s.users);
   const loadAll = useUserDirectory((s) => s.loadAll);
+  const { can } = usePermissions();
 
   const {
     draft,
@@ -44,7 +47,10 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
     adoptExternal,
   } = useTaskEditor(task);
 
-  const [mode, setMode] = useState<PreviewMode>("edit");
+  // Text fields (title/description) require an explicit edit mode; the other
+  // controls (status/priority/assignees/checklist/comments) stay available.
+  const [viewMode, setViewMode] = useState<ViewMode>("read");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("edit");
   const [newItem, setNewItem] = useState("");
   const [commentText, setCommentText] = useState("");
 
@@ -55,6 +61,11 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
   async function handleClose(): Promise<void> {
     await flush();
     onClose();
+  }
+
+  async function handleDone(): Promise<void> {
+    await flush();
+    setViewMode("read");
   }
 
   function toggleAssignee(id: string): void {
@@ -83,15 +94,30 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
       <div className={styles.backdrop} onClick={() => void handleClose()} />
       <aside className={styles.panel}>
         <header className={styles.head}>
-          <input
-            className={styles.titleInput}
-            value={draft.title}
-            placeholder="Название задачи"
-            onChange={(event) => setTitle(event.target.value)}
-            onBlur={() => void flush()}
-          />
+          {viewMode === "edit" ? (
+            <input
+              className={styles.titleInput}
+              value={draft.title}
+              placeholder="Название задачи"
+              onChange={(event) => setTitle(event.target.value)}
+              onBlur={() => void flush()}
+            />
+          ) : (
+            <div className={styles.titleText}>{draft.title || "Без названия"}</div>
+          )}
           <div className={styles.headRight}>
             {saving ? <span className={styles.saving}>Сохранение…</span> : null}
+            {can("task.edit") ? (
+              viewMode === "edit" ? (
+                <button className="btn-ghost" type="button" onClick={() => void handleDone()}>
+                  Готово
+                </button>
+              ) : (
+                <button className="btn-ghost" type="button" onClick={() => setViewMode("edit")}>
+                  Редактировать
+                </button>
+              )
+            ) : null}
             <button
               className={styles.close}
               type="button"
@@ -185,35 +211,43 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
           </div>
 
           <div className={styles.section}>
-            <div className={styles.tabs}>
-              <button
-                type="button"
-                className={mode === "edit" ? styles.tabActive : ""}
-                onClick={() => setMode("edit")}
-              >
-                Редактировать
-              </button>
-              <button
-                type="button"
-                className={mode === "preview" ? styles.tabActive : ""}
-                onClick={() => setMode("preview")}
-              >
-                Предпросмотр
-              </button>
-            </div>
-            {mode === "edit" ? (
-              <textarea
-                className={styles.mdInput}
-                rows={8}
-                placeholder="Описание (Markdown)"
-                value={draft.description}
-                onChange={(event) => setDescription(event.target.value)}
-                onBlur={() => void flush()}
-              />
-            ) : (
-              <div className={styles.markdownPreview}>
+            {viewMode === "read" ? (
+              <div className={styles.descriptionRead}>
                 <ReactMarkdown>{draft.description || "*Нет описания.*"}</ReactMarkdown>
               </div>
+            ) : (
+              <>
+                <div className={styles.tabs}>
+                  <button
+                    type="button"
+                    className={previewMode === "edit" ? styles.tabActive : ""}
+                    onClick={() => setPreviewMode("edit")}
+                  >
+                    Редактор
+                  </button>
+                  <button
+                    type="button"
+                    className={previewMode === "preview" ? styles.tabActive : ""}
+                    onClick={() => setPreviewMode("preview")}
+                  >
+                    Предпросмотр
+                  </button>
+                </div>
+                {previewMode === "edit" ? (
+                  <textarea
+                    className={styles.mdInput}
+                    rows={8}
+                    placeholder="Описание (Markdown)"
+                    value={draft.description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    onBlur={() => void flush()}
+                  />
+                ) : (
+                  <div className={styles.markdownPreview}>
+                    <ReactMarkdown>{draft.description || "*Нет описания.*"}</ReactMarkdown>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

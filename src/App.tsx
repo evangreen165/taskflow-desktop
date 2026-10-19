@@ -7,6 +7,8 @@ import BootGate from "@/components/boot/BootGate";
 import Onboarding from "@/components/onboarding/Onboarding";
 import AdminPage from "@/pages/admin/AdminPage";
 import LoginScreen from "@/pages/auth/LoginScreen";
+import KbArticlePage from "@/pages/kb/KbArticlePage";
+import KbPage from "@/pages/kb/KbPage";
 import WorkspaceLayout from "@/pages/layout/WorkspaceLayout";
 import ProfilePage from "@/pages/profile/ProfilePage";
 import TasksPage from "@/pages/tasks/TasksPage";
@@ -30,6 +32,8 @@ export const router = createHashRouter([
     children: [
       { index: true, element: <Navigate to="/app/tasks" replace /> },
       { path: "tasks", element: <TasksPage /> },
+      { path: "kb", element: <KbPage /> },
+      { path: "kb/:id", element: <KbArticlePage /> },
       {
         path: "admin",
         element: (
