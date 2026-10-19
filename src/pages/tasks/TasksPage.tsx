@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import KanbanBoard from "@/components/tasks/KanbanBoard";
 import NewTaskModal from "@/components/tasks/NewTaskModal";
+import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import { messageForCode } from "@/lib/errorMessages";
 import type { TaskStatus } from "@/services/tasks";
 import { useTaskStore } from "@/stores/useTaskStore";
@@ -32,6 +33,7 @@ export default function TasksPage(): JSX.Element {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalStatus, setModalStatus] = useState<TaskStatus>("new");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchTasks();
@@ -56,6 +58,9 @@ export default function TasksPage(): JSX.Element {
     }
   }
 
+  const selectedTask =
+    selectedId !== null ? (tasks.find((task) => task.id === selectedId) ?? null) : null;
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -72,6 +77,7 @@ export default function TasksPage(): JSX.Element {
         users={users}
         onMove={(id, status, version) => void handleMove(id, status, version)}
         onAdd={openModal}
+        onSelect={(task) => setSelectedId(task.id)}
       />
 
       {modalOpen ? (
@@ -79,6 +85,14 @@ export default function TasksPage(): JSX.Element {
           initialStatus={modalStatus}
           onClose={() => setModalOpen(false)}
           onCreated={addTask}
+        />
+      ) : null}
+
+      {selectedTask ? (
+        <TaskDetailPanel
+          key={selectedTask.id}
+          task={selectedTask}
+          onClose={() => setSelectedId(null)}
         />
       ) : null}
     </div>

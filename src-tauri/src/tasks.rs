@@ -130,6 +130,8 @@ pub struct UpdateTaskPayload {
     #[serde(default)]
     pub checklist: Option<Vec<ChecklistItem>>,
     #[serde(default)]
+    pub comments: Option<Vec<Comment>>,
+    #[serde(default)]
     pub watchers: Option<Vec<String>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
     pub project_id: Option<Option<String>>,
@@ -277,6 +279,9 @@ pub fn update(
     }
     if let Some(checklist) = patch.checklist {
         task.checklist = checklist;
+    }
+    if let Some(comments) = patch.comments {
+        task.comments = comments;
     }
     if let Some(watchers) = patch.watchers {
         task.watchers = watchers;

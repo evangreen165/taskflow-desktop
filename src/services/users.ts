@@ -19,6 +19,11 @@ export const UsersService = {
     return invokeCommand<UserSummary[]>("usersSummaries", { ids });
   },
 
+  /** Active-user directory for pickers (authenticated, non-sensitive). */
+  directory(): Promise<Result<UserSummary[]>> {
+    return invokeCommand<UserSummary[]>("usersDirectory");
+  },
+
   update(id: string, patch: UserPatch): Promise<Result<UserInfo>> {
     return invokeCommand<UserInfo>("usersUpdate", { id, patch });
   },

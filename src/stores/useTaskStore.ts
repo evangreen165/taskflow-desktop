@@ -10,6 +10,8 @@ interface TaskState {
   /** Loads all visible tasks (`tasksList` with an empty filter). */
   fetchTasks: () => Promise<void>;
   addTask: (task: Task) => void;
+  /** Replaces one task in the list with the server-confirmed version. */
+  replaceTask: (task: Task) => void;
   /**
    * Optimistically moves a task to `status`, then persists it. On failure the
    * previous list is restored and the error is returned for a toast.
@@ -34,6 +36,12 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
   addTask: (task) => {
     set((state) => ({ tasks: [task, ...state.tasks] }));
+  },
+
+  replaceTask: (task) => {
+    set((state) => ({
+      tasks: state.tasks.map((item) => (item.id === task.id ? task : item)),
+    }));
   },
 
   moveTask: async (id, status, currentVersion) => {

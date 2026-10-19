@@ -73,6 +73,7 @@ export interface UpdateTaskPayload {
   dueDate?: string | null;
   tags?: string[];
   checklist?: ChecklistItem[];
+  comments?: Comment[];
   watchers?: string[];
   projectId?: string | null;
 }

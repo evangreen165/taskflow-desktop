@@ -56,6 +56,19 @@ export function initials(name: string): string {
   return (first + second).toUpperCase();
 }
 
+export function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 const AVATAR_COLORS = ["#5b5bd6", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
 
 /** Deterministic fallback color when a user summary is not available yet. */

@@ -48,6 +48,29 @@ pub fn users_summaries(
     users_summaries_impl(&state, ids)
 }
 
+/// Active-user directory for pickers (assignees). Authenticated, non-sensitive
+/// projection only.
+pub fn users_directory_impl(state: &AppState) -> Result<Vec<UserSummary>, AppError> {
+    state.require_auth()?;
+    let root = state.root()?;
+    let mut users: Vec<UserSummary> = users::list(&root)?
+        .into_iter()
+        .filter(|u| u.is_active)
+        .map(|u| UserSummary {
+            id: u.id,
+            display_name: u.display_name,
+            avatar_color: u.avatar_color,
+        })
+        .collect();
+    users.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+    Ok(users)
+}
+
+#[tauri::command(rename = "usersDirectory")]
+pub fn users_directory(state: State<'_, AppState>) -> Result<Vec<UserSummary>, AppError> {
+    users_directory_impl(&state)
+}
+
 #[tauri::command(rename = "usersList")]
 pub fn users_list(state: State<'_, AppState>) -> Result<Vec<UserInfo>, AppError> {
     state.require_perm("users.manage")?;
