@@ -1,4 +1,5 @@
 mod audit;
+mod attachments;
 mod commands;
 mod error;
 mod fsops;
@@ -252,6 +253,9 @@ pub fn run() {
             commands::notes_publish,
             commands::notes_delete,
             commands::notes_restore_version,
+            commands::attachment_add,
+            commands::attachment_get_base64,
+            commands::attachment_remove,
             commands::read_json,
             commands::write_json_atomic,
             commands::read_text,

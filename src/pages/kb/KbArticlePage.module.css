@@ -302,6 +302,27 @@
   border-color: var(--accent);
 }
 
+.attachBar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.attachBar button {
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.attachBar button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
 .mdInput {
   width: 100%;
   padding: 12px 14px;

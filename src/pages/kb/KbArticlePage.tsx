@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { AttachmentImage, AttachmentLink } from "@/components/kb/MarkdownAttachments";
 import { useNoteEditor } from "@/hooks/useNoteEditor";
 import { usePermissions } from "@/hooks/usePermissions";
 import { categoryIcon, formatDate, NOTE_STATUS_LABELS } from "@/lib/kbMeta";
+import { AttachmentsService } from "@/services/attachments";
 import { NotesService, type Note, type NoteMeta } from "@/services/notes";
 import { useNoteStore } from "@/stores/useNoteStore";
 import { useToastStore } from "@/stores/useToastStore";
@@ -177,7 +180,10 @@ export default function KbArticlePage(): JSX.Element {
             ) : null}
           </div>
           <div className={styles.markdown}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{ img: AttachmentImage, a: AttachmentLink }}
+            >
               {note.content || "*Нет содержания.*"}
             </ReactMarkdown>
           </div>
@@ -254,6 +260,7 @@ function ArticleEditor({
 
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [tagInput, setTagInput] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   // Select a stable reference and derive the list with useMemo: a selector that
   // returns a fresh array (e.g. `s.notes.map(...)`) breaks `useSyncExternalStore`
   // and causes an infinite render loop.
@@ -270,6 +277,48 @@ function ArticleEditor({
     }
     setTags([...draft.tags, value]);
     setTagInput("");
+  }
+
+  function insertMarkdown(markdown: string): void {
+    const element = textareaRef.current;
+    const start = element?.selectionStart ?? draft.content.length;
+    const end = element?.selectionEnd ?? start;
+    const next = draft.content.slice(0, start) + markdown + draft.content.slice(end);
+    setContent(next);
+    requestAnimationFrame(() => {
+      element?.focus();
+      const position = start + markdown.length;
+      element?.setSelectionRange(position, position);
+    });
+  }
+
+  /** Opens the native file picker, stores the file, and inserts its link. */
+  async function attachFile(kind: "image" | "file"): Promise<void> {
+    const options =
+      kind === "image"
+        ? {
+            multiple: false,
+            filters: [
+              {
+                name: "Изображения",
+                extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
+              },
+            ],
+          }
+        : { multiple: false };
+    const selected = await open(options);
+    if (typeof selected !== "string") {
+      return;
+    }
+    const name = selected.split(/[\\/]/).pop() ?? selected;
+    const result = await AttachmentsService.add(selected, name);
+    if (!result.ok) {
+      return;
+    }
+    const { sha256 } = result.value.info;
+    insertMarkdown(
+      kind === "image" ? `![${name}](attachment://${sha256})` : `[${name}](attachment://${sha256})`,
+    );
   }
 
   async function loadCurrent(): Promise<void> {
@@ -358,16 +407,34 @@ function ArticleEditor({
           </button>
         </div>
         {mode === "edit" ? (
-          <textarea
-            className={styles.mdInput}
-            rows={18}
-            value={draft.content}
-            placeholder="Текст статьи (Markdown)"
-            onChange={(e) => setContent(e.target.value)}
-          />
+          <>
+            <div className={styles.attachBar}>
+              <button type="button" onClick={() => void attachFile("file")} title="Прикрепить файл">
+                📎 Прикрепить файл
+              </button>
+              <button
+                type="button"
+                onClick={() => void attachFile("image")}
+                title="Вставить картинку"
+              >
+                🖼️ Вставить картинку
+              </button>
+            </div>
+            <textarea
+              ref={textareaRef}
+              className={styles.mdInput}
+              rows={16}
+              value={draft.content}
+              placeholder="Текст статьи (Markdown)"
+              onChange={(e) => setContent(e.target.value)}
+            />
+          </>
         ) : (
           <div className={styles.mdPreview}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{ img: AttachmentImage, a: AttachmentLink }}
+            >
               {draft.content || "*Нет содержания.*"}
             </ReactMarkdown>
           </div>
