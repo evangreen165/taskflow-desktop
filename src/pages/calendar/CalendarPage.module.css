@@ -163,6 +163,7 @@
 
 .unscheduled {
   width: 240px;
+  min-height: 160px;
   flex-shrink: 0;
   background: var(--surface-2);
   border: 1px solid var(--border);

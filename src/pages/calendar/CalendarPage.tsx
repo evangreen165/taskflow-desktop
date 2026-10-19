@@ -3,10 +3,12 @@ import {
   DndContext,
   PointerSensor,
   pointerWithin,
+  rectIntersection,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
@@ -36,6 +38,12 @@ import styles from "./CalendarPage.module.css";
 const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const UNSCHEDULED_DROP_ID = "unscheduled";
 const MAX_CELL_TASKS = 3;
+
+/** Prefers pointer-precise targets; falls back to rectangle intersection. */
+const calendarCollision: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args);
+  return pointerHits.length > 0 ? pointerHits : rectIntersection(args);
+};
 
 type CalendarView = "month" | "week";
 
@@ -193,7 +201,11 @@ export default function CalendarPage(): JSX.Element {
 
       {loading ? <div className={styles.muted}>Загрузка…</div> : null}
 
-      <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={calendarCollision}
+        onDragEnd={handleDragEnd}
+      >
         <div className={styles.body}>
           <div className={styles.calendarWrap}>
             <div className={styles.weekRow}>

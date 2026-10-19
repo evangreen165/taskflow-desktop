@@ -114,12 +114,59 @@ button {
   font-size: inherit;
 }
 
+/* Native form controls must follow the theme tokens (dark-mode friendly). */
+html {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  html {
+    color-scheme: dark;
+  }
+}
+
 input,
 textarea,
 select {
   font-family: inherit;
   font-size: inherit;
-  color: inherit;
+  color: var(--text);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  caret-color: var(--text);
+}
+
+option {
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+}
+
+html[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
 }
 
 ::-webkit-scrollbar {
