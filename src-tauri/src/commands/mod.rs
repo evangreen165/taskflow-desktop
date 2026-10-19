@@ -1,4 +1,5 @@
 mod auth;
+mod notes;
 mod roles;
 mod storage;
 mod tasks;
@@ -6,6 +7,7 @@ mod users;
 mod workspace;
 
 pub use auth::*;
+pub use notes::*;
 pub use roles::*;
 pub use storage::*;
 pub use tasks::*;

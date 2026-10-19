@@ -6,6 +6,7 @@ mod identity;
 mod locking;
 mod logging;
 mod migrate;
+mod notes;
 mod path;
 mod permissions;
 mod roles;
@@ -243,6 +244,14 @@ pub fn run() {
             commands::tasks_update,
             commands::tasks_change_status,
             commands::tasks_delete,
+            commands::notes_list,
+            commands::notes_get,
+            commands::notes_get_history,
+            commands::notes_create,
+            commands::notes_update,
+            commands::notes_publish,
+            commands::notes_delete,
+            commands::notes_restore_version,
             commands::read_json,
             commands::write_json_atomic,
             commands::read_text,
