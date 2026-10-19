@@ -25,3 +25,6 @@ logs/
 scratch/
 tmp/
 *.taskflow-*.tmp
+
+# Agent tool state
+.kilo/plans/

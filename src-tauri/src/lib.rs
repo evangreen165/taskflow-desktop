@@ -10,6 +10,7 @@ mod path;
 mod permissions;
 mod roles;
 mod session;
+mod tasks;
 mod users;
 mod watcher;
 mod workspace;
@@ -229,11 +230,19 @@ pub fn run() {
             commands::users_list,
             commands::users_update,
             commands::users_deactivate,
+            commands::users_summaries,
+            commands::users_directory,
             commands::roles_list,
             commands::roles_create,
             commands::roles_update,
             commands::roles_delete,
             commands::permissions_list,
+            commands::tasks_list,
+            commands::tasks_get,
+            commands::tasks_create,
+            commands::tasks_update,
+            commands::tasks_change_status,
+            commands::tasks_delete,
             commands::read_json,
             commands::write_json_atomic,
             commands::read_text,

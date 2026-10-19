@@ -38,6 +38,7 @@ export const KNOWN_ERROR_CODES = [
   "ROLE_FIXED",
   "ROLE_SYSTEM",
   "ROLE_IN_USE",
+  "VERSION_CONFLICT",
 ] as const;
 
 export type KnownErrorCode = (typeof KNOWN_ERROR_CODES)[number];

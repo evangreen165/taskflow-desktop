@@ -1,5 +1,7 @@
 use tauri::State;
 
+use serde::Serialize;
+
 use taskflow_macros::write_command;
 
 use crate::audit;
@@ -7,6 +9,67 @@ use crate::error::AppError;
 use crate::session::ActorId;
 use crate::users::{self, UserInfo, UserPatch};
 use crate::AppState;
+
+/// Minimal, non-sensitive user projection used to render assignee avatars.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserSummary {
+    pub id: String,
+    pub display_name: String,
+    pub avatar_color: String,
+}
+
+pub fn users_summaries_impl(
+    state: &AppState,
+    ids: Vec<String>,
+) -> Result<Vec<UserSummary>, AppError> {
+    state.require_auth()?;
+    let root = state.root()?;
+    let wanted: std::collections::HashSet<&str> = ids.iter().map(String::as_str).collect();
+    let users = users::list(&root)?;
+    Ok(users
+        .into_iter()
+        .filter(|u| wanted.contains(u.id.as_str()))
+        .map(|u| UserSummary {
+            id: u.id,
+            display_name: u.display_name,
+            avatar_color: u.avatar_color,
+        })
+        .collect())
+}
+
+/// Resolves display name + avatar color for a set of user ids. Available to any
+/// authenticated user (task cards show assignees); never exposes credentials.
+#[tauri::command(rename = "usersSummaries")]
+pub fn users_summaries(
+    state: State<'_, AppState>,
+    ids: Vec<String>,
+) -> Result<Vec<UserSummary>, AppError> {
+    users_summaries_impl(&state, ids)
+}
+
+/// Active-user directory for pickers (assignees). Authenticated, non-sensitive
+/// projection only.
+pub fn users_directory_impl(state: &AppState) -> Result<Vec<UserSummary>, AppError> {
+    state.require_auth()?;
+    let root = state.root()?;
+    let mut users: Vec<UserSummary> = users::list(&root)?
+        .into_iter()
+        .filter(|u| u.is_active)
+        .map(|u| UserSummary {
+            id: u.id,
+            display_name: u.display_name,
+            avatar_color: u.avatar_color,
+        })
+        .collect();
+    users.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+    Ok(users)
+}
+
+#[tauri::command(rename = "usersDirectory")]
+pub fn users_directory(state: State<'_, AppState>) -> Result<Vec<UserSummary>, AppError> {
+    users_directory_impl(&state)
+}
 
 #[tauri::command(rename = "usersList")]
 pub fn users_list(state: State<'_, AppState>) -> Result<Vec<UserInfo>, AppError> {
