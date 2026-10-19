@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -254,7 +254,14 @@ function ArticleEditor({
 
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [tagInput, setTagInput] = useState("");
-  const categories = useNoteStore((s) => s.notes.map((n) => n.category));
+  // Select a stable reference and derive the list with useMemo: a selector that
+  // returns a fresh array (e.g. `s.notes.map(...)`) breaks `useSyncExternalStore`
+  // and causes an infinite render loop.
+  const allNotes = useNoteStore((s) => s.notes);
+  const categories = useMemo(
+    () => Array.from(new Set(allNotes.map((note) => note.category).filter(Boolean))),
+    [allNotes],
+  );
 
   function addTag(): void {
     const value = tagInput.trim();
