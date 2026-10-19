@@ -1,10 +1,21 @@
 use tauri::State;
 
+use serde::Serialize;
+
 use taskflow_macros::write_command;
 
 use crate::error::AppError;
 use crate::notes::{self, Note, NoteMeta, NoteStatus};
 use crate::AppState;
+
+/// `notesList` item: flattened meta plus a content snippet for the grid.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteListItem {
+    #[serde(flatten)]
+    pub meta: NoteMeta,
+    pub preview: String,
+}
 
 pub fn notes_list_impl(
     state: &AppState,
@@ -12,7 +23,7 @@ pub fn notes_list_impl(
     tag: Option<String>,
     query: Option<String>,
     status: Option<NoteStatus>,
-) -> Result<Vec<NoteMeta>, AppError> {
+) -> Result<Vec<NoteListItem>, AppError> {
     state.require_perm("article.view")?;
     let root = state.root()?;
 
@@ -37,7 +48,15 @@ pub fn notes_list_impl(
             });
         }
     }
-    Ok(metas)
+
+    let mut items = Vec::with_capacity(metas.len());
+    for meta in metas {
+        let preview = notes::read_content(&root, &meta.id)
+            .map(|content| notes::preview_of(&content))
+            .unwrap_or_default();
+        items.push(NoteListItem { meta, preview });
+    }
+    Ok(items)
 }
 
 #[tauri::command(rename = "notesList")]
@@ -47,7 +66,7 @@ pub fn notes_list(
     tag: Option<String>,
     query: Option<String>,
     status: Option<NoteStatus>,
-) -> Result<Vec<NoteMeta>, AppError> {
+) -> Result<Vec<NoteListItem>, AppError> {
     notes_list_impl(&state, category, tag, query, status)
 }
 
@@ -257,7 +276,8 @@ mod tests {
 
         let listed = notes_list_impl(&fx.state, None, None, None, None).unwrap();
         assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].id, note.meta.id);
+        assert_eq!(listed[0].meta.id, note.meta.id);
+        assert!(listed[0].preview.contains("Онбординг"));
 
         let fetched = notes_get_impl(&fx.state, note.meta.id.clone()).unwrap();
         assert_eq!(fetched.content, "# Онбординг\nТекст.");
@@ -386,7 +406,7 @@ mod tests {
         let by_category =
             notes_list_impl(&fx.state, Some("HR".to_string()), None, None, None).unwrap();
         assert_eq!(by_category.len(), 1);
-        assert_eq!(by_category[0].title, "Политика отпусков");
+        assert_eq!(by_category[0].meta.title, "Политика отпусков");
 
         let by_status =
             notes_list_impl(&fx.state, None, None, None, Some(NoteStatus::Published)).unwrap();
@@ -395,6 +415,6 @@ mod tests {
         let by_query = notes_list_impl(&fx.state, None, None, Some("отпуск".to_string()), None)
             .unwrap();
         assert_eq!(by_query.len(), 1);
-        assert_eq!(by_query[0].title, "Политика отпусков");
+        assert_eq!(by_query[0].meta.title, "Политика отпусков");
     }
 }

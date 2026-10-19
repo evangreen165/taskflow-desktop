@@ -65,6 +65,18 @@ fn validate_title(title: &str) -> Result<String, AppError> {
     Ok(title.to_string())
 }
 
+/// Whitespace-collapsed snippet of the first ~500 chars (grid card preview).
+pub fn preview_of(content: &str) -> String {
+    const MAX: usize = 500;
+    let collapsed = content.split_whitespace().collect::<Vec<_>>().join(" ");
+    let chars: Vec<char> = collapsed.chars().collect();
+    let mut preview: String = chars.iter().take(MAX).collect();
+    if chars.len() > MAX {
+        preview.push('…');
+    }
+    preview
+}
+
 fn note_dir(root: &Path, id: &str) -> Result<PathBuf, AppError> {
     if uuid::Uuid::parse_str(id).is_err() {
         return Err(AppError::new("INVALID_INPUT", "invalid note id"));
