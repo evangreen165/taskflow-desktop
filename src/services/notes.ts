@@ -96,4 +96,16 @@ export const NotesService = {
   restoreVersion(id: string, version: number): Promise<Result<Note>> {
     return invokeCommand<Note>("notesRestoreVersion", { id, version });
   },
+
+  listCategories(): Promise<Result<string[]>> {
+    return invokeCommand<string[]>("notesListCategories");
+  },
+
+  createCategory(name: string): Promise<Result<string[]>> {
+    return invokeCommand<string[]>("notesCreateCategory", { name });
+  },
+
+  deleteCategory(name: string): Promise<Result<string[]>> {
+    return invokeCommand<string[]>("notesDeleteCategory", { name });
+  },
 };

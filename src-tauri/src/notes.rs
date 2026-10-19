@@ -192,6 +192,52 @@ pub fn read_content(root: &Path, id: &str) -> Result<String, AppError> {
     fsops::read_text(&content_path(root, id)?)
 }
 
+fn categories_path(root: &Path) -> PathBuf {
+    root.join("categories.json")
+}
+
+/// Explicit KB category list (stored at `{workspace}/categories.json`).
+pub fn list_categories(root: &Path) -> Result<Vec<String>, AppError> {
+    let path = categories_path(root);
+    if !path.is_file() {
+        return Ok(Vec::new());
+    }
+    fsops::read_json::<Vec<String>>(&path)
+}
+
+fn write_categories(root: &Path, categories: &[String]) -> Result<(), AppError> {
+    fsops::write_json_atomic(&categories_path(root), &categories)
+}
+
+/// Adds a category (idempotent) and returns the updated list.
+pub fn create_category(root: &Path, name: &str) -> Result<Vec<String>, AppError> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 80 {
+        return Err(AppError::new(
+            "INVALID_INPUT",
+            "category name must be between 1 and 80 characters",
+        ));
+    }
+    let mut categories = list_categories(root)?;
+    if !categories.iter().any(|c| c == name) {
+        categories.push(name.to_string());
+        categories.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        write_categories(root, &categories)?;
+    }
+    Ok(categories)
+}
+
+/// Removes a category (idempotent) and returns the updated list.
+pub fn delete_category(root: &Path, name: &str) -> Result<Vec<String>, AppError> {
+    let mut categories = list_categories(root)?;
+    let before = categories.len();
+    categories.retain(|c| c != name);
+    if categories.len() != before {
+        write_categories(root, &categories)?;
+    }
+    Ok(categories)
+}
+
 /// Version numbers that have a history snapshot, newest first.
 pub fn history_versions(root: &Path, id: &str) -> Result<Vec<u64>, AppError> {
     let mut snapshots = read_snapshots(root, id)?;

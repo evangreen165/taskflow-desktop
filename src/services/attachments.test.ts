@@ -31,4 +31,10 @@ describe("AttachmentsService", () => {
     await AttachmentsService.remove("abc");
     expect(invokeMock).toHaveBeenCalledWith("attachmentRemove", { sha256: "abc" });
   });
+
+  it("open sends the sha256", async () => {
+    invokeMock.mockResolvedValue(undefined);
+    await AttachmentsService.open("abc");
+    expect(invokeMock).toHaveBeenCalledWith("attachmentOpen", { sha256: "abc" });
+  });
 });

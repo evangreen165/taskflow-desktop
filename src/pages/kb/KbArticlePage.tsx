@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
@@ -182,6 +182,7 @@ export default function KbArticlePage(): JSX.Element {
           <div className={styles.markdown}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
+              urlTransform={(url) => url}
               components={{ img: AttachmentImage, a: AttachmentLink }}
             >
               {note.content || "*Нет содержания.*"}
@@ -261,14 +262,8 @@ function ArticleEditor({
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [tagInput, setTagInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  // Select a stable reference and derive the list with useMemo: a selector that
-  // returns a fresh array (e.g. `s.notes.map(...)`) breaks `useSyncExternalStore`
-  // and causes an infinite render loop.
-  const allNotes = useNoteStore((s) => s.notes);
-  const categories = useMemo(
-    () => Array.from(new Set(allNotes.map((note) => note.category).filter(Boolean))),
-    [allNotes],
-  );
+  // Explicit category list from the backend (`categories.json`).
+  const categories = useNoteStore((s) => s.categories);
 
   function addTag(): void {
     const value = tagInput.trim();
@@ -433,6 +428,7 @@ function ArticleEditor({
           <div className={styles.mdPreview}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
+              urlTransform={(url) => url}
               components={{ img: AttachmentImage, a: AttachmentLink }}
             >
               {draft.content || "*Нет содержания.*"}

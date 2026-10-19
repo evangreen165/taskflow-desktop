@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import { isAttachmentUrl, shaFromAttachmentUrl, downloadDataUrl } from "@/lib/attachments";
+import { isAttachmentUrl, shaFromAttachmentUrl } from "@/lib/attachments";
 import { AttachmentsService } from "@/services/attachments";
 
 /**
@@ -42,8 +42,9 @@ export function AttachmentImage({
 }
 
 /**
- * Renders `attachment://` links: clicking downloads the file via a data URL.
- * Non-attachment links render as a normal `<a>`.
+ * Renders `attachment://` links: clicking opens the stored file with the OS
+ * default application (via the `attachmentOpen` command). `preventDefault` is
+ * always called so the webview never navigates to the custom protocol.
  */
 export function AttachmentLink({
   href,
@@ -59,7 +60,6 @@ export function AttachmentLink({
   }
 
   const sha = shaFromAttachmentUrl(href);
-  const name = typeof children === "string" && children ? children : "attachment";
 
   async function handleClick(event: React.MouseEvent<HTMLAnchorElement>): Promise<void> {
     event.preventDefault();
@@ -67,16 +67,13 @@ export function AttachmentLink({
       return;
     }
     setBusy(true);
-    const result = await AttachmentsService.getBase64(sha);
+    await AttachmentsService.open(sha);
     setBusy(false);
-    if (result.ok) {
-      downloadDataUrl(result.value, name);
-    }
   }
 
   return (
     <a href={href} onClick={(event) => void handleClick(event)}>
-      {busy ? "Загрузка…" : children}
+      {busy ? "Открытие…" : children}
     </a>
   );
 }

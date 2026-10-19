@@ -201,6 +201,7 @@ impl AppState {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
@@ -253,9 +254,13 @@ pub fn run() {
             commands::notes_publish,
             commands::notes_delete,
             commands::notes_restore_version,
+            commands::notes_list_categories,
+            commands::notes_create_category,
+            commands::notes_delete_category,
             commands::attachment_add,
             commands::attachment_get_base64,
             commands::attachment_remove,
+            commands::attachment_open,
             commands::read_json,
             commands::write_json_atomic,
             commands::read_text,

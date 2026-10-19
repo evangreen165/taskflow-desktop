@@ -28,4 +28,9 @@ export const AttachmentsService = {
   remove(sha256: string): Promise<Result<void>> {
     return invokeCommand<void>("attachmentRemove", { sha256 });
   },
+
+  /** Opens the stored file with the OS default application. */
+  open(sha256: string): Promise<Result<void>> {
+    return invokeCommand<void>("attachmentOpen", { sha256 });
+  },
 };

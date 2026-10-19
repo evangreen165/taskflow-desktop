@@ -50,6 +50,31 @@ pub fn attachment_remove(state: State<'_, AppState>, sha256: String) -> Result<(
     attachment_remove_impl(&state, sha256)
 }
 
+pub fn attachment_open_impl(
+    state: &AppState,
+    app: &tauri::AppHandle,
+    sha256: String,
+) -> Result<(), AppError> {
+    use tauri_plugin_opener::OpenerExt;
+
+    state.require_auth()?;
+    let root = state.root()?;
+    let path = attachments::resolve(&root, &sha256)?;
+    app.opener()
+        .open_path(path.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|e| AppError::new("IO", format!("open attachment: {e}")))
+}
+
+/// Opens the stored file with the OS default application.
+#[tauri::command(rename = "attachmentOpen")]
+pub fn attachment_open(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    sha256: String,
+) -> Result<(), AppError> {
+    attachment_open_impl(&state, &app, sha256)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

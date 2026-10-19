@@ -57,6 +57,84 @@
   background: var(--surface-2);
 }
 
+.titleText {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+  padding: 6px 8px;
+  overflow-wrap: break-word;
+}
+
+.descriptionRead {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.descriptionRead h1,
+.descriptionRead h2,
+.descriptionRead h3,
+.descriptionRead h4 {
+  font-weight: 650;
+  margin: 10px 0 6px;
+  line-height: 1.3;
+}
+
+.descriptionRead h1 {
+  font-size: 16px;
+}
+
+.descriptionRead h2 {
+  font-size: 14.5px;
+}
+
+.descriptionRead h3,
+.descriptionRead h4 {
+  font-size: 13.5px;
+}
+
+.descriptionRead p {
+  margin: 0 0 8px;
+}
+
+.descriptionRead ul,
+.descriptionRead ol {
+  padding-left: 20px;
+  margin: 0 0 8px;
+}
+
+.descriptionRead code {
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+.descriptionRead pre {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  overflow-x: auto;
+  margin: 0 0 8px;
+}
+
+.descriptionRead pre code {
+  background: none;
+  padding: 0;
+}
+
+.descriptionRead a {
+  color: var(--accent);
+}
+
 .headRight {
   display: flex;
   align-items: center;

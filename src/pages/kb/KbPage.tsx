@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import KbCard from "@/components/kb/KbCard";
 import NewNoteModal from "@/components/kb/NewNoteModal";
+import { usePermissions } from "@/hooks/usePermissions";
 import { EMPTY_KB_FILTER, filterNoteItems, type KbFilter } from "@/lib/kbMeta";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNoteStore } from "@/stores/useNoteStore";
@@ -12,19 +13,27 @@ import styles from "./KbPage.module.css";
 
 export default function KbPage(): JSX.Element {
   const notes = useNoteStore((s) => s.notes);
+  const categories = useNoteStore((s) => s.categories);
   const loading = useNoteStore((s) => s.loading);
   const fetchNotes = useNoteStore((s) => s.fetchNotes);
+  const fetchCategories = useNoteStore((s) => s.fetchCategories);
+  const addCategory = useNoteStore((s) => s.addCategory);
+  const removeCategory = useNoteStore((s) => s.removeCategory);
   const users = useUserDirectory((s) => s.users);
   const ensureUsers = useUserDirectory((s) => s.ensure);
   const currentUserId = useAuthStore((s) => s.session?.user.id ?? null);
+  const { can } = usePermissions();
   const navigate = useNavigate();
 
   const [filter, setFilter] = useState<KbFilter>(EMPTY_KB_FILTER);
   const [modalOpen, setModalOpen] = useState(false);
+  const [newCategoryOpen, setNewCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   useEffect(() => {
     void fetchNotes();
-  }, [fetchNotes]);
+    void fetchCategories();
+  }, [fetchNotes, fetchCategories]);
 
   useEffect(() => {
     const ids = Array.from(new Set(notes.map((note) => note.authorId)));
@@ -33,11 +42,6 @@ export default function KbPage(): JSX.Element {
     }
   }, [notes, ensureUsers]);
 
-  const categories = useMemo(() => {
-    const set = new Set(notes.map((note) => note.category).filter(Boolean));
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "ru"));
-  }, [notes]);
-
   const visible = useMemo(
     () => filterNoteItems(notes, filter, currentUserId),
     [notes, filter, currentUserId],
@@ -45,22 +49,85 @@ export default function KbPage(): JSX.Element {
   const filterActive =
     filter.category !== null || filter.status !== "all" || filter.search.trim() !== "";
 
+  async function submitCategory(): Promise<void> {
+    const name = newCategoryName.trim();
+    setNewCategoryOpen(false);
+    if (!name) {
+      return;
+    }
+    const created = await addCategory(name);
+    if (created) {
+      setFilter((current) => ({ ...current, category: name }));
+    }
+  }
+
   return (
     <div className={styles.page}>
       <aside className={styles.sidebar}>
-        <div className={styles.sidebarTitle}>Категории</div>
+        <div className={styles.sidebarRow}>
+          <div className={styles.sidebarTitle}>Категории</div>
+          {can("article.create") ? (
+            <button
+              className={styles.sidebarPlus}
+              type="button"
+              title="Новая категория"
+              onClick={() => {
+                setNewCategoryName("");
+                setNewCategoryOpen(true);
+              }}
+            >
+              +
+            </button>
+          ) : null}
+        </div>
+
+        {newCategoryOpen ? (
+          <div className={styles.newCategoryRow}>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Название категории"
+              value={newCategoryName}
+              onChange={(event) => setNewCategoryName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  void submitCategory();
+                } else if (event.key === "Escape") {
+                  setNewCategoryOpen(false);
+                }
+              }}
+            />
+            <button type="button" onClick={() => void submitCategory()}>
+              OK
+            </button>
+          </div>
+        ) : null}
+
         <FilterButton
           label="Все статьи"
           active={filter.category === null}
           onClick={() => setFilter({ ...filter, category: null })}
         />
         {categories.map((cat) => (
-          <FilterButton
-            key={cat}
-            label={cat}
-            active={filter.category === cat}
-            onClick={() => setFilter({ ...filter, category: filter.category === cat ? null : cat })}
-          />
+          <div key={cat} className={styles.filterRow}>
+            <FilterButton
+              label={cat}
+              active={filter.category === cat}
+              onClick={() =>
+                setFilter({ ...filter, category: filter.category === cat ? null : cat })
+              }
+            />
+            {can("article.create") ? (
+              <button
+                className={styles.filterDelete}
+                type="button"
+                title={`Удалить категорию «${cat}»`}
+                onClick={() => void removeCategory(cat)}
+              >
+                ✕
+              </button>
+            ) : null}
+          </div>
         ))}
 
         <div className={styles.sidebarTitle}>Статус</div>

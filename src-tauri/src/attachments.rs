@@ -105,7 +105,7 @@ fn attachment_path(root: &Path, sha256: &str, ext: &str) -> Result<PathBuf, AppE
 }
 
 /// Locates `attachments/{sha256}.*` without knowing the extension.
-fn find_by_sha(root: &Path, sha256: &str) -> Result<PathBuf, AppError> {
+pub fn resolve(root: &Path, sha256: &str) -> Result<PathBuf, AppError> {
     if sha256.len() != 64 || !sha256.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(AppError::new("INVALID_INPUT", "invalid sha256"));
     }
@@ -171,7 +171,7 @@ pub fn add(root: &Path, source_path: &str, name: &str) -> Result<(AttachmentInfo
 
 /// Reads the attachment and returns it as a `data:<mime>;base64,…` URL.
 pub fn get_base64(root: &Path, sha256: &str) -> Result<String, AppError> {
-    let path = find_by_sha(root, sha256)?;
+    let path = resolve(root, sha256)?;
     let bytes = std::fs::read(&path).map_err(|e| AppError::io("read attachment", e))?;
     let ext = path
         .extension()
@@ -213,6 +213,6 @@ pub fn remove(root: &Path, sha256: &str) -> Result<(), AppError> {
     if is_referenced(root, sha256)? {
         return Ok(());
     }
-    let path = find_by_sha(root, sha256)?;
+    let path = resolve(root, sha256)?;
     std::fs::remove_file(&path).map_err(|e| AppError::io("remove attachment", e))
 }

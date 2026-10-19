@@ -198,6 +198,50 @@ pub fn notes_restore_version(
     notes_restore_version_impl(&state, id, version)
 }
 
+pub fn notes_list_categories_impl(state: &AppState) -> Result<Vec<String>, AppError> {
+    state.require_auth()?;
+    notes::list_categories(&state.root()?)
+}
+
+#[tauri::command(rename = "notesListCategories")]
+pub fn notes_list_categories(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
+    notes_list_categories_impl(&state)
+}
+
+pub fn notes_create_category_impl(
+    state: &AppState,
+    name: String,
+) -> Result<Vec<String>, AppError> {
+    state.require_writable()?;
+    state.require_perm("article.create")?;
+    notes::create_category(&state.root()?, &name)
+}
+
+#[write_command(rename = "notesCreateCategory")]
+pub fn notes_create_category(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<Vec<String>, AppError> {
+    notes_create_category_impl(&state, name)
+}
+
+pub fn notes_delete_category_impl(
+    state: &AppState,
+    name: String,
+) -> Result<Vec<String>, AppError> {
+    state.require_writable()?;
+    state.require_perm("article.create")?;
+    notes::delete_category(&state.root()?, &name)
+}
+
+#[write_command(rename = "notesDeleteCategory")]
+pub fn notes_delete_category(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<Vec<String>, AppError> {
+    notes_delete_category_impl(&state, name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -423,5 +467,26 @@ mod tests {
             .unwrap();
         assert_eq!(by_query.len(), 1);
         assert_eq!(by_query[0].meta.title, "Политика отпусков");
+    }
+
+    #[test]
+    fn categories_create_list_delete() {
+        let fx = fixture();
+        let created = notes_create_category_impl(&fx.state, "Онбординг".to_string()).unwrap();
+        assert!(created.iter().any(|c| c == "Онбординг"));
+
+        // Idempotent create.
+        notes_create_category_impl(&fx.state, "Онбординг".to_string()).unwrap();
+        let listed = notes_list_categories_impl(&fx.state).unwrap();
+        assert_eq!(listed, vec!["Онбординг".to_string()]);
+
+        assert_eq!(
+            notes_create_category_impl(&fx.state, "  ".to_string()).unwrap_err().code,
+            "INVALID_INPUT"
+        );
+
+        let after_delete = notes_delete_category_impl(&fx.state, "Онбординг".to_string()).unwrap();
+        assert!(after_delete.is_empty());
+        assert!(notes_list_categories_impl(&fx.state).unwrap().is_empty());
     }
 }

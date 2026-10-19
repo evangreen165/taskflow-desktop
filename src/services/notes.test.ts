@@ -85,4 +85,22 @@ describe("NotesService", () => {
     await NotesService.restoreVersion("n1", 2);
     expect(invokeMock).toHaveBeenCalledWith("notesRestoreVersion", { id: "n1", version: 2 });
   });
+
+  it("listCategories has no args", async () => {
+    invokeMock.mockResolvedValue([]);
+    await NotesService.listCategories();
+    expect(invokeMock).toHaveBeenCalledWith("notesListCategories", undefined);
+  });
+
+  it("createCategory sends the name", async () => {
+    invokeMock.mockResolvedValue(["HR"]);
+    await NotesService.createCategory("HR");
+    expect(invokeMock).toHaveBeenCalledWith("notesCreateCategory", { name: "HR" });
+  });
+
+  it("deleteCategory sends the name", async () => {
+    invokeMock.mockResolvedValue([]);
+    await NotesService.deleteCategory("HR");
+    expect(invokeMock).toHaveBeenCalledWith("notesDeleteCategory", { name: "HR" });
+  });
 });
