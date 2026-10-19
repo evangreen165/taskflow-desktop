@@ -67,6 +67,9 @@ export default function WorkspaceLayout(): JSX.Element {
 
         <nav className={styles.nav}>
           <div className={styles.navLabel}>Работа</div>
+          <SideNavLink to="/app/dashboard" disabled={forced}>
+            🏠 Главная
+          </SideNavLink>
           <SideNavLink to="/app/tasks" disabled={forced}>
             Задачи
           </SideNavLink>

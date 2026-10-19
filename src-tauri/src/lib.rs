@@ -261,6 +261,7 @@ pub fn run() {
             commands::attachment_get_base64,
             commands::attachment_remove,
             commands::attachment_open,
+            commands::dashboard_summary,
             commands::read_json,
             commands::write_json_atomic,
             commands::read_text,
