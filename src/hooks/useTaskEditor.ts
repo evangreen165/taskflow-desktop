@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { AppError } from "@/lib/errors";
 import {
   buildUpdatePatch,
   fromDateInput,
+  hasChanges,
   statusChanged,
   taskToDraft,
   type TaskDraft,
@@ -42,6 +43,8 @@ export interface UseTaskEditorResult {
   saving: boolean;
   error: string | null;
   conflictTask: Task | null;
+  /** True when an external change arrived while there were unsaved edits. */
+  externalUpdate: boolean;
   setTitle: (value: string) => void;
   setDescription: (value: string) => void;
   setStatus: (value: TaskStatus) => void;
@@ -55,6 +58,8 @@ export interface UseTaskEditorResult {
   flush: () => Promise<void>;
   reloadCurrent: () => void;
   dismissConflict: () => void;
+  /** Adopts the latest server version (from the store) discarding local edits. */
+  adoptExternal: () => void;
 }
 
 /**
@@ -70,6 +75,7 @@ export function useTaskEditor(task: Task): UseTaskEditorResult {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflictTask, setConflictTask] = useState<Task | null>(null);
+  const [externalUpdate, setExternalUpdate] = useState(false);
 
   const draftRef = useRef<TaskDraft>(initial.current);
   const baseRef = useRef<TaskDraft>(initial.current);
@@ -78,6 +84,28 @@ export function useTaskEditor(task: Task): UseTaskEditorResult {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inflightRef = useRef<Promise<void> | null>(null);
   const pendingRef = useRef(false);
+
+  // External task change (watcher refetch): adopt it when the draft is clean,
+  // otherwise notify without clobbering the draft. Our own saves set
+  // `versionRef` before `replaceTask`, so they never trip this.
+  useEffect(() => {
+    if (conflictRef.current) {
+      return;
+    }
+    if (task.version === versionRef.current) {
+      return;
+    }
+    const nextBase = taskToDraft(task);
+    if (hasChanges(draftRef.current, baseRef.current)) {
+      setExternalUpdate(true);
+    } else {
+      baseRef.current = nextBase;
+      versionRef.current = task.version;
+      draftRef.current = nextBase;
+      setDraft(nextBase);
+      setExternalUpdate(false);
+    }
+  }, [task]);
 
   function clearTimer(): void {
     if (timerRef.current !== null) {
@@ -271,6 +299,7 @@ export function useTaskEditor(task: Task): UseTaskEditorResult {
     conflictRef.current = false;
     setDraft(next);
     setConflictTask(null);
+    setExternalUpdate(false);
     setError(null);
     useTaskStore.getState().replaceTask(current);
   }
@@ -279,11 +308,22 @@ export function useTaskEditor(task: Task): UseTaskEditorResult {
     setConflictTask(null);
   }
 
+  function adoptExternal(): void {
+    const next = taskToDraft(task);
+    draftRef.current = next;
+    baseRef.current = next;
+    versionRef.current = task.version;
+    setDraft(next);
+    setExternalUpdate(false);
+    setError(null);
+  }
+
   return {
     draft,
     saving,
     error,
     conflictTask,
+    externalUpdate,
     setTitle,
     setDescription,
     setStatus,
@@ -297,5 +337,6 @@ export function useTaskEditor(task: Task): UseTaskEditorResult {
     flush,
     reloadCurrent,
     dismissConflict,
+    adoptExternal,
   };
 }

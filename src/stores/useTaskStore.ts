@@ -7,8 +7,12 @@ interface TaskState {
   tasks: Task[];
   loading: boolean;
   error: string | null;
+  /** Epoch ms of the last local task write (used to suppress own fs-events). */
+  lastWriteAt: number;
   /** Loads all visible tasks (`tasksList` with an empty filter). */
   fetchTasks: () => Promise<void>;
+  /** Replaces the list without touching `loading` (watcher refresh). */
+  setTasksSilently: (tasks: Task[]) => void;
   addTask: (task: Task) => void;
   /** Replaces one task in the list with the server-confirmed version. */
   replaceTask: (task: Task) => void;
@@ -23,6 +27,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   tasks: [],
   loading: false,
   error: null,
+  lastWriteAt: 0,
 
   fetchTasks: async () => {
     set({ loading: true, error: null });
@@ -34,13 +39,18 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 
+  setTasksSilently: (tasks) => {
+    set({ tasks });
+  },
+
   addTask: (task) => {
-    set((state) => ({ tasks: [task, ...state.tasks] }));
+    set((state) => ({ tasks: [task, ...state.tasks], lastWriteAt: Date.now() }));
   },
 
   replaceTask: (task) => {
     set((state) => ({
       tasks: state.tasks.map((item) => (item.id === task.id ? task : item)),
+      lastWriteAt: Date.now(),
     }));
   },
 
@@ -58,6 +68,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     set((state) => ({
       tasks: state.tasks.map((task) => (task.id === id ? result.value : task)),
+      lastWriteAt: Date.now(),
     }));
     return null;
   },

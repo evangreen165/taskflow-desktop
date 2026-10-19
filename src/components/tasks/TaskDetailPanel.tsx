@@ -27,6 +27,7 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
     saving,
     error,
     conflictTask,
+    externalUpdate,
     setTitle,
     setDescription,
     setStatus,
@@ -40,6 +41,7 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
     flush,
     reloadCurrent,
     dismissConflict,
+    adoptExternal,
   } = useTaskEditor(task);
 
   const [mode, setMode] = useState<PreviewMode>("edit");
@@ -105,6 +107,17 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
           {error ? (
             <div className="alert" style={{ marginBottom: 14 }}>
               {error}
+            </div>
+          ) : null}
+
+          {externalUpdate ? (
+            <div className={styles.externalBanner}>
+              <span>
+                Эта задача была обновлена другим пользователем. Ваши изменения не перезаписаны.
+              </span>
+              <button type="button" onClick={adoptExternal}>
+                Показать актуальную версию
+              </button>
             </div>
           ) : null}
 

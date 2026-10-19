@@ -21,6 +21,19 @@ export const PRIORITY_LABELS: Record<TaskPriority, string> = {
   critical: "Critical",
 };
 
+export function priorityColor(priority: TaskPriority): string {
+  switch (priority) {
+    case "low":
+      return "#6b7280";
+    case "medium":
+      return "#3b82f6";
+    case "high":
+      return "#f59e0b";
+    case "critical":
+      return "#ef4444";
+  }
+}
+
 export function statusLabel(status: TaskStatus): string {
   return KANBAN_COLUMNS.find((column) => column.status === status)?.label ?? status;
 }

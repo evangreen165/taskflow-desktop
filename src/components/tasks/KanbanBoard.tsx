@@ -107,6 +107,7 @@ function Column({
         {tasks.map((task) => (
           <DraggableCard key={task.id} task={task} users={users} onSelect={onSelect} />
         ))}
+        {tasks.length === 0 ? <div className={styles.empty}>Нет задач</div> : null}
       </div>
     </section>
   );

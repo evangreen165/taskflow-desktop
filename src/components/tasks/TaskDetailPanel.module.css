@@ -69,6 +69,30 @@
   color: var(--text-muted);
 }
 
+.externalBanner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.externalBanner button {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amber);
+  text-decoration: underline;
+}
+
+.externalBanner button:hover {
+  opacity: 0.85;
+}
+
 .close {
   width: 30px;
   height: 30px;
