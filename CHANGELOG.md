@@ -2,6 +2,17 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.4.0] - 2026-10-19
+
+### Added
+
+- Knowledge Base with explicit category management
+- Markdown article editor with version history and snapshots
+- Optimistic locking (VERSION_CONFLICT) and draft protection for articles
+- Content-addressable attachments (SHA-256 deduplication)
+- Image embedding and system-level file opening (tauri-plugin-opener)
+- Read/Edit modes for Task and Article panels
+
 ## [0.3.0] - 2026-10-19
 
 ### Added
