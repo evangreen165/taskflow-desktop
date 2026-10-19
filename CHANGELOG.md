@@ -2,6 +2,16 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.3.0] - 2026-10-19
+
+### Added
+
+- Kanban board with Drag-and-Drop
+- Task detail panel with Markdown editor, checklists, and comments
+- Optimistic locking (VERSION_CONFLICT) and draft preservation
+- Real-time workspace updates via filesystem watcher
+- Task filtering (search, priority, assignee) and List view
+
 ## [0.2.0] - 2026-10-18
 
 ### Added
