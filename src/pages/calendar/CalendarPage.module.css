@@ -152,6 +152,10 @@
   cursor: grab;
 }
 
+.dragTask {
+  touch-action: none;
+}
+
 .more {
   font-size: 10.5px;
   color: var(--text-muted);

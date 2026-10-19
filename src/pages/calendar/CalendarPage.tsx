@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
+  pointerWithin,
   useDraggable,
   useDroppable,
   useSensor,
@@ -48,7 +49,7 @@ function dayKey(day: Date): string {
 
 export default function CalendarPage(): JSX.Element {
   const pushToast = useToastStore((s) => s.push);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const [view, setView] = useState<CalendarView>("month");
   const [cursor, setCursor] = useState(() => new Date());
@@ -82,6 +83,7 @@ export default function CalendarPage(): JSX.Element {
   }, [load]);
 
   const days = useMemo(() => eachDayOfInterval({ start: range.start, end: range.end }), [range]);
+  const knownDayKeys = useMemo(() => new Set(days.map(dayKey)), [days]);
   const weeks = useMemo(() => {
     const rows: Date[][] = [];
     for (let i = 0; i < days.length; i += 7) {
@@ -114,7 +116,16 @@ export default function CalendarPage(): JSX.Element {
     if (!task) {
       return;
     }
-    const newDue = over.id === UNSCHEDULED_DROP_ID ? null : String(over.id);
+    let newDue: string | null;
+    if (over.id === UNSCHEDULED_DROP_ID) {
+      newDue = null;
+    } else {
+      const target = String(over.id);
+      if (!knownDayKeys.has(target)) {
+        return;
+      }
+      newDue = target;
+    }
     const oldDue = task.dueDate ? task.dueDate.slice(0, 10) : null;
     if (newDue === oldDue) {
       return;
@@ -182,7 +193,7 @@ export default function CalendarPage(): JSX.Element {
 
       {loading ? <div className={styles.muted}>Загрузка…</div> : null}
 
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
         <div className={styles.body}>
           <div className={styles.calendarWrap}>
             <div className={styles.weekRow}>
@@ -312,6 +323,7 @@ function DraggableTask({ task, onOpen }: { task: Task; onOpen: () => void }): JS
   return (
     <div
       ref={setNodeRef}
+      className={styles.dragTask}
       style={{
         transform: CSS.Translate.toString(transform),
         opacity: isDragging ? 0.5 : 1,
