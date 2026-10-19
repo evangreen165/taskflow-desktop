@@ -50,6 +50,9 @@ export interface TaskFilter {
   projectId?: string;
   status?: TaskStatus;
   assigneeId?: string;
+  /** Inclusive `YYYY-MM-DD` range on `dueDate`. */
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface CreateTaskPayload {

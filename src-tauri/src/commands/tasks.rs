@@ -49,6 +49,18 @@ fn matches_filter(task: &Task, filter: &TaskFilter) -> bool {
             return false;
         }
     }
+    if let Some(start) = &filter.start_date {
+        let due = task.due_date.as_deref().map(|d| d.get(..10).unwrap_or(d));
+        if due.is_none() || due.unwrap() < start.as_str() {
+            return false;
+        }
+    }
+    if let Some(end) = &filter.end_date {
+        let due = task.due_date.as_deref().map(|d| d.get(..10).unwrap_or(d));
+        if due.is_none() || due.unwrap() > end.as_str() {
+            return false;
+        }
+    }
     true
 }
 
@@ -421,5 +433,47 @@ mod tests {
         .unwrap();
         assert_eq!(by_project.len(), 1);
         assert_eq!(by_project[0].id, second.id);
+    }
+
+    #[test]
+    fn list_filters_by_date_range() {
+        let fx = fixture();
+        let first = tasks_create_impl(
+            &fx.state,
+            create_payload(json!({ "title": "A", "dueDate": "2026-10-15" })),
+        )
+        .unwrap();
+        let second = tasks_create_impl(
+            &fx.state,
+            create_payload(json!({ "title": "B", "dueDate": "2026-10-20" })),
+        )
+        .unwrap();
+        tasks_create_impl(&fx.state, create_payload(json!({ "title": "C" }))).unwrap();
+
+        let in_range = tasks_list_impl(
+            &fx.state,
+            TaskFilter {
+                start_date: Some("2026-10-10".to_string()),
+                end_date: Some("2026-10-18".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(in_range.len(), 1);
+        assert_eq!(in_range[0].id, first.id);
+
+        let unscheduled = tasks_list_impl(
+            &fx.state,
+            TaskFilter {
+                start_date: Some("2026-01-01".to_string()),
+                end_date: Some("2026-12-31".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        // A wide range includes both dated tasks but never an unscheduled one.
+        assert!(unscheduled.iter().any(|t| t.id == first.id));
+        assert!(unscheduled.iter().any(|t| t.id == second.id));
+        assert!(!unscheduled.iter().any(|t| t.title == "C"));
     }
 }

@@ -85,6 +85,9 @@ export default function WorkspaceLayout(): JSX.Element {
           <SideNavLink to="/app/tasks" disabled={forced}>
             Задачи
           </SideNavLink>
+          <SideNavLink to="/app/calendar" disabled={forced}>
+            Календарь
+          </SideNavLink>
           <SideNavLink to="/app/kb" disabled={forced}>
             Заметки
           </SideNavLink>

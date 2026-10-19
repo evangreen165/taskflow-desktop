@@ -17,6 +17,14 @@ describe("TasksService", () => {
     expect(invokeMock).toHaveBeenCalledWith("tasksList", { filter: {} });
   });
 
+  it("list forwards the date range", async () => {
+    invokeMock.mockResolvedValue([]);
+    await TasksService.list({ startDate: "2026-10-01", endDate: "2026-10-31" });
+    expect(invokeMock).toHaveBeenCalledWith("tasksList", {
+      filter: { startDate: "2026-10-01", endDate: "2026-10-31" },
+    });
+  });
+
   it("get sends the id", async () => {
     invokeMock.mockResolvedValue({ id: "t1" });
     await TasksService.get("t1");
