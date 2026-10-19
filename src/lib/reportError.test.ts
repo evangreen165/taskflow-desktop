@@ -22,6 +22,7 @@ const session: SessionView = {
     email: null,
     roleId: "admin",
     avatarColor: "#5b5bd6",
+    avatarSha256: null,
     createdAt: "2026-10-01T00:00:00Z",
     lastLoginAt: null,
     isActive: true,

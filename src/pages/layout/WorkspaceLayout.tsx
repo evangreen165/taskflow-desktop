@@ -1,18 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
+import Avatar from "@/components/Avatar";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 
 import styles from "./WorkspaceLayout.module.css";
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const first = parts[0]?.charAt(0) ?? "?";
-  const second = parts[1]?.charAt(0) ?? "";
-  return (first + second).toUpperCase();
-}
 
 function SideNavLink({
   to,
@@ -143,9 +137,12 @@ export default function WorkspaceLayout(): JSX.Element {
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((open) => !open)}
             >
-              <div className={styles.avatar} style={{ background: user?.avatarColor ?? "#5b5bd6" }}>
-                {initials(user?.displayName ?? "—")}
-              </div>
+              <Avatar
+                name={user?.displayName ?? "—"}
+                color={user?.avatarColor ?? "#5b5bd6"}
+                sha256={user?.avatarSha256}
+                size={32}
+              />
               <div className={styles.userText}>
                 <div className={styles.userName}>{user?.displayName ?? "—"}</div>
                 <div className={styles.userRole}>{role?.name ?? "—"}</div>

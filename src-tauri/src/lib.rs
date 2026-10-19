@@ -257,6 +257,7 @@ pub fn run() {
             commands::notes_list_categories,
             commands::notes_create_category,
             commands::notes_delete_category,
+            commands::notes_import,
             commands::attachment_add,
             commands::attachment_get_base64,
             commands::attachment_remove,

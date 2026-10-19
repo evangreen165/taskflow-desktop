@@ -17,6 +17,7 @@ pub struct UserSummary {
     pub id: String,
     pub display_name: String,
     pub avatar_color: String,
+    pub avatar_sha256: Option<String>,
 }
 
 pub fn users_summaries_impl(
@@ -34,6 +35,7 @@ pub fn users_summaries_impl(
             id: u.id,
             display_name: u.display_name,
             avatar_color: u.avatar_color,
+            avatar_sha256: u.avatar_sha256,
         })
         .collect())
 }
@@ -60,6 +62,7 @@ pub fn users_directory_impl(state: &AppState) -> Result<Vec<UserSummary>, AppErr
             id: u.id,
             display_name: u.display_name,
             avatar_color: u.avatar_color,
+            avatar_sha256: u.avatar_sha256,
         })
         .collect();
     users.sort_by(|a, b| a.display_name.cmp(&b.display_name));

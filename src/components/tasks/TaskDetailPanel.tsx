@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
+import Avatar from "@/components/Avatar";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTaskEditor } from "@/hooks/useTaskEditor";
-import { KANBAN_COLUMNS, PRIORITY_LABELS, formatDateTime, initials } from "@/lib/taskMeta";
+import { KANBAN_COLUMNS, PRIORITY_LABELS, formatDateTime } from "@/lib/taskMeta";
 import type { Comment, Task, TaskPriority, TaskStatus } from "@/services/tasks";
+import type { UserSummary } from "@/services/users";
 import { useUserDirectory } from "@/stores/useUserDirectory";
 
 import styles from "./TaskDetailPanel.module.css";
@@ -200,9 +202,12 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
                       checked={draft.assignees.includes(user.id)}
                       onChange={() => toggleAssignee(user.id)}
                     />
-                    <span className={styles.avatar} style={{ background: user.avatarColor }}>
-                      {initials(user.displayName)}
-                    </span>
+                    <Avatar
+                      name={user.displayName}
+                      color={user.avatarColor}
+                      sha256={user.avatarSha256}
+                      size={24}
+                    />
                     {user.displayName}
                   </label>
                 ))}
@@ -341,14 +346,17 @@ function CommentRow({
   directory,
 }: {
   comment: Comment;
-  directory: Record<string, { id: string; displayName: string; avatarColor: string }>;
+  directory: Record<string, UserSummary>;
 }): JSX.Element {
   const author = directory[comment.authorId];
   return (
     <div className={styles.comment}>
-      <span className={styles.avatar} style={{ background: author?.avatarColor ?? "#5b5bd6" }}>
-        {initials(author?.displayName ?? "?")}
-      </span>
+      <Avatar
+        name={author?.displayName ?? "?"}
+        color={author?.avatarColor ?? "#5b5bd6"}
+        sha256={author?.avatarSha256}
+        size={26}
+      />
       <div className={styles.commentBody}>
         <div className={styles.commentMeta}>
           <b>{author?.displayName ?? "Пользователь"}</b>

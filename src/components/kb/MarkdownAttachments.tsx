@@ -5,14 +5,19 @@ import { AttachmentsService } from "@/services/attachments";
 
 /**
  * Renders `attachment://` images: fetches the base64 data URL and shows it.
- * Non-attachment images pass through unchanged.
+ * Non-attachment images pass through unchanged. An optional `onImageClick`
+ * lets the editor open a resize toolbar.
  */
 export function AttachmentImage({
   src,
   alt,
+  width,
+  onImageClick,
 }: {
   src?: string | undefined;
   alt?: string | undefined;
+  width?: string | number | undefined;
+  onImageClick?: (sha: string, alt: string) => void;
 }): JSX.Element {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
 
@@ -33,12 +38,20 @@ export function AttachmentImage({
   }, [src]);
 
   if (!src || !isAttachmentUrl(src)) {
-    return <img src={src} alt={alt ?? ""} />;
+    return <img src={src} alt={alt ?? ""} width={width} />;
   }
+  const sha = shaFromAttachmentUrl(src);
   if (!dataUrl) {
     return <span style={{ color: "var(--text-muted)" }}>Загрузка картинки…</span>;
   }
-  return <img src={dataUrl} alt={alt ?? ""} />;
+  return (
+    <img
+      src={dataUrl}
+      alt={alt ?? ""}
+      width={width}
+      onClick={() => onImageClick?.(sha, alt ?? "")}
+    />
+  );
 }
 
 /**

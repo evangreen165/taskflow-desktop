@@ -7,6 +7,7 @@ export interface UserSummary {
   id: string;
   displayName: string;
   avatarColor: string;
+  avatarSha256: string | null;
 }
 
 export const UsersService = {

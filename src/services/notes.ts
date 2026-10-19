@@ -108,4 +108,9 @@ export const NotesService = {
   deleteCategory(name: string): Promise<Result<string[]>> {
     return invokeCommand<string[]>("notesDeleteCategory", { name });
   },
+
+  /** Imports a local `.md`/`.pdf` file as a note. */
+  importFile(sourcePath: string): Promise<Result<Note>> {
+    return invokeCommand<Note>("notesImport", { sourcePath });
+  },
 };

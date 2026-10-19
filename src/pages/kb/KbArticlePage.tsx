@@ -2,6 +2,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 
 import { AttachmentImage, AttachmentLink } from "@/components/kb/MarkdownAttachments";
@@ -182,6 +183,7 @@ export default function KbArticlePage(): JSX.Element {
           <div className={styles.markdown}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw]}
               urlTransform={(url) => url}
               components={{ img: AttachmentImage, a: AttachmentLink }}
             >
@@ -236,6 +238,20 @@ export default function KbArticlePage(): JSX.Element {
   );
 }
 
+/** Replaces an existing resized `<img>` or the plain Markdown image for `sha`. */
+function resizeImageInMarkdown(content: string, sha: string, width: string): string {
+  const imgTag = new RegExp(`<img[^>]*src="attachment://${sha}"[^>]*>`);
+  const mdImg = new RegExp(`!\\[[^\\]]*\\]\\(attachment://${sha}\\)`);
+  const replacement = `<img src="attachment://${sha}" width="${width}" />`;
+  if (imgTag.test(content)) {
+    return content.replace(imgTag, replacement);
+  }
+  if (mdImg.test(content)) {
+    return content.replace(mdImg, replacement);
+  }
+  return content;
+}
+
 function ArticleEditor({
   initial,
   onSaved,
@@ -261,6 +277,7 @@ function ArticleEditor({
 
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [tagInput, setTagInput] = useState("");
+  const [resizeTarget, setResizeTarget] = useState<{ sha: string; alt: string } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   // Explicit category list from the backend (`categories.json`).
   const categories = useNoteStore((s) => s.categories);
@@ -321,6 +338,14 @@ function ArticleEditor({
     if (result.ok) {
       reload(result.value);
     }
+  }
+
+  function applyImageWidth(width: string): void {
+    if (!resizeTarget) {
+      return;
+    }
+    setContent(resizeImageInMarkdown(draft.content, resizeTarget.sha, width));
+    setResizeTarget(null);
   }
 
   return (
@@ -425,15 +450,47 @@ function ArticleEditor({
             />
           </>
         ) : (
-          <div className={styles.mdPreview}>
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              urlTransform={(url) => url}
-              components={{ img: AttachmentImage, a: AttachmentLink }}
-            >
-              {draft.content || "*Нет содержания.*"}
-            </ReactMarkdown>
-          </div>
+          <>
+            <div className={styles.mdPreview}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
+                urlTransform={(url) => url}
+                components={{
+                  img: (props) => (
+                    <AttachmentImage
+                      {...props}
+                      onImageClick={(sha, alt) => setResizeTarget({ sha, alt })}
+                    />
+                  ),
+                  a: AttachmentLink,
+                }}
+              >
+                {draft.content || "*Нет содержания.*"}
+              </ReactMarkdown>
+            </div>
+            {resizeTarget ? (
+              <div className={styles.imageToolbar}>
+                <span>Размер картинки:</span>
+                <button type="button" onClick={() => applyImageWidth("300")}>
+                  S (300px)
+                </button>
+                <button type="button" onClick={() => applyImageWidth("500")}>
+                  M (500px)
+                </button>
+                <button type="button" onClick={() => applyImageWidth("100%")}>
+                  L (100%)
+                </button>
+                <button
+                  type="button"
+                  className={styles.imageToolbarClose}
+                  onClick={() => setResizeTarget(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : null}
+          </>
         )}
       </div>
 

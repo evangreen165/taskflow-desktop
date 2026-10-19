@@ -1,10 +1,14 @@
-﻿use tauri::State;
+﻿use std::path::Path;
+
+use tauri::State;
 
 use serde::Serialize;
 
 use taskflow_macros::write_command;
 
+use crate::attachments;
 use crate::error::AppError;
+use crate::fsops;
 use crate::notes::{self, Note, NoteMeta, NoteStatus};
 use crate::AppState;
 
@@ -240,6 +244,63 @@ pub fn notes_delete_category(
     name: String,
 ) -> Result<Vec<String>, AppError> {
     notes_delete_category_impl(&state, name)
+}
+
+/// Imports a local file as a note. `.md` files become the note body; `.pdf`
+/// files are stored as attachments and referenced from the body.
+pub fn notes_import_impl(state: &AppState, source_path: String) -> Result<Note, AppError> {
+    state.require_writable()?;
+    let session = state.require_perm("article.create")?;
+    let root = state.root()?;
+
+    let path = Path::new(&source_path);
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| source_path.clone());
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+    if !matches!(ext.as_str(), "md" | "markdown" | "pdf") {
+        return Err(AppError::new(
+            "INVALID_INPUT",
+            "only .md and .pdf files can be imported",
+        ));
+    }
+    let meta = std::fs::metadata(path).map_err(|e| AppError::io("import source", e))?;
+    let limit = if ext == "pdf" {
+        50 * 1024 * 1024
+    } else {
+        2 * 1024 * 1024
+    };
+    if meta.len() > limit {
+        return Err(AppError::new("INVALID_INPUT", "imported file is too large"));
+    }
+
+    let title = path
+        .file_stem()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "Импорт".to_string());
+
+    match ext.as_str() {
+        "md" | "markdown" => {
+            let text = fsops::read_text(path)?;
+            notes::create(&root, &session.user_id, &title, "Импорт", &text)
+        }
+        "pdf" => {
+            let (info, _) = attachments::add(&root, &source_path, &name)?;
+            let content = format!("[Открыть PDF](attachment://{})", info.sha256);
+            notes::create(&root, &session.user_id, &title, "Импорт", &content)
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[write_command(rename = "notesImport")]
+pub fn notes_import(state: State<'_, AppState>, source_path: String) -> Result<Note, AppError> {
+    notes_import_impl(&state, source_path)
 }
 
 #[cfg(test)]
@@ -488,5 +549,30 @@ mod tests {
         let after_delete = notes_delete_category_impl(&fx.state, "Онбординг".to_string()).unwrap();
         assert!(after_delete.is_empty());
         assert!(notes_list_categories_impl(&fx.state).unwrap().is_empty());
+    }
+
+    #[test]
+    fn imports_markdown_and_pdf() {
+        let fx = fixture();
+
+        let md = fx._dir.path().join("guide.md");
+        std::fs::write(&md, "# Онбординг\n\nТекст.").unwrap();
+        let note = notes_import_impl(&fx.state, md.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(note.meta.title, "guide");
+        assert_eq!(note.meta.category, "Импорт");
+        assert!(note.content.contains("Онбординг"));
+
+        let pdf = fx._dir.path().join("doc.pdf");
+        std::fs::write(&pdf, b"%PDF-1.4 fake").unwrap();
+        let note = notes_import_impl(&fx.state, pdf.to_string_lossy().into_owned()).unwrap();
+        assert!(note.content.starts_with("[Открыть PDF](attachment://"));
+        assert!(fx._dir.path().join("attachments").is_dir());
+
+        let exe = fx._dir.path().join("bad.exe");
+        std::fs::write(&exe, b"MZ").unwrap();
+        assert_eq!(
+            notes_import_impl(&fx.state, exe.to_string_lossy().into_owned()).unwrap_err().code,
+            "INVALID_INPUT"
+        );
     }
 }
