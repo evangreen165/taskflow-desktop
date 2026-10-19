@@ -255,6 +255,7 @@ pub fn update(
     id: &str,
     title: &str,
     category: &str,
+    tags: &[String],
     content: &str,
     expected_version: u64,
 ) -> Result<Note, AppError> {
@@ -268,6 +269,7 @@ pub fn update(
     }
     meta.title = validate_title(title)?;
     meta.category = category.trim().to_string();
+    meta.tags = tags.to_vec();
     meta.version += 1;
     meta.updated_at = now_rfc3339();
     fsops::write_json_atomic(&meta_path(root, id)?, &meta)?;

@@ -1,4 +1,4 @@
-use tauri::State;
+﻿use tauri::State;
 
 use serde::Serialize;
 
@@ -119,6 +119,7 @@ pub fn notes_update_impl(
     id: String,
     title: String,
     category: String,
+    tags: Vec<String>,
     content: String,
     expected_version: u64,
 ) -> Result<Note, AppError> {
@@ -129,6 +130,7 @@ pub fn notes_update_impl(
         &id,
         &title,
         &category,
+        &tags,
         &content,
         expected_version,
     )
@@ -140,10 +142,11 @@ pub fn notes_update(
     id: String,
     title: String,
     category: String,
+    tags: Vec<String>,
     content: String,
     expected_version: u64,
 ) -> Result<Note, AppError> {
-    notes_update_impl(&state, id, title, category, content, expected_version)
+    notes_update_impl(&state, id, title, category, tags, content, expected_version)
 }
 
 pub fn notes_publish_impl(
@@ -293,6 +296,7 @@ mod tests {
             note.meta.id.clone(),
             "V2".to_string(),
             "Процессы".to_string(),
+            vec![],
             "second".to_string(),
             1,
         )
@@ -312,6 +316,7 @@ mod tests {
             note.meta.id.clone(),
             "V2".to_string(),
             "Процессы".to_string(),
+            vec![],
             "second".to_string(),
             99,
         )
@@ -341,6 +346,7 @@ mod tests {
             note.meta.id.clone(),
             "V2".to_string(),
             "Процессы".to_string(),
+            vec![],
             "second".to_string(),
             1,
         )
@@ -379,6 +385,7 @@ mod tests {
                 note.meta.id.clone(),
                 format!("Title {i}"),
                 "Процессы".to_string(),
+                vec![],
                 format!("content {i}"),
                 i,
             )

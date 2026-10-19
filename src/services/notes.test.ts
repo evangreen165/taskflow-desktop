@@ -51,11 +51,12 @@ describe("NotesService", () => {
 
   it("update sends expectedVersion", async () => {
     invokeMock.mockResolvedValue({ meta: { version: 2 } });
-    await NotesService.update("n1", "New", "C", "body", 1);
+    await NotesService.update("n1", "New", "C", ["kb"], "body", 1);
     expect(invokeMock).toHaveBeenCalledWith("notesUpdate", {
       id: "n1",
       title: "New",
       category: "C",
+      tags: ["kb"],
       content: "body",
       expectedVersion: 1,
     });

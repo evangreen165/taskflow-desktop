@@ -67,6 +67,7 @@ export const NotesService = {
     id: string,
     title: string,
     category: string,
+    tags: string[],
     content: string,
     version: number,
   ): Promise<Result<Note>> {
@@ -74,6 +75,7 @@ export const NotesService = {
       id,
       title,
       category,
+      tags,
       content,
       expectedVersion: version,
     });
