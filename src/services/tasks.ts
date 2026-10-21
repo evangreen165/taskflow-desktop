@@ -82,31 +82,47 @@ export interface UpdateTaskPayload {
 }
 
 export const TasksService = {
-  list(filter: TaskFilter = {}): Promise<Result<Task[]>> {
-    return invokeCommand<Task[]>("tasksList", { filter });
+  list(spaceId: string, filter: TaskFilter = {}): Promise<Result<Task[]>> {
+    return invokeCommand<Task[]>("tasksList", { spaceId, filter });
   },
 
-  get(id: string): Promise<Result<Task>> {
-    return invokeCommand<Task>("tasksGet", { id });
+  get(spaceId: string, id: string): Promise<Result<Task>> {
+    return invokeCommand<Task>("tasksGet", { spaceId, id });
   },
 
-  create(payload: CreateTaskPayload): Promise<Result<Task>> {
-    return invokeCommand<Task>("tasksCreate", { payload });
+  create(spaceId: string, payload: CreateTaskPayload): Promise<Result<Task>> {
+    return invokeCommand<Task>("tasksCreate", { spaceId, payload });
   },
 
-  update(id: string, patch: UpdateTaskPayload, version: number): Promise<Result<Task>> {
-    return invokeCommand<Task>("tasksUpdate", { id, patch, expectedVersion: version });
+  update(
+    spaceId: string,
+    id: string,
+    patch: UpdateTaskPayload,
+    version: number,
+  ): Promise<Result<Task>> {
+    return invokeCommand<Task>("tasksUpdate", {
+      spaceId,
+      id,
+      patch,
+      expectedVersion: version,
+    });
   },
 
-  changeStatus(id: string, status: TaskStatus, version: number): Promise<Result<Task>> {
+  changeStatus(
+    spaceId: string,
+    id: string,
+    status: TaskStatus,
+    version: number,
+  ): Promise<Result<Task>> {
     return invokeCommand<Task>("tasksChangeStatus", {
+      spaceId,
       id,
       status,
       expectedVersion: version,
     });
   },
 
-  delete(id: string): Promise<Result<void>> {
-    return invokeCommand<void>("tasksDelete", { id });
+  delete(spaceId: string, id: string): Promise<Result<void>> {
+    return invokeCommand<void>("tasksDelete", { spaceId, id });
   },
 };

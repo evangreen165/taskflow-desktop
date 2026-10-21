@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
 
@@ -9,12 +9,14 @@ import { EMPTY_KB_FILTER, filterNoteItems, type KbFilter } from "@/lib/kbMeta";
 import { NotesService } from "@/services/notes";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNoteStore } from "@/stores/useNoteStore";
+import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useUserDirectory } from "@/stores/useUserDirectory";
 
 import styles from "./KbPage.module.css";
 
 export default function KbPage(): JSX.Element {
+  const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const notes = useNoteStore((s) => s.notes);
   const categories = useNoteStore((s) => s.categories);
   const loading = useNoteStore((s) => s.loading);
@@ -35,9 +37,11 @@ export default function KbPage(): JSX.Element {
   const [newCategoryName, setNewCategoryName] = useState("");
 
   useEffect(() => {
-    void fetchNotes();
+    if (spaceId) {
+      void fetchNotes(spaceId);
+    }
     void fetchCategories();
-  }, [fetchNotes, fetchCategories]);
+  }, [fetchNotes, fetchCategories, spaceId]);
 
   useEffect(() => {
     const ids = Array.from(new Set(notes.map((note) => note.authorId)));
@@ -73,12 +77,17 @@ export default function KbPage(): JSX.Element {
     if (typeof selected !== "string") {
       return;
     }
-    const result = await NotesService.importFile(selected);
+    if (!spaceId) {
+      return;
+    }
+    const result = await NotesService.importFile(spaceId, selected);
     if (!result.ok) {
       return;
     }
     pushToast(`Заметка «${result.value.meta.title}» импортирована`, "success");
-    void fetchNotes();
+    if (spaceId) {
+      void fetchNotes(spaceId);
+    }
     void fetchCategories();
   }
 
@@ -196,7 +205,11 @@ export default function KbPage(): JSX.Element {
         {loading ? <div className={styles.loading}>Загрузка…</div> : null}
 
         {!loading && visible.length === 0 ? (
-          <div className={styles.emptyState}>Ничего не найдено</div>
+          <div className={styles.emptyState}>
+            {notes.length === 0 && !filterActive
+              ? "В этом пространстве пока нет заметок."
+              : "Ничего не найдено"}
+          </div>
         ) : (
           <div className={styles.grid}>
             {visible.map((item) => (
@@ -211,8 +224,9 @@ export default function KbPage(): JSX.Element {
         )}
       </div>
 
-      {modalOpen ? (
+      {modalOpen && spaceId ? (
         <NewNoteModal
+          spaceId={spaceId}
           categories={categories}
           onClose={() => setModalOpen(false)}
           onCreated={(note) => navigate(`/app/kb/${note.meta.id}`)}

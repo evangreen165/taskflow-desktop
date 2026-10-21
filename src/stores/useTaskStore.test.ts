@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { listMock, changeStatusMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
@@ -52,7 +52,7 @@ describe("useTaskStore", () => {
 
   it("fetchTasks loads tasks into the store", async () => {
     listMock.mockResolvedValue({ ok: true, value: [makeTask()] });
-    await useTaskStore.getState().fetchTasks();
+    await useTaskStore.getState().fetchTasks("sp1");
     expect(useTaskStore.getState().tasks).toHaveLength(1);
     expect(useTaskStore.getState().loading).toBe(false);
   });
@@ -65,14 +65,14 @@ describe("useTaskStore", () => {
       value: { ...task, status: "in_progress", version: 2 },
     });
 
-    const error = await useTaskStore.getState().moveTask("t1", "in_progress", 1);
+    const error = await useTaskStore.getState().moveTask("sp1", "t1", "in_progress", 1);
 
     expect(error).toBeNull();
     expect(useTaskStore.getState().tasks[0]).toMatchObject({
       status: "in_progress",
       version: 2,
     });
-    expect(changeStatusMock).toHaveBeenCalledWith("t1", "in_progress", 1);
+    expect(changeStatusMock).toHaveBeenCalledWith("sp1", "t1", "in_progress", 1);
   });
 
   it("moveTask rolls back and returns the error on failure", async () => {
@@ -83,7 +83,7 @@ describe("useTaskStore", () => {
       error: new AppError({ code: "VERSION_CONFLICT", message: "conflict" }),
     });
 
-    const error = await useTaskStore.getState().moveTask("t1", "in_progress", 1);
+    const error = await useTaskStore.getState().moveTask("sp1", "t1", "in_progress", 1);
 
     expect(error?.code).toBe("VERSION_CONFLICT");
     expect(useTaskStore.getState().tasks[0]).toMatchObject({

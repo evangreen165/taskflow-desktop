@@ -42,34 +42,43 @@ fn is_visible(session: &Session, view_all: bool, task: &Task) -> bool {
         || task.author_id == session.user_id
 }
 
-pub fn dashboard_summary_impl(state: &AppState) -> Result<DashboardSummary, AppError> {
+pub fn dashboard_summary_impl(
+    state: &AppState,
+    space_id: Option<String>,
+) -> Result<DashboardSummary, AppError> {
     let session = state.require_auth()?;
     let root = state.root()?;
     let permissions = roles::permissions_for(&root, &session.role_id)?;
     let view_all = permissions.iter().any(|p| p == "task.view_all");
     let can_view_articles = permissions.iter().any(|p| p == "article.view");
 
-    let all_spaces = crate::spaces::list(&root)?;
-    let accessible: Vec<crate::spaces::Space> = if crate::spaces::is_admin(&session) {
-        all_spaces
+    let space_dirs: Vec<std::path::PathBuf> = if let Some(id) = &space_id {
+        crate::spaces::require_access(&root, id, &session)?;
+        vec![crate::spaces::space_dir(&root, id)?]
     } else {
-        all_spaces
-            .into_iter()
-            .filter(|space| crate::spaces::is_member(space, &session.user_id))
+        let all_spaces = crate::spaces::list(&root)?;
+        let accessible: Vec<crate::spaces::Space> = if crate::spaces::is_admin(&session) {
+            all_spaces
+        } else {
+            all_spaces
+                .into_iter()
+                .filter(|space| crate::spaces::is_member(space, &session.user_id))
+                .collect()
+        };
+        accessible
+            .iter()
+            .filter_map(|space| crate::spaces::space_dir(&root, &space.id).ok())
             .collect()
     };
 
     let mut all_tasks = Vec::new();
     let mut all_notes = Vec::new();
-    for space in &accessible {
-        let Ok(space_dir) = crate::spaces::space_dir(&root, &space.id) else {
-            continue;
-        };
-        if let Ok(mut tasks) = tasks::list(&space_dir) {
+    for space_dir in &space_dirs {
+        if let Ok(mut tasks) = tasks::list(space_dir) {
             all_tasks.append(&mut tasks);
         }
         if can_view_articles {
-            if let Ok(mut notes) = notes::list_meta(&space_dir) {
+            if let Ok(mut notes) = notes::list_meta(space_dir) {
                 all_notes.append(&mut notes);
             }
         }
@@ -139,8 +148,11 @@ pub fn dashboard_summary_impl(state: &AppState) -> Result<DashboardSummary, AppE
 }
 
 #[tauri::command(rename = "dashboardSummary")]
-pub fn dashboard_summary(state: State<'_, AppState>) -> Result<DashboardSummary, AppError> {
-    dashboard_summary_impl(&state)
+pub fn dashboard_summary(
+    state: State<'_, AppState>,
+    space_id: Option<String>,
+) -> Result<DashboardSummary, AppError> {
+    dashboard_summary_impl(&state, space_id)
 }
 
 #[cfg(test)]
@@ -235,7 +247,7 @@ mod tests {
         make_task(&fx, "Готова", "done", &yesterday, &[&ex_id]);
 
         fx.state.set_session(session_for(&fx.executor.id, "executor"));
-        let summary = dashboard_summary_impl(&fx.state).unwrap();
+        let summary = dashboard_summary_impl(&fx.state, None).unwrap();
         let active_titles: Vec<&str> =
             summary.my_active_tasks.iter().map(|t| t.title.as_str()).collect();
         assert!(active_titles.contains(&"Без срока"));
@@ -259,11 +271,11 @@ mod tests {
         make_task(&fx, "Чужая", "new", "2999-01-01", &[]);
 
         fx.state.set_session(session_for(&fx.executor.id, "executor"));
-        let summary = dashboard_summary_impl(&fx.state).unwrap();
+        let summary = dashboard_summary_impl(&fx.state, None).unwrap();
         assert_eq!(summary.stats.total_tasks, 1);
 
         fx.state.set_session(session_for(&fx.admin.id, "admin"));
-        let summary = dashboard_summary_impl(&fx.state).unwrap();
+        let summary = dashboard_summary_impl(&fx.state, None).unwrap();
         assert_eq!(summary.stats.total_tasks, 2);
     }
 
@@ -276,7 +288,7 @@ mod tests {
         let second = crate::notes::create(&crate::spaces::space_dir(fx._dir.path(), SPACE).unwrap(), &fx.admin.id, "Two", "Процессы", "x").unwrap();
         crate::notes::publish(&crate::spaces::space_dir(fx._dir.path(), SPACE).unwrap(), &second.meta.id, 1).unwrap();
 
-        let summary = dashboard_summary_impl(&fx.state).unwrap();
+        let summary = dashboard_summary_impl(&fx.state, None).unwrap();
         let titles: Vec<&str> = summary
             .recent_articles
             .iter()

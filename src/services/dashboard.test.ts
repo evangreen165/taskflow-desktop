@@ -11,9 +11,11 @@ describe("DashboardService", () => {
     invokeMock.mockReset();
   });
 
-  it("getSummary has no arguments", async () => {
-    invokeMock.mockResolvedValue({ stats: { totalTasks: 0, inProgress: 0, completedThisWeek: 0 } });
-    await DashboardService.getSummary();
-    expect(invokeMock).toHaveBeenCalledWith("dashboardSummary", undefined);
+  it("getSummary sends the current space id", async () => {
+    invokeMock.mockResolvedValue({
+      stats: { totalTasks: 0, inProgress: 0, completedThisWeek: 0 },
+    });
+    await DashboardService.getSummary("sp1");
+    expect(invokeMock).toHaveBeenCalledWith("dashboardSummary", { spaceId: "sp1" });
   });
 });

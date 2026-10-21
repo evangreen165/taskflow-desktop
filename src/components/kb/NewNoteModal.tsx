@@ -1,16 +1,18 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 
 import { NotesService, type Note } from "@/services/notes";
 
 import styles from "./NewNoteModal.module.css";
 
 interface NewNoteModalProps {
+  spaceId: string;
   categories: string[];
   onClose: () => void;
   onCreated: (note: Note) => void;
 }
 
 export default function NewNoteModal({
+  spaceId,
   categories,
   onClose,
   onCreated,
@@ -27,7 +29,7 @@ export default function NewNoteModal({
     }
     setBusy(true);
     setError(null);
-    const result = await NotesService.create({
+    const result = await NotesService.create(spaceId, {
       title: title.trim(),
       category: category.trim(),
     });

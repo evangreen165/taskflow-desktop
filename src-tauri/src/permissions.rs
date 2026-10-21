@@ -1,7 +1,7 @@
-/// Canonical permission registry. This is the single source of truth for the
+﻿/// Canonical permission registry. This is the single source of truth for the
 /// permission strings the app understands; roles may only carry permissions
 /// from this list.
-pub const ALL: [&str; 16] = [
+pub const ALL: [&str; 17] = [
     "task.view",
     "task.create",
     "task.edit",
@@ -18,6 +18,7 @@ pub const ALL: [&str; 16] = [
     "roles.manage",
     "audit.view",
     "workspace.settings",
+    "space.create",
 ];
 
 pub fn is_valid(perm: &str) -> bool {
@@ -44,8 +45,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_has_sixteen_unique_entries() {
-        assert_eq!(ALL.len(), 16);
+    fn registry_has_seventeen_unique_entries() {
+        assert_eq!(ALL.len(), 17);
         for (i, perm) in ALL.iter().enumerate() {
             assert!(!ALL[i + 1..].contains(perm), "duplicate permission {perm}");
         }

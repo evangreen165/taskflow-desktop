@@ -1,4 +1,4 @@
-/** Pure permission helpers shared by guards, hooks and the admin matrix. */
+﻿/** Pure permission helpers shared by guards, hooks and the admin matrix. */
 
 export function can(permissions: readonly string[], perm: string): boolean {
   return permissions.includes(perm);
@@ -40,6 +40,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   { id: "roles", label: "Роли", permissions: ["roles.manage"] },
   { id: "audit", label: "Аудит", permissions: ["audit.view"] },
   { id: "workspace", label: "Workspace", permissions: ["workspace.settings"] },
+  { id: "space", label: "Пространства", permissions: ["space.create"] },
 ];
 
 /** The 16-registry permission set (mirrors permissions::ALL). */
@@ -65,4 +66,5 @@ export const PERMISSION_LABELS: Record<string, string> = {
   "roles.manage": "Управление ролями",
   "audit.view": "Просмотр аудита",
   "workspace.settings": "Настройки workspace",
+  "space.create": "Создание пространств",
 };

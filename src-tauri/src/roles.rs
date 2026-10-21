@@ -60,6 +60,7 @@ pub fn default_roles() -> Vec<Role> {
                 "task.assign",
                 "task.view_all",
                 "article.view",
+                "space.create",
             ],
         ),
         role(

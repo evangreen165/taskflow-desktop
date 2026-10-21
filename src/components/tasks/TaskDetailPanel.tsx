@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 import Avatar from "@/components/Avatar";
@@ -13,6 +13,7 @@ import styles from "./TaskDetailPanel.module.css";
 
 interface TaskDetailPanelProps {
   task: Task;
+  spaceId: string;
   onClose: () => void;
 }
 
@@ -21,7 +22,11 @@ type ViewMode = "read" | "edit";
 
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 
-export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps): JSX.Element {
+export default function TaskDetailPanel({
+  task,
+  spaceId,
+  onClose,
+}: TaskDetailPanelProps): JSX.Element {
   const allUsers = useUserDirectory((s) => s.all);
   const directory = useUserDirectory((s) => s.users);
   const loadAll = useUserDirectory((s) => s.loadAll);
@@ -47,7 +52,7 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
     reloadCurrent,
     dismissConflict,
     adoptExternal,
-  } = useTaskEditor(task);
+  } = useTaskEditor(task, spaceId);
 
   // Text fields (title/description) require an explicit edit mode; the other
   // controls (status/priority/assignees/checklist/comments) stay available.

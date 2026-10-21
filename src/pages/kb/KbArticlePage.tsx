@@ -12,6 +12,7 @@ import { categoryIcon, formatDate, NOTE_STATUS_LABELS } from "@/lib/kbMeta";
 import { AttachmentsService } from "@/services/attachments";
 import { NotesService, type Note, type NoteMeta } from "@/services/notes";
 import { useNoteStore } from "@/stores/useNoteStore";
+import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useUserDirectory } from "@/stores/useUserDirectory";
 
@@ -19,6 +20,7 @@ import styles from "./KbArticlePage.module.css";
 
 export default function KbArticlePage(): JSX.Element {
   const { id } = useParams();
+  const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const navigate = useNavigate();
   const { can } = usePermissions();
   const pushToast = useToastStore((s) => s.push);
@@ -40,12 +42,12 @@ export default function KbArticlePage(): JSX.Element {
     setLoadFailed(false);
     setMode("read");
     setNote(null);
-    if (!id) {
+    if (!id || !spaceId) {
       setLoading(false);
       setLoadFailed(true);
       return;
     }
-    void NotesService.get(id).then((result) => {
+    void NotesService.get(spaceId, id).then((result) => {
       if (cancelled) {
         return;
       }
@@ -59,7 +61,7 @@ export default function KbArticlePage(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, spaceId]);
 
   useEffect(() => {
     if (note) {
@@ -89,7 +91,10 @@ export default function KbArticlePage(): JSX.Element {
 
   async function handlePublish(): Promise<void> {
     setBusy(true);
-    const result = await NotesService.publish(meta.id, meta.version);
+    if (!spaceId) {
+      return;
+    }
+    const result = await NotesService.publish(spaceId, meta.id, meta.version);
     setBusy(false);
     if (!result.ok) {
       return;
@@ -100,7 +105,10 @@ export default function KbArticlePage(): JSX.Element {
 
   async function handleDelete(): Promise<void> {
     setBusy(true);
-    const result = await NotesService.delete(meta.id);
+    if (!spaceId) {
+      return;
+    }
+    const result = await NotesService.delete(spaceId, meta.id);
     setBusy(false);
     if (!result.ok) {
       return;
@@ -113,7 +121,10 @@ export default function KbArticlePage(): JSX.Element {
   async function openHistory(): Promise<void> {
     setHistoryOpen(true);
     setHistory(null);
-    const result = await NotesService.getHistory(meta.id);
+    if (!spaceId) {
+      return;
+    }
+    const result = await NotesService.getHistory(spaceId, meta.id);
     if (result.ok) {
       setHistory(result.value);
     }
@@ -195,6 +206,7 @@ export default function KbArticlePage(): JSX.Element {
         <ArticleEditor
           key={meta.id}
           initial={note}
+          spaceId={spaceId ?? ""}
           onSaved={setNote}
           onCancel={() => setMode("read")}
         />
@@ -203,6 +215,7 @@ export default function KbArticlePage(): JSX.Element {
       {historyOpen ? (
         <HistoryModal
           id={meta.id}
+          spaceId={spaceId ?? ""}
           history={history}
           onClose={() => setHistoryOpen(false)}
           onRestored={(updated) => {
@@ -254,10 +267,12 @@ function resizeImageInMarkdown(content: string, sha: string, width: string): str
 
 function ArticleEditor({
   initial,
+  spaceId,
   onSaved,
   onCancel,
 }: {
   initial: Note;
+  spaceId: string;
   onSaved: (note: Note) => void;
   onCancel: () => void;
 }): JSX.Element {
@@ -273,7 +288,7 @@ function ArticleEditor({
     saveNow,
     reload,
     dismissConflict,
-  } = useNoteEditor(initial, onSaved);
+  } = useNoteEditor(initial, spaceId, onSaved);
 
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [tagInput, setTagInput] = useState("");
@@ -334,7 +349,7 @@ function ArticleEditor({
   }
 
   async function loadCurrent(): Promise<void> {
-    const result = await NotesService.get(initial.meta.id);
+    const result = await NotesService.get(spaceId, initial.meta.id);
     if (result.ok) {
       reload(result.value);
     }
@@ -535,11 +550,13 @@ function ArticleEditor({
 
 function HistoryModal({
   id,
+  spaceId,
   history,
   onClose,
   onRestored,
 }: {
   id: string;
+  spaceId: string;
   history: NoteMeta[] | null;
   onClose: () => void;
   onRestored: (note: Note) => void;
@@ -549,7 +566,7 @@ function HistoryModal({
 
   async function restore(version: number): Promise<void> {
     setBusy(true);
-    const result = await NotesService.restoreVersion(id, version);
+    const result = await NotesService.restoreVersion(spaceId, id, version);
     setBusy(false);
     if (result.ok) {
       onRestored(result.value);

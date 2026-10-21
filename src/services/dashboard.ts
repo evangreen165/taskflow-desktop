@@ -18,7 +18,7 @@ export interface DashboardSummary {
 }
 
 export const DashboardService = {
-  getSummary(): Promise<Result<DashboardSummary>> {
-    return invokeCommand<DashboardSummary>("dashboardSummary");
+  getSummary(spaceId: string | null): Promise<Result<DashboardSummary>> {
+    return invokeCommand<DashboardSummary>("dashboardSummary", { spaceId });
   },
 };

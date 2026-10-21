@@ -3,8 +3,10 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import Avatar from "@/components/Avatar";
 import { usePermissions } from "@/hooks/usePermissions";
+import { SpacesService } from "@/services/spaces";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { isPersonalSpace, useSpaceStore } from "@/stores/useSpaceStore";
 
 import styles from "./WorkspaceLayout.module.css";
 
@@ -46,15 +48,57 @@ export default function WorkspaceLayout(): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
+  const spaces = useSpaceStore((s) => s.spaces);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const fetchSpaces = useSpaceStore((s) => s.fetchSpaces);
+  const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
+  const [spaceMenuOpen, setSpaceMenuOpen] = useState(false);
+  const spaceRef = useRef<HTMLDivElement | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newSpaceName, setNewSpaceName] = useState("");
+  const [newSpaceDesc, setNewSpaceDesc] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const currentSpace = spaces.find((space) => space.id === currentSpaceId) ?? null;
+
+  useEffect(() => {
+    void fetchSpaces();
+  }, [fetchSpaces]);
+
   useEffect(() => {
     function onPointerDown(event: MouseEvent): void {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (menuRef.current && !menuRef.current.contains(target)) {
         setMenuOpen(false);
+      }
+      if (spaceRef.current && !spaceRef.current.contains(target)) {
+        setSpaceMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, []);
+
+  async function createSpace(): Promise<void> {
+    const name = newSpaceName.trim();
+    if (!name) {
+      return;
+    }
+    setCreating(true);
+    setCreateError(null);
+    const result = await SpacesService.create(name, newSpaceDesc.trim());
+    setCreating(false);
+    if (!result.ok) {
+      setCreateError(result.error.message);
+      return;
+    }
+    await fetchSpaces();
+    setCurrentSpace(result.value.id);
+    setCreateOpen(false);
+    setNewSpaceName("");
+    setNewSpaceDesc("");
+  }
 
   async function handleLogout(): Promise<void> {
     await logout();
@@ -155,7 +199,57 @@ export default function WorkspaceLayout(): JSX.Element {
 
       <div className={styles.main}>
         <header className={styles.topbar}>
-          <h2>TaskFlow</h2>
+          <div className={styles.spaceWrap} ref={spaceRef}>
+            <button
+              type="button"
+              className={styles.spaceButton}
+              aria-haspopup="menu"
+              aria-expanded={spaceMenuOpen}
+              onClick={() => setSpaceMenuOpen((open) => !open)}
+            >
+              <span className={styles.spaceIcon}>
+                {isPersonalSpace(currentSpaceId) ? "🔒" : "📁"}
+              </span>
+              <span className={styles.spaceName}>{currentSpace?.name ?? "Пространство"}</span>
+              <span className={styles.chevron}>{spaceMenuOpen ? "▴" : "▾"}</span>
+            </button>
+            {spaceMenuOpen ? (
+              <div className={styles.spaceMenu} role="menu">
+                {spaces.map((space) => (
+                  <button
+                    key={space.id}
+                    type="button"
+                    role="menuitem"
+                    className={`${styles.spaceItem} ${
+                      space.id === currentSpaceId ? styles.spaceItemActive : ""
+                    }`}
+                    onClick={() => {
+                      setCurrentSpace(space.id);
+                      setSpaceMenuOpen(false);
+                    }}
+                  >
+                    <span>{isPersonalSpace(space.id) ? "🔒" : "📁"}</span>
+                    {space.name}
+                  </button>
+                ))}
+                {can("space.create") ? (
+                  <button
+                    type="button"
+                    className={styles.spaceCreate}
+                    onClick={() => {
+                      setSpaceMenuOpen(false);
+                      setNewSpaceName("");
+                      setNewSpaceDesc("");
+                      setCreateError(null);
+                      setCreateOpen(true);
+                    }}
+                  >
+                    + Создать пространство
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
           <div className={styles.spacer} />
           <button className="btn-ghost" type="button" onClick={() => void chooseDifferentFolder()}>
             Сменить папку
@@ -165,6 +259,56 @@ export default function WorkspaceLayout(): JSX.Element {
           <Outlet />
         </div>
       </div>
+
+      {createOpen ? (
+        <div className={styles.modalBackdrop} onClick={() => setCreateOpen(false)}>
+          <div
+            className={styles.spaceModal}
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>Новое пространство</h3>
+            {createError ? (
+              <div className="alert" style={{ marginBottom: 14 }}>
+                {createError}
+              </div>
+            ) : null}
+            <div className="field">
+              <label htmlFor="sp-name">Название</label>
+              <input
+                id="sp-name"
+                type="text"
+                autoFocus
+                value={newSpaceName}
+                onChange={(event) => setNewSpaceName(event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="sp-desc">Описание</label>
+              <input
+                id="sp-desc"
+                type="text"
+                value={newSpaceDesc}
+                onChange={(event) => setNewSpaceDesc(event.target.value)}
+              />
+            </div>
+            <div className={styles.modalActions}>
+              <button className="btn-ghost" type="button" onClick={() => setCreateOpen(false)}>
+                Отмена
+              </button>
+              <button
+                className="btn-primary"
+                type="button"
+                disabled={creating}
+                onClick={() => void createSpace()}
+              >
+                {creating ? "Создание…" : "Создать"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

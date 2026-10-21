@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 
 import type { AppError } from "@/lib/errors";
 import { TasksService, type Task, type TaskStatus } from "@/services/tasks";
@@ -10,7 +10,7 @@ interface TaskState {
   /** Epoch ms of the last local task write (used to suppress own fs-events). */
   lastWriteAt: number;
   /** Loads all visible tasks (`tasksList` with an empty filter). */
-  fetchTasks: () => Promise<void>;
+  fetchTasks: (spaceId: string) => Promise<void>;
   /** Replaces the list without touching `loading` (watcher refresh). */
   setTasksSilently: (tasks: Task[]) => void;
   addTask: (task: Task) => void;
@@ -20,7 +20,12 @@ interface TaskState {
    * Optimistically moves a task to `status`, then persists it. On failure the
    * previous list is restored and the error is returned for a toast.
    */
-  moveTask: (id: string, status: TaskStatus, currentVersion: number) => Promise<AppError | null>;
+  moveTask: (
+    spaceId: string,
+    id: string,
+    status: TaskStatus,
+    currentVersion: number,
+  ) => Promise<AppError | null>;
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -29,9 +34,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   error: null,
   lastWriteAt: 0,
 
-  fetchTasks: async () => {
+  fetchTasks: async (spaceId) => {
     set({ loading: true, error: null });
-    const result = await TasksService.list({});
+    const result = await TasksService.list(spaceId, {});
     if (result.ok) {
       set({ tasks: result.value, loading: false });
     } else {
@@ -54,13 +59,13 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }));
   },
 
-  moveTask: async (id, status, currentVersion) => {
+  moveTask: async (spaceId, id, status, currentVersion) => {
     const previous = get().tasks;
     set({
       tasks: previous.map((task) => (task.id === id ? { ...task, status } : task)),
     });
 
-    const result = await TasksService.changeStatus(id, status, currentVersion);
+    const result = await TasksService.changeStatus(spaceId, id, status, currentVersion);
     if (!result.ok) {
       set({ tasks: previous });
       return result.error;

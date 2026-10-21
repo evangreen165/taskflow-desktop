@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 
 import { NotesService, type NoteListItem } from "@/services/notes";
 
@@ -7,7 +7,7 @@ interface NoteState {
   categories: string[];
   loading: boolean;
   error: string | null;
-  fetchNotes: () => Promise<void>;
+  fetchNotes: (spaceId: string) => Promise<void>;
   fetchCategories: () => Promise<void>;
   /** Creates a category and updates the list; false when the backend failed. */
   addCategory: (name: string) => Promise<boolean>;
@@ -20,9 +20,9 @@ export const useNoteStore = create<NoteState>((set) => ({
   loading: false,
   error: null,
 
-  fetchNotes: async () => {
+  fetchNotes: async (spaceId) => {
     set({ loading: true, error: null });
-    const result = await NotesService.list({});
+    const result = await NotesService.list(spaceId, {});
     if (result.ok) {
       set({ notes: result.value, loading: false });
     } else {

@@ -41,7 +41,7 @@ pub fn spaces_create_impl(
     description: String,
 ) -> Result<Space, AppError> {
     state.require_writable()?;
-    let session = state.require_auth()?;
+    let session = state.require_perm("space.create")?;
     spaces::create(&state.root()?, &session.user_id, &name, &description)
 }
 
@@ -187,11 +187,14 @@ mod tests {
     fn spaces_list_is_scoped_to_membership() {
         let fx = fixture();
         let listed = spaces_list_impl(&fx.state).unwrap();
-        let ids: Vec<&str> = listed.iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, vec![fx.space_a.as_str()]);
+        assert!(listed.iter().any(|s| s.id == fx.space_a));
+        assert!(!listed.iter().any(|s| s.id == fx.space_b));
+        // Alice also has her auto-created personal space.
+        assert!(listed.iter().any(|s| crate::spaces::is_personal(&s.id)));
 
         fx.state.set_session(session_for(&fx.admin.id, "admin"));
-        assert_eq!(spaces_list_impl(&fx.state).unwrap().len(), 2);
+        // 3 personal spaces (admin/alice/bob) + Alpha + Beta.
+        assert_eq!(spaces_list_impl(&fx.state).unwrap().len(), 5);
     }
 
     #[test]

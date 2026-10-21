@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -31,6 +31,7 @@ import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import { messageForCode } from "@/lib/errorMessages";
 import { priorityColor } from "@/lib/taskMeta";
 import { TasksService, type Task } from "@/services/tasks";
+import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useToastStore } from "@/stores/useToastStore";
 
 import styles from "./CalendarPage.module.css";
@@ -56,6 +57,7 @@ function dayKey(day: Date): string {
 }
 
 export default function CalendarPage(): JSX.Element {
+  const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const pushToast = useToastStore((s) => s.push);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -75,8 +77,12 @@ export default function CalendarPage(): JSX.Element {
   }, [view, cursor]);
 
   const load = useCallback(async () => {
+    if (!spaceId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const result = await TasksService.list({
+    const result = await TasksService.list(spaceId, {
       startDate: format(range.start, "yyyy-MM-dd"),
       endDate: format(range.end, "yyyy-MM-dd"),
     });
@@ -84,7 +90,7 @@ export default function CalendarPage(): JSX.Element {
       setTasks(result.value);
     }
     setLoading(false);
-  }, [range]);
+  }, [range, spaceId]);
 
   useEffect(() => {
     void load();
@@ -105,7 +111,10 @@ export default function CalendarPage(): JSX.Element {
   function moveTask(id: string, dueDate: string | null, version: number): void {
     setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, dueDate } : task)));
     void (async () => {
-      const result = await TasksService.update(id, { dueDate }, version);
+      if (!spaceId) {
+        return;
+      }
+      const result = await TasksService.update(spaceId, id, { dueDate }, version);
       if (!result.ok) {
         pushToast(messageForCode(result.error.code, result.error.message), "error");
         void load();
@@ -263,10 +272,11 @@ export default function CalendarPage(): JSX.Element {
         </div>
       </DndContext>
 
-      {selectedTask ? (
+      {selectedTask && spaceId ? (
         <TaskDetailPanel
           key={selectedTask.id}
           task={selectedTask}
+          spaceId={spaceId}
           onClose={() => {
             setSelectedTaskId(null);
             void load();

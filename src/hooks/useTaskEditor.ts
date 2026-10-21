@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 
 import type { AppError } from "@/lib/errors";
 import {
@@ -69,7 +69,7 @@ export interface UseTaskEditorResult {
  * `VERSION_CONFLICT` autosave stops and the modal data is exposed; on other
  * errors the draft is reverted to the last server-confirmed state.
  */
-export function useTaskEditor(task: Task): UseTaskEditorResult {
+export function useTaskEditor(task: Task, spaceId: string): UseTaskEditorResult {
   const initial = useRef<TaskDraft>(taskToDraft(task));
   const [draft, setDraft] = useState<TaskDraft>(initial.current);
   const [saving, setSaving] = useState(false);
@@ -164,7 +164,12 @@ export function useTaskEditor(task: Task): UseTaskEditorResult {
     let currentVersion = versionRef.current;
     try {
       if (nextStatus !== undefined) {
-        const result = await TasksService.changeStatus(task.id, nextStatus, currentVersion);
+        const result = await TasksService.changeStatus(
+          spaceId,
+          task.id,
+          nextStatus,
+          currentVersion,
+        );
         if (!result.ok) {
           handleError(result.error);
           return;
@@ -175,7 +180,7 @@ export function useTaskEditor(task: Task): UseTaskEditorResult {
         useTaskStore.getState().replaceTask(result.value);
       }
       if (Object.keys(patch).length > 0) {
-        const result = await TasksService.update(task.id, patch, currentVersion);
+        const result = await TasksService.update(spaceId, task.id, patch, currentVersion);
         if (!result.ok) {
           handleError(result.error);
           return;

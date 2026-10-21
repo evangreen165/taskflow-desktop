@@ -63,7 +63,12 @@ pub fn list(root: &Path) -> Result<Vec<Space>, AppError> {
         }
         spaces.push(fsops::read_json::<Space>(&file)?);
     }
-    spaces.sort_by(|a, b| a.created_at.cmp(&b.created_at).then_with(|| a.id.cmp(&b.id)));
+    spaces.sort_by(|a, b| {
+        is_personal(&b.id)
+            .cmp(&is_personal(&a.id))
+            .then_with(|| a.created_at.cmp(&b.created_at))
+            .then_with(|| a.id.cmp(&b.id))
+    });
     Ok(spaces)
 }
 
@@ -152,6 +157,29 @@ pub fn delete(root: &Path, id: &str) -> Result<(), AppError> {
 
 pub fn is_member(space: &Space, user_id: &str) -> bool {
     space.owner_id == user_id || space.members.iter().any(|m| m == user_id)
+}
+
+/// Every account gets a private space (`personal_{userId}`) for its own data.
+pub fn ensure_personal(root: &Path, user_id: &str, display_name: &str) -> Result<(), AppError> {
+    let id = format!("personal_{user_id}");
+    let path = space_path(root, &id)?;
+    if path.is_file() {
+        return Ok(());
+    }
+    let space = Space {
+        id,
+        name: format!("Личное пространство {display_name}"),
+        description: String::new(),
+        created_at: now_rfc3339(),
+        owner_id: user_id.to_string(),
+        members: vec![user_id.to_string()],
+    };
+    write_space(root, &space)
+}
+
+/// True for the auto-generated personal space id.
+pub fn is_personal(space_id: &str) -> bool {
+    space_id.starts_with("personal_")
 }
 
 pub fn is_admin(session: &Session) -> bool {
