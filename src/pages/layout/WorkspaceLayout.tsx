@@ -1,18 +1,12 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
+import Avatar from "@/components/Avatar";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 
 import styles from "./WorkspaceLayout.module.css";
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const first = parts[0]?.charAt(0) ?? "?";
-  const second = parts[1]?.charAt(0) ?? "";
-  return (first + second).toUpperCase();
-}
 
 function SideNavLink({
   to,
@@ -49,6 +43,18 @@ export default function WorkspaceLayout(): JSX.Element {
   const navigate = useNavigate();
 
   const forced = session?.mustChangePassword ?? false;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function onPointerDown(event: MouseEvent): void {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, []);
 
   async function handleLogout(): Promise<void> {
     await logout();
@@ -67,11 +73,17 @@ export default function WorkspaceLayout(): JSX.Element {
 
         <nav className={styles.nav}>
           <div className={styles.navLabel}>Работа</div>
+          <SideNavLink to="/app/dashboard" disabled={forced}>
+            🏠 Главная
+          </SideNavLink>
           <SideNavLink to="/app/tasks" disabled={forced}>
             Задачи
           </SideNavLink>
+          <SideNavLink to="/app/calendar" disabled={forced}>
+            Календарь
+          </SideNavLink>
           <SideNavLink to="/app/kb" disabled={forced}>
-            База знаний
+            Заметки
           </SideNavLink>
           <div className={styles.navLabel}>Управление</div>
           {can("users.manage") ? (
@@ -79,20 +91,64 @@ export default function WorkspaceLayout(): JSX.Element {
               Администрирование
             </SideNavLink>
           ) : null}
-          <SideNavLink to="/app/profile" disabled={false}>
-            Профиль
-          </SideNavLink>
         </nav>
 
         <div className={styles.footer}>
-          <div className={styles.userCard}>
-            <div className={styles.avatar} style={{ background: user?.avatarColor ?? "#5b5bd6" }}>
-              {initials(user?.displayName ?? "—")}
-            </div>
-            <div>
-              <div className={styles.userName}>{user?.displayName ?? "—"}</div>
-              <div className={styles.userRole}>{role?.name ?? "—"}</div>
-            </div>
+          <div className={styles.menuWrap} ref={menuRef}>
+            {menuOpen ? (
+              <div className={styles.userMenu} role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    navigate("/app/profile");
+                  }}
+                >
+                  Мой профиль
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    navigate("/app/settings");
+                  }}
+                >
+                  Настройки приложения
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.menuLogout}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void handleLogout();
+                  }}
+                >
+                  Выйти
+                </button>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className={styles.userCard}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <Avatar
+                name={user?.displayName ?? "—"}
+                color={user?.avatarColor ?? "#5b5bd6"}
+                sha256={user?.avatarSha256}
+                size={32}
+              />
+              <div className={styles.userText}>
+                <div className={styles.userName}>{user?.displayName ?? "—"}</div>
+                <div className={styles.userRole}>{role?.name ?? "—"}</div>
+              </div>
+              <span className={styles.chevron}>{menuOpen ? "▴" : "▾"}</span>
+            </button>
           </div>
         </div>
       </aside>
@@ -103,9 +159,6 @@ export default function WorkspaceLayout(): JSX.Element {
           <div className={styles.spacer} />
           <button className="btn-ghost" type="button" onClick={() => void chooseDifferentFolder()}>
             Сменить папку
-          </button>
-          <button className="btn-ghost" type="button" onClick={() => void handleLogout()}>
-            Выйти
           </button>
         </header>
         <div className={styles.content}>

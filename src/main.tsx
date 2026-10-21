@@ -6,9 +6,13 @@ import { router } from "@/App";
 import Toaster from "@/components/Toast/Toaster";
 import { setAppNavigator } from "@/lib/navigate";
 import { setupAuthWatcher } from "@/stores/useAuthStore";
+import { applyTheme, useThemeStore } from "@/stores/useThemeStore";
 import "@/styles/global.css";
 
 setAppNavigator((path, options) => void router.navigate(path, options));
+
+applyTheme(useThemeStore.getState().theme);
+useThemeStore.subscribe((state) => applyTheme(state.theme));
 
 const container = document.getElementById("root");
 if (!container) {

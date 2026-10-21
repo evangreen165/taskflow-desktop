@@ -25,6 +25,8 @@ pub struct User {
     pub password_hash: String,
     pub role_id: String,
     pub avatar_color: String,
+    #[serde(default)]
+    pub avatar_sha256: Option<String>,
     pub created_at: String,
     pub last_login_at: Option<String>,
     pub is_active: bool,
@@ -41,6 +43,7 @@ pub struct UserInfo {
     pub email: Option<String>,
     pub role_id: String,
     pub avatar_color: String,
+    pub avatar_sha256: Option<String>,
     pub created_at: String,
     pub last_login_at: Option<String>,
     pub is_active: bool,
@@ -56,6 +59,7 @@ impl From<&User> for UserInfo {
             email: u.email.clone(),
             role_id: u.role_id.clone(),
             avatar_color: u.avatar_color.clone(),
+            avatar_sha256: u.avatar_sha256.clone(),
             created_at: u.created_at.clone(),
             last_login_at: u.last_login_at.clone(),
             is_active: u.is_active,
@@ -74,6 +78,7 @@ pub struct UserPatch {
     pub role_id: Option<String>,
     pub avatar_color: Option<String>,
     pub is_active: Option<bool>,
+    pub avatar_sha256: Option<String>,
 }
 
 pub fn hash_password(password: &str) -> Result<String, AppError> {
@@ -186,6 +191,7 @@ pub fn create(
         password_hash: hash_password(password)?,
         role_id: role_id.to_string(),
         avatar_color: avatar_color(&login),
+        avatar_sha256: None,
         created_at: now_rfc3339(),
         last_login_at: None,
         is_active: true,
@@ -335,6 +341,9 @@ pub fn update(root: &Path, user_id: &str, patch: UserPatch) -> Result<UserInfo, 
     }
     if let Some(color) = patch.avatar_color {
         user.avatar_color = color;
+    }
+    if let Some(avatar_sha256) = patch.avatar_sha256 {
+        user.avatar_sha256 = Some(avatar_sha256);
     }
     if let Some(active) = patch.is_active {
         user.is_active = active;

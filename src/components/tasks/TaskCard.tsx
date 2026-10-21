@@ -1,10 +1,5 @@
-import {
-  avatarColorFor,
-  formatDueDate,
-  initials,
-  isOverdue,
-  PRIORITY_LABELS,
-} from "@/lib/taskMeta";
+import Avatar from "@/components/Avatar";
+import { avatarColorFor, formatDueDate, isOverdue, PRIORITY_LABELS } from "@/lib/taskMeta";
 import type { Task } from "@/services/tasks";
 import type { UserSummary } from "@/services/users";
 
@@ -21,7 +16,13 @@ export default function TaskCard({ task, users }: TaskCardProps): JSX.Element {
   const due = formatDueDate(task.dueDate);
   const overdue = isOverdue(task.dueDate, task.status);
   const assignees = task.assignees.map(
-    (id) => users[id] ?? { id, displayName: "?", avatarColor: avatarColorFor(id) },
+    (id) =>
+      users[id] ?? {
+        id,
+        displayName: "?",
+        avatarColor: avatarColorFor(id),
+        avatarSha256: null,
+      },
   );
   const shown = assignees.slice(0, MAX_AVATARS);
   const extra = assignees.length - shown.length;
@@ -49,14 +50,13 @@ export default function TaskCard({ task, users }: TaskCardProps): JSX.Element {
       <div className={styles.foot}>
         <div className={styles.avatars}>
           {shown.map((user) => (
-            <span
+            <Avatar
               key={user.id}
-              className={styles.avatar}
-              style={{ background: user.avatarColor }}
-              title={user.displayName}
-            >
-              {initials(user.displayName)}
-            </span>
+              name={user.displayName}
+              color={user.avatarColor}
+              sha256={user.avatarSha256}
+              size={22}
+            />
           ))}
           {extra > 0 ? <span className={styles.more}>+{extra}</span> : null}
         </div>

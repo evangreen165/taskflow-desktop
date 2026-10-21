@@ -1,10 +1,5 @@
-import {
-  formatDueDate,
-  initials,
-  PRIORITY_LABELS,
-  priorityColor,
-  statusLabel,
-} from "@/lib/taskMeta";
+import Avatar from "@/components/Avatar";
+import { formatDueDate, PRIORITY_LABELS, priorityColor, statusLabel } from "@/lib/taskMeta";
 import type { Task, TaskStatus } from "@/services/tasks";
 import type { UserSummary } from "@/services/users";
 
@@ -32,7 +27,7 @@ export default function TaskListView({ tasks, users, onSelect }: TaskListViewPro
       {tasks.map((task) => {
         const due = formatDueDate(task.dueDate);
         const assignees = task.assignees.map(
-          (id) => users[id] ?? { id, displayName: "?", avatarColor: "#5b5bd6" },
+          (id) => users[id] ?? { id, displayName: "?", avatarColor: "#5b5bd6", avatarSha256: null },
         );
         return (
           <button key={task.id} type="button" className={styles.row} onClick={() => onSelect(task)}>
@@ -45,14 +40,13 @@ export default function TaskListView({ tasks, users, onSelect }: TaskListViewPro
             </span>
             <span className={styles.assignees}>
               {assignees.slice(0, MAX_AVATARS).map((user) => (
-                <span
+                <Avatar
                   key={user.id}
-                  className={styles.avatar}
-                  style={{ background: user.avatarColor }}
-                  title={user.displayName}
-                >
-                  {initials(user.displayName)}
-                </span>
+                  name={user.displayName}
+                  color={user.avatarColor}
+                  sha256={user.avatarSha256}
+                  size={22}
+                />
               ))}
               {assignees.length > MAX_AVATARS ? (
                 <span className={styles.more}>+{assignees.length - MAX_AVATARS}</span>

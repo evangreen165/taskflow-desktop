@@ -13,6 +13,7 @@ import { useEffect, useRef } from "react";
 import { KANBAN_COLUMNS, type KanbanColumn } from "@/lib/taskMeta";
 import type { Task, TaskStatus } from "@/services/tasks";
 import type { UserSummary } from "@/services/users";
+import { useSettingsStore } from "@/stores/useSettingsStore";
 
 import TaskCard from "./TaskCard";
 import styles from "./KanbanBoard.module.css";
@@ -33,6 +34,11 @@ export default function KanbanBoard({
   onSelect,
 }: KanbanBoardProps): JSX.Element {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const hideEmptyColumns = useSettingsStore((s) => s.hideEmptyColumns);
+
+  const columns = hideEmptyColumns
+    ? KANBAN_COLUMNS.filter((column) => tasks.some((task) => task.status === column.status))
+    : KANBAN_COLUMNS;
 
   function handleDragEnd(event: DragEndEvent): void {
     const { active, over } = event;
@@ -53,7 +59,7 @@ export default function KanbanBoard({
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className={styles.board}>
-        {KANBAN_COLUMNS.map((column) => (
+        {columns.map((column) => (
           <Column
             key={column.status}
             column={column}

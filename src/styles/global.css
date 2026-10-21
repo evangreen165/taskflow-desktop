@@ -40,6 +40,43 @@
   }
 }
 
+/* Explicit theme overrides (Light / Dark selector on the Settings page). */
+:root[data-theme="dark"] {
+  --bg: #0e1013;
+  --surface: #16181d;
+  --surface-2: #1c1f26;
+  --border: #262a33;
+  --text: #e7e9ee;
+  --text-muted: #8b93a1;
+  --accent: #7c7cf0;
+  --accent-soft: #23234a;
+  --green-soft: #123a2e;
+  --amber-soft: #3d2f13;
+  --red-soft: #3d1c1c;
+  --blue-soft: #142a4d;
+  --gray-soft: #23262e;
+}
+
+:root[data-theme="light"] {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f1f2f5;
+  --border: #e6e8ec;
+  --text: #14161a;
+  --text-muted: #6b7280;
+  --accent: #5b5bd6;
+  --accent-soft: #ececfd;
+  --green: #10b981;
+  --green-soft: #d9f6ea;
+  --amber: #f59e0b;
+  --amber-soft: #fdf0d5;
+  --red: #ef4444;
+  --red-soft: #fde2e2;
+  --blue: #3b82f6;
+  --blue-soft: #e0edfe;
+  --gray-soft: #eceef1;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -77,12 +114,59 @@ button {
   font-size: inherit;
 }
 
+/* Native form controls must follow the theme tokens (dark-mode friendly). */
+html {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  html {
+    color-scheme: dark;
+  }
+}
+
 input,
 textarea,
 select {
   font-family: inherit;
   font-size: inherit;
-  color: inherit;
+  color: var(--text);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  caret-color: var(--text);
+}
+
+option {
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+}
+
+html[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
 }
 
 ::-webkit-scrollbar {

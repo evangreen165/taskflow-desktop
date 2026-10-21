@@ -25,6 +25,7 @@ export interface UserInfo {
   email: string | null;
   roleId: string;
   avatarColor: string;
+  avatarSha256: string | null;
   createdAt: string;
   lastLoginAt: string | null;
   isActive: boolean;
@@ -61,6 +62,7 @@ export interface UserPatch {
   roleId?: string;
   avatarColor?: string;
   isActive?: boolean;
+  avatarSha256?: string | null;
 }
 
 export interface RolePatch {

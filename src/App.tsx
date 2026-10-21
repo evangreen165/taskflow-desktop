@@ -7,10 +7,13 @@ import BootGate from "@/components/boot/BootGate";
 import Onboarding from "@/components/onboarding/Onboarding";
 import AdminPage from "@/pages/admin/AdminPage";
 import LoginScreen from "@/pages/auth/LoginScreen";
+import CalendarPage from "@/pages/calendar/CalendarPage";
+import DashboardPage from "@/pages/dashboard/DashboardPage";
 import KbArticlePage from "@/pages/kb/KbArticlePage";
 import KbPage from "@/pages/kb/KbPage";
 import WorkspaceLayout from "@/pages/layout/WorkspaceLayout";
 import ProfilePage from "@/pages/profile/ProfilePage";
+import SettingsPage from "@/pages/settings/SettingsPage";
 import TasksPage from "@/pages/tasks/TasksPage";
 
 /**
@@ -30,7 +33,9 @@ export const router = createHashRouter([
       </RequireAuth>
     ),
     children: [
-      { index: true, element: <Navigate to="/app/tasks" replace /> },
+      { index: true, element: <Navigate to="/app/dashboard" replace /> },
+      { path: "dashboard", element: <DashboardPage /> },
+      { path: "calendar", element: <CalendarPage /> },
       { path: "tasks", element: <TasksPage /> },
       { path: "kb", element: <KbPage /> },
       { path: "kb/:id", element: <KbArticlePage /> },
@@ -43,6 +48,7 @@ export const router = createHashRouter([
         ),
       },
       { path: "profile", element: <ProfilePage /> },
+      { path: "settings", element: <SettingsPage /> },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },

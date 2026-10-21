@@ -146,6 +146,12 @@ pub struct TaskFilter {
     pub status: Option<TaskStatus>,
     #[serde(default)]
     pub assignee_id: Option<String>,
+    /// Inclusive `YYYY-MM-DD` range on `dueDate` (tasks without a due date are
+    /// excluded when either bound is set).
+    #[serde(default)]
+    pub start_date: Option<String>,
+    #[serde(default)]
+    pub end_date: Option<String>,
 }
 
 mod double_option {

@@ -348,6 +348,47 @@
   gap: 12px;
 }
 
+.imageToolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 12px;
+  align-self: flex-start;
+}
+
+.imageToolbar span {
+  color: var(--text-muted);
+  margin-right: 2px;
+}
+
+.imageToolbar button {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-muted);
+}
+
+.imageToolbar button:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.imageToolbarClose {
+  margin-left: 4px;
+}
+
+.imageToolbarClose:hover {
+  color: var(--red) !important;
+  border-color: var(--red) !important;
+}
+
 .actions {
   display: flex;
   gap: 8px;

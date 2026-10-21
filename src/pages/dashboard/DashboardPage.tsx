@@ -1,0 +1,308 @@
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import GridLayout, { useContainerWidth, type Layout } from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
+import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
+import { usePermissions } from "@/hooks/usePermissions";
+import { categoryIcon, formatDate } from "@/lib/kbMeta";
+import { formatDueDate, PRIORITY_LABELS, priorityColor, statusLabel } from "@/lib/taskMeta";
+import { DashboardService, type DashboardSummary } from "@/services/dashboard";
+import type { NoteMeta } from "@/services/notes";
+import type { Task } from "@/services/tasks";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { useDashboardStore, WIDGET_DEFS, type WidgetId } from "@/stores/useDashboardStore";
+
+import styles from "./DashboardPage.module.css";
+
+export default function DashboardPage(): JSX.Element {
+  const displayName = useAuthStore((s) => s.session?.user.displayName ?? "Пользователь");
+  const { can } = usePermissions();
+  const navigate = useNavigate();
+  const config = useDashboardStore((s) => s.config);
+  const setLayout = useDashboardStore((s) => s.setLayout);
+  const toggleVisible = useDashboardStore((s) => s.toggleVisible);
+  const { containerRef, width: gridWidth, mounted } = useContainerWidth();
+
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const result = await DashboardService.getSummary();
+    if (result.ok) {
+      setSummary(result.value);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const selectedTask: Task | null =
+    selectedTaskId !== null && summary
+      ? (summary.myActiveTasks.find((t) => t.id === selectedTaskId) ??
+        summary.myTasksToday.find((t) => t.id === selectedTaskId) ??
+        summary.myOverdueTasks.find((t) => t.id === selectedTaskId) ??
+        null)
+      : null;
+
+  const canViewNotes = can("article.view");
+  const layout = config.layout.filter((item) => {
+    const id = item.i as WidgetId;
+    if (id === "notes" && !canViewNotes) {
+      return false;
+    }
+    return config.visible[id] ?? false;
+  });
+
+  const today = new Date().toLocaleDateString("ru-RU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
+  return (
+    <div className={styles.page}>
+      <div className={styles.hero}>
+        <div>
+          <h1>Привет, {displayName}!</h1>
+          <span className={styles.date}>{today}</span>
+        </div>
+        <button
+          className={styles.gear}
+          type="button"
+          title="Настройки дашборда"
+          onClick={() => setSettingsOpen(true)}
+        >
+          ⚙
+        </button>
+      </div>
+
+      {loading ? <div className={styles.muted}>Загрузка…</div> : null}
+      <div ref={containerRef as React.RefObject<HTMLDivElement>} className={styles.gridHost}>
+        {summary && mounted ? (
+          <GridLayout
+            width={gridWidth}
+            layout={layout}
+            gridConfig={{ cols: 12, rowHeight: 90, margin: [14, 14] }}
+            dragConfig={{ handle: ".drag-handle" }}
+            onLayoutChange={(next: Layout) => setLayout(next)}
+          >
+            {WIDGET_DEFS.filter(
+              (def) => (def.id !== "notes" || canViewNotes) && (config.visible[def.id] ?? false),
+            ).map((def) => (
+              <div key={def.id}>
+                <div className={styles.widget}>
+                  <div className={`${styles.widgetHead} drag-handle`}>
+                    <h2>{def.title}</h2>
+                  </div>
+                  <div className={styles.widgetBody}>
+                    <WidgetBody
+                      id={def.id}
+                      summary={summary}
+                      canViewNotes={canViewNotes}
+                      onOpenTask={setSelectedTaskId}
+                      onOpenNote={(id) => navigate(`/app/kb/${id}`)}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </GridLayout>
+        ) : null}
+      </div>
+
+      {settingsOpen ? (
+        <div className={styles.modalBackdrop} onClick={() => setSettingsOpen(false)}>
+          <div
+            className={styles.settingsCard}
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>Настройки дашборда</h3>
+            <div className={styles.settingList}>
+              {WIDGET_DEFS.map((def) => (
+                <label key={def.id} className={styles.settingRow}>
+                  <input
+                    type="checkbox"
+                    checked={config.visible[def.id] ?? false}
+                    onChange={() => toggleVisible(def.id)}
+                  />
+                  {def.title}
+                </label>
+              ))}
+            </div>
+            <button className="btn-primary" type="button" onClick={() => setSettingsOpen(false)}>
+              Готово
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedTask ? (
+        <TaskDetailPanel
+          key={selectedTask.id}
+          task={selectedTask}
+          onClose={() => {
+            setSelectedTaskId(null);
+            void load();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function WidgetBody({
+  id,
+  summary,
+  canViewNotes,
+  onOpenTask,
+  onOpenNote,
+}: {
+  id: WidgetId;
+  summary: DashboardSummary;
+  canViewNotes: boolean;
+  onOpenTask: (id: string) => void;
+  onOpenNote: (id: string) => void;
+}): JSX.Element {
+  switch (id) {
+    case "active":
+      return (
+        <TaskList
+          tasks={summary.myActiveTasks}
+          empty="Активных задач нет."
+          showStatus
+          onOpen={onOpenTask}
+        />
+      );
+    case "today":
+      return (
+        <TaskList tasks={summary.myTasksToday} empty="На сегодня задач нет." onOpen={onOpenTask} />
+      );
+    case "overdue":
+      return (
+        <TaskList
+          tasks={summary.myOverdueTasks}
+          empty="Просроченных задач нет."
+          overdue
+          onOpen={onOpenTask}
+        />
+      );
+    case "stats":
+      return (
+        <div className={styles.stats}>
+          <Stat value={summary.stats.totalTasks} label="Всего задач" />
+          <Stat value={summary.stats.inProgress} label="В работе" />
+          <Stat value={summary.stats.completedThisWeek} label="Выполнено за неделю" />
+        </div>
+      );
+    case "notes":
+      if (!canViewNotes) {
+        return <div className={styles.muted}>Нет доступа.</div>;
+      }
+      return <ArticleList articles={summary.recentArticles} onOpen={onOpenNote} />;
+  }
+}
+
+function TaskList({
+  tasks,
+  empty,
+  overdue,
+  showStatus,
+  onOpen,
+}: {
+  tasks: Task[];
+  empty: string;
+  overdue?: boolean | undefined;
+  showStatus?: boolean | undefined;
+  onOpen: (id: string) => void;
+}): JSX.Element {
+  return tasks.length === 0 ? (
+    <div className={styles.muted}>{empty}</div>
+  ) : (
+    <div className={styles.list}>
+      {tasks.map((task) => (
+        <TaskRow
+          key={task.id}
+          task={task}
+          overdue={overdue}
+          showStatus={showStatus}
+          onOpen={() => onOpen(task.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TaskRow({
+  task,
+  overdue,
+  showStatus,
+  onOpen,
+}: {
+  task: Task;
+  overdue?: boolean | undefined;
+  showStatus?: boolean | undefined;
+  onOpen: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      className={`${styles.taskRow} ${overdue ? styles.taskOverdue : ""}`}
+      onClick={onOpen}
+    >
+      <span className={styles.taskTitle}>{task.title}</span>
+      <span className={styles.taskMeta}>
+        <span style={{ color: priorityColor(task.priority) }}>
+          {PRIORITY_LABELS[task.priority]}
+        </span>
+        {showStatus ? <span>{statusLabel(task.status)}</span> : null}
+        {task.dueDate ? <span>📅 {formatDueDate(task.dueDate)}</span> : null}
+      </span>
+    </button>
+  );
+}
+
+function Stat({ value, label }: { value: number; label: string }): JSX.Element {
+  return (
+    <div className={styles.stat}>
+      <span className={styles.statValue}>{value}</span>
+      <span className={styles.statLabel}>{label}</span>
+    </div>
+  );
+}
+
+function ArticleList({
+  articles,
+  onOpen,
+}: {
+  articles: NoteMeta[];
+  onOpen: (id: string) => void;
+}): JSX.Element {
+  return articles.length === 0 ? (
+    <div className={styles.muted}>Опубликованных статей пока нет.</div>
+  ) : (
+    <div className={styles.list}>
+      {articles.map((article) => (
+        <button
+          key={article.id}
+          type="button"
+          className={styles.articleRow}
+          onClick={() => onOpen(article.id)}
+        >
+          <span className={styles.articleIcon}>{categoryIcon(article.category)}</span>
+          <span className={styles.articleBody}>
+            <span className={styles.articleTitle}>{article.title}</span>
+            <span className={styles.muted}>{formatDate(article.updatedAt)}</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}

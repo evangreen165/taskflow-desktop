@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
 
 import KbCard from "@/components/kb/KbCard";
 import NewNoteModal from "@/components/kb/NewNoteModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EMPTY_KB_FILTER, filterNoteItems, type KbFilter } from "@/lib/kbMeta";
+import { NotesService } from "@/services/notes";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNoteStore } from "@/stores/useNoteStore";
+import { useToastStore } from "@/stores/useToastStore";
 import { useUserDirectory } from "@/stores/useUserDirectory";
 
 import styles from "./KbPage.module.css";
@@ -23,6 +26,7 @@ export default function KbPage(): JSX.Element {
   const ensureUsers = useUserDirectory((s) => s.ensure);
   const currentUserId = useAuthStore((s) => s.session?.user.id ?? null);
   const { can } = usePermissions();
+  const pushToast = useToastStore((s) => s.push);
   const navigate = useNavigate();
 
   const [filter, setFilter] = useState<KbFilter>(EMPTY_KB_FILTER);
@@ -59,6 +63,23 @@ export default function KbPage(): JSX.Element {
     if (created) {
       setFilter((current) => ({ ...current, category: name }));
     }
+  }
+
+  async function handleImport(): Promise<void> {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "Документы", extensions: ["md", "markdown", "pdf"] }],
+    });
+    if (typeof selected !== "string") {
+      return;
+    }
+    const result = await NotesService.importFile(selected);
+    if (!result.ok) {
+      return;
+    }
+    pushToast(`Заметка «${result.value.meta.title}» импортирована`, "success");
+    void fetchNotes();
+    void fetchCategories();
   }
 
   return (
@@ -160,6 +181,11 @@ export default function KbPage(): JSX.Element {
           {filterActive ? (
             <button className="btn-ghost" type="button" onClick={() => setFilter(EMPTY_KB_FILTER)}>
               Сбросить
+            </button>
+          ) : null}
+          {can("article.create") ? (
+            <button className="btn-ghost" type="button" onClick={() => void handleImport()}>
+              Импорт
             </button>
           ) : null}
           <button className="btn-primary" type="button" onClick={() => setModalOpen(true)}>

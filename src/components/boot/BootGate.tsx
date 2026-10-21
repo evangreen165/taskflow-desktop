@@ -69,5 +69,5 @@ export default function BootGate(): JSX.Element {
   if (phase === "login") {
     return <Navigate to="/login" replace />;
   }
-  return <Navigate to="/app/tasks" replace />;
+  return <Navigate to="/app/dashboard" replace />;
 }
