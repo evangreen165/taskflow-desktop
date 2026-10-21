@@ -2,6 +2,17 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.5.0] - 2026-10-21
+
+### Added
+
+- Customizable dashboard with drag-and-drop widgets
+- Calendar view with drag-and-drop due dates
+- User avatars (image upload & caching)
+- Markdown image resizing (S/M/L)
+- MD/PDF note import
+- Extended settings (theme, kanban visibility, security tabs)
+
 ## [0.4.0] - 2026-10-19
 
 ### Added
