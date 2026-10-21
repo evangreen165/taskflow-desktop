@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 
@@ -67,5 +67,15 @@ describe("TasksService", () => {
     invokeMock.mockResolvedValue(undefined);
     await TasksService.delete("sp1", "t1");
     expect(invokeMock).toHaveBeenCalledWith("tasksDelete", { spaceId: "sp1", id: "t1" });
+  });
+
+  it("move sends taskId and both spaces", async () => {
+    invokeMock.mockResolvedValue({ id: "t1" });
+    await TasksService.move("t1", "sp1", "sp2");
+    expect(invokeMock).toHaveBeenCalledWith("tasksMove", {
+      taskId: "t1",
+      fromSpaceId: "sp1",
+      toSpaceId: "sp2",
+    });
   });
 });

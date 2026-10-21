@@ -15,17 +15,20 @@ export interface NoteMeta {
   status: NoteStatus;
   version: number;
   linkedTaskIds: string[];
+  sharedWithSpaces: string[];
 }
 
 /** `notesList` item: meta flattened plus a content snippet. */
 export interface NoteListItem extends NoteMeta {
   preview: string;
+  shared: boolean;
 }
 
 export interface Note {
   meta: NoteMeta;
   content: string;
   historyVersions: number[];
+  shared: boolean;
 }
 
 export interface NoteListFilter {
@@ -116,5 +119,10 @@ export const NotesService = {
   /** Imports a local `.md`/`.pdf` file as a note. */
   importFile(spaceId: string, sourcePath: string): Promise<Result<Note>> {
     return invokeCommand<Note>("notesImport", { spaceId, sourcePath });
+  },
+
+  /** Shares a note with other spaces (read-only access). */
+  share(noteId: string, spaceId: string, targetSpaceIds: string[]): Promise<Result<Note>> {
+    return invokeCommand<Note>("notesShare", { noteId, spaceId, targetSpaceIds });
   },
 };

@@ -107,7 +107,10 @@ pub fn spaces_delete(state: State<'_, AppState>, id: String) -> Result<(), AppEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::{tasks_create_impl, tasks_list_impl};
+    use crate::commands::{
+        notes_create_impl, notes_get_impl, notes_list_impl, notes_share_impl, tasks_create_impl,
+        tasks_list_impl, tasks_move_impl,
+    };
     use crate::session::Session;
     use crate::tasks::{CreateTaskPayload, TaskFilter};
     use crate::users::{self, UserInfo};
@@ -246,8 +249,7 @@ mod tests {
     }
 
     #[test]
-    fn update_and_delete_require_owner_or_admin() {
-        let fx = fixture();
+    fn update_and_delete_require_owner_or_admin() {        let fx = fixture();
 
         fx.state.set_session(session_for(&fx.user_b.id, "manager"));
         assert_eq!(
@@ -284,5 +286,69 @@ mod tests {
         fx.state.set_session(session_for(&fx.admin.id, "admin"));
         spaces_delete_impl(&fx.state, fx.space_a.clone()).unwrap();
         assert!(crate::spaces::get(fx._dir.path(), &fx.space_a).is_err());
+    }
+
+    #[test]
+    fn tasks_move_relocates_between_spaces() {
+        let fx = fixture();
+        // Give userA access to spaceB.
+        let mut space_b = crate::spaces::get(fx._dir.path(), &fx.space_b).unwrap();
+        space_b.members.push(fx.user_a.id.clone());
+        crate::spaces::write_space(fx._dir.path(), &space_b).unwrap();
+
+        let task = tasks_create_impl(
+            &fx.state,
+            fx.space_a.clone(),
+            create_payload(json!({ "title": "Move me" })),
+        )
+        .unwrap();
+
+        let moved =
+            tasks_move_impl(&fx.state, task.id.clone(), fx.space_a.clone(), fx.space_b.clone())
+                .unwrap();
+        assert_eq!(moved.id, task.id);
+
+        assert!(tasks_list_impl(&fx.state, fx.space_a.clone(), TaskFilter::default())
+            .unwrap()
+            .is_empty());
+        let in_b = tasks_list_impl(&fx.state, fx.space_b.clone(), TaskFilter::default()).unwrap();
+        assert_eq!(in_b.len(), 1);
+        assert_eq!(in_b[0].id, task.id);
+    }
+
+    #[test]
+    fn notes_share_exposes_note_in_target_space() {
+        let fx = fixture();
+        fx.state.set_session(session_for(&fx.admin.id, "admin"));
+
+        let note = notes_create_impl(
+            &fx.state,
+            fx.space_a.clone(),
+            "Shared".to_string(),
+            "Процессы".to_string(),
+            "body".to_string(),
+        )
+        .unwrap();
+
+        notes_share_impl(
+            &fx.state,
+            note.meta.id.clone(),
+            fx.space_a.clone(),
+            vec![fx.space_b.clone()],
+        )
+        .unwrap();
+
+        let listed =
+            notes_list_impl(&fx.state, fx.space_b.clone(), None, None, None, None).unwrap();
+        let shared = listed
+            .iter()
+            .find(|item| item.meta.id == note.meta.id)
+            .expect("shared note visible in target space");
+        assert!(shared.shared);
+
+        let fetched =
+            notes_get_impl(&fx.state, fx.space_b.clone(), note.meta.id.clone()).unwrap();
+        assert!(fetched.shared);
+        assert_eq!(fetched.content, "body");
     }
 }

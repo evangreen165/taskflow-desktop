@@ -32,17 +32,13 @@ export default function DashboardPage(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const load = useCallback(async () => {
-    if (!spaceId) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
-    const result = await DashboardService.getSummary(spaceId);
+    const result = await DashboardService.getSummary(null);
     if (result.ok) {
       setSummary(result.value);
     }
     setLoading(false);
-  }, [spaceId]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -150,11 +146,11 @@ export default function DashboardPage(): JSX.Element {
         </div>
       ) : null}
 
-      {selectedTask && spaceId ? (
+      {selectedTask && (selectedTask.spaceId ?? spaceId) ? (
         <TaskDetailPanel
           key={selectedTask.id}
           task={selectedTask}
-          spaceId={spaceId}
+          spaceId={selectedTask.spaceId ?? spaceId ?? ""}
           onClose={() => {
             setSelectedTaskId(null);
             void load();
@@ -264,7 +260,10 @@ function TaskRow({
       className={`${styles.taskRow} ${overdue ? styles.taskOverdue : ""}`}
       onClick={onOpen}
     >
-      <span className={styles.taskTitle}>{task.title}</span>
+      <span className={styles.taskTitle}>
+        {task.spaceName ? <span className={styles.spaceBadge}>{task.spaceName}</span> : null}
+        {task.title}
+      </span>
       <span className={styles.taskMeta}>
         <span style={{ color: priorityColor(task.priority) }}>
           {PRIORITY_LABELS[task.priority]}

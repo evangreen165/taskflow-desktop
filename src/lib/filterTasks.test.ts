@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
 import { EMPTY_TASK_FILTER, filterTasks, isFilterActive } from "@/lib/filterTasks";
 import type { Task } from "@/services/tasks";
@@ -22,6 +22,8 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     version: 1,
     watchers: [],
     projectId: null,
+    spaceId: null,
+    spaceName: null,
     ...overrides,
   };
 }

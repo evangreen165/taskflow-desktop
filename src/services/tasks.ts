@@ -44,6 +44,9 @@ export interface Task {
   version: number;
   watchers: string[];
   projectId: string | null;
+  /** Set only in cross-space dashboard responses. */
+  spaceId: string | null;
+  spaceName: string | null;
 }
 
 export interface TaskFilter {
@@ -124,5 +127,10 @@ export const TasksService = {
 
   delete(spaceId: string, id: string): Promise<Result<void>> {
     return invokeCommand<void>("tasksDelete", { spaceId, id });
+  },
+
+  /** Moves a task between spaces (requires access to both). */
+  move(taskId: string, fromSpaceId: string, toSpaceId: string): Promise<Result<Task>> {
+    return invokeCommand<Task>("tasksMove", { taskId, fromSpaceId, toSpaceId });
   },
 };

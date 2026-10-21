@@ -39,6 +39,8 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     version: 1,
     watchers: [],
     projectId: null,
+    spaceId: null,
+    spaceName: null,
     ...overrides,
   };
 }

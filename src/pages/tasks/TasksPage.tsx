@@ -216,7 +216,10 @@ export default function TasksPage(): JSX.Element {
           key={selectedTask.id}
           task={selectedTask}
           spaceId={spaceId}
-          onClose={() => setSelectedId(null)}
+          onClose={() => {
+            setSelectedId(null);
+            void fetchTasks(spaceId);
+          }}
         />
       ) : null}
     </div>

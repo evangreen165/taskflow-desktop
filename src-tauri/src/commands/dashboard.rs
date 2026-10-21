@@ -52,34 +52,70 @@ pub fn dashboard_summary_impl(
     let view_all = permissions.iter().any(|p| p == "task.view_all");
     let can_view_articles = permissions.iter().any(|p| p == "article.view");
 
-    let space_dirs: Vec<std::path::PathBuf> = if let Some(id) = &space_id {
-        crate::spaces::require_access(&root, id, &session)?;
-        vec![crate::spaces::space_dir(&root, id)?]
+    let accessible: Vec<crate::spaces::Space> = if let Some(id) = &space_id {
+        vec![crate::spaces::require_access(&root, id, &session)?]
     } else {
         let all_spaces = crate::spaces::list(&root)?;
-        let accessible: Vec<crate::spaces::Space> = if crate::spaces::is_admin(&session) {
+        if crate::spaces::is_admin(&session) {
             all_spaces
         } else {
             all_spaces
                 .into_iter()
                 .filter(|space| crate::spaces::is_member(space, &session.user_id))
                 .collect()
-        };
-        accessible
-            .iter()
-            .filter_map(|space| crate::spaces::space_dir(&root, &space.id).ok())
-            .collect()
+        }
     };
 
     let mut all_tasks = Vec::new();
     let mut all_notes = Vec::new();
-    for space_dir in &space_dirs {
-        if let Ok(mut tasks) = tasks::list(space_dir) {
+    let mut accessible_ids = std::collections::HashSet::new();
+    for space in &accessible {
+        accessible_ids.insert(space.id.clone());
+        let Ok(space_dir) = crate::spaces::space_dir(&root, &space.id) else {
+            continue;
+        };
+        if let Ok(mut tasks) = tasks::list(&space_dir) {
+            for task in &mut tasks {
+                task.space_id = Some(space.id.clone());
+                task.space_name = Some(space.name.clone());
+            }
             all_tasks.append(&mut tasks);
         }
         if can_view_articles {
-            if let Ok(mut notes) = notes::list_meta(space_dir) {
+            if let Ok(mut notes) = notes::list_meta(&space_dir) {
                 all_notes.append(&mut notes);
+            }
+        }
+    }
+
+    // Notes from other spaces explicitly shared with an accessible space.
+    if can_view_articles {
+        let mut seen: std::collections::HashSet<String> =
+            all_notes.iter().map(|note| note.id.clone()).collect();
+        if let Ok(all_spaces) = crate::spaces::list(&root) {
+            for space in all_spaces {
+                if accessible_ids.contains(&space.id) {
+                    continue;
+                }
+                let Ok(dir) = crate::spaces::space_dir(&root, &space.id) else {
+                    continue;
+                };
+                let Ok(metas) = notes::list_meta(&dir) else {
+                    continue;
+                };
+                for meta in metas {
+                    if seen.contains(&meta.id) {
+                        continue;
+                    }
+                    if meta
+                        .shared_with_spaces
+                        .iter()
+                        .any(|s| accessible_ids.contains(s))
+                    {
+                        seen.insert(meta.id.clone());
+                        all_notes.push(meta);
+                    }
+                }
             }
         }
     }

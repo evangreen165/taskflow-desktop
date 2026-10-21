@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 
@@ -114,6 +114,16 @@ describe("NotesService", () => {
     invokeMock.mockResolvedValue([]);
     await NotesService.deleteCategory("HR");
     expect(invokeMock).toHaveBeenCalledWith("notesDeleteCategory", { name: "HR" });
+  });
+
+  it("share sends noteId, spaceId and targets", async () => {
+    invokeMock.mockResolvedValue({ meta: {} });
+    await NotesService.share("n1", "sp1", ["sp2", "sp3"]);
+    expect(invokeMock).toHaveBeenCalledWith("notesShare", {
+      noteId: "n1",
+      spaceId: "sp1",
+      targetSpaceIds: ["sp2", "sp3"],
+    });
   });
 
   it("importFile sends spaceId and sourcePath", async () => {

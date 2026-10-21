@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
 import {
   buildUpdatePatch,
@@ -30,6 +30,8 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     version: 1,
     watchers: [],
     projectId: null,
+    spaceId: null,
+    spaceName: null,
     ...overrides,
   };
 }

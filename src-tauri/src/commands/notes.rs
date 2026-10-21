@@ -19,6 +19,46 @@ pub struct NoteListItem {
     #[serde(flatten)]
     pub meta: NoteMeta,
     pub preview: String,
+    /// True when the note belongs to another space and was shared with this one.
+    #[serde(default)]
+    pub shared: bool,
+}
+
+fn meta_matches(
+    meta: &NoteMeta,
+    space_dir: &Path,
+    category: &Option<String>,
+    tag: &Option<String>,
+    query: &Option<String>,
+    status: Option<NoteStatus>,
+) -> bool {
+    if let Some(category) = category {
+        if &meta.category != category {
+            return false;
+        }
+    }
+    if let Some(tag) = tag {
+        if !meta.tags.iter().any(|t| t == tag) {
+            return false;
+        }
+    }
+    if let Some(status) = status {
+        if meta.status != status {
+            return false;
+        }
+    }
+    if let Some(query) = query {
+        if !query.is_empty() {
+            let hay = format!("{} {}", meta.title, meta.category).to_lowercase();
+            let content_hit = notes::read_content(space_dir, &meta.id)
+                .map(|content| content.to_lowercase().contains(query))
+                .unwrap_or(false);
+            if !hay.contains(query) && !content_hit {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 pub fn notes_list_impl(
@@ -33,36 +73,53 @@ pub fn notes_list_impl(
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    let query = query.map(|q| q.trim().to_lowercase());
 
-    let mut metas = notes::list_meta(&space_dir)?;
-    if let Some(category) = &category {
-        metas.retain(|meta| &meta.category == category);
+    let mut items = Vec::new();
+    for meta in notes::list_meta(&space_dir)? {
+        if !meta_matches(&meta, &space_dir, &category, &tag, &query, status) {
+            continue;
+        }
+        let preview = notes::read_content(&space_dir, &meta.id)
+            .map(|content| notes::preview_of(&content))
+            .unwrap_or_default();
+        items.push(NoteListItem {
+            meta,
+            preview,
+            shared: false,
+        });
     }
-    if let Some(tag) = &tag {
-        metas.retain(|meta| meta.tags.iter().any(|t| t == tag));
-    }
-    if let Some(status) = status {
-        metas.retain(|meta| meta.status == status);
-    }
-    if let Some(query) = query.map(|q| q.trim().to_lowercase()) {
-        if !query.is_empty() {
-            metas.retain(|meta| {
-                let meta_hay = format!("{} {}", meta.title, meta.category).to_lowercase();
-                meta_hay.contains(&query)
-                    || notes::read_content(&space_dir, &meta.id)
-                        .map(|content| content.to_lowercase().contains(&query))
-                        .unwrap_or(false)
+
+    // Notes from other spaces explicitly shared with this space.
+    for space in crate::spaces::list(&root)? {
+        if space.id == space_id {
+            continue;
+        }
+        let Ok(other_dir) = crate::spaces::space_dir(&root, &space.id) else {
+            continue;
+        };
+        let Ok(metas) = notes::list_meta(&other_dir) else {
+            continue;
+        };
+        for meta in metas {
+            if !meta.shared_with_spaces.iter().any(|s| s == &space_id) {
+                continue;
+            }
+            if !meta_matches(&meta, &other_dir, &category, &tag, &query, status) {
+                continue;
+            }
+            let preview = notes::read_content(&other_dir, &meta.id)
+                .map(|content| notes::preview_of(&content))
+                .unwrap_or_default();
+            items.push(NoteListItem {
+                meta,
+                preview,
+                shared: true,
             });
         }
     }
 
-    let mut items = Vec::with_capacity(metas.len());
-    for meta in metas {
-        let preview = notes::read_content(&space_dir, &meta.id)
-            .map(|content| notes::preview_of(&content))
-            .unwrap_or_default();
-        items.push(NoteListItem { meta, preview });
-    }
+    items.sort_by(|a, b| b.meta.updated_at.cmp(&a.meta.updated_at));
     Ok(items)
 }
 
@@ -78,6 +135,41 @@ pub fn notes_list(
     notes_list_impl(&state, space_id, category, tag, query, status)
 }
 
+/// Resolves a note in `space_id`, falling back to a note shared into it.
+fn resolve_note(
+    root: &Path,
+    space_id: &str,
+    id: &str,
+) -> Result<(std::path::PathBuf, Note), AppError> {
+    let own = crate::spaces::space_dir(root, space_id)?;
+    if own.join("notes").join(id).join("meta.json").is_file() {
+        let mut note = notes::get(&own, id)?;
+        note.shared = false;
+        return Ok((own, note));
+    }
+    for space in crate::spaces::list(root)? {
+        if space.id == space_id {
+            continue;
+        }
+        let Ok(dir) = crate::spaces::space_dir(root, &space.id) else {
+            continue;
+        };
+        if !dir.join("notes").join(id).join("meta.json").is_file() {
+            continue;
+        }
+        let meta = notes::get_meta(&dir, id)?;
+        if meta.shared_with_spaces.iter().any(|s| s == space_id) {
+            let mut note = notes::get(&dir, id)?;
+            note.shared = true;
+            return Ok((dir, note));
+        }
+    }
+    Err(AppError::new(
+        "NOT_FOUND",
+        format!("note '{id}' does not exist"),
+    ))
+}
+
 pub fn notes_get_impl(
     state: &AppState,
     space_id: String,
@@ -86,8 +178,8 @@ pub fn notes_get_impl(
     let session = state.require_perm("article.view")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
-    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
-    notes::get(&space_dir, &id)
+    let (_, note) = resolve_note(&root, &space_id, &id)?;
+    Ok(note)
 }
 
 #[tauri::command(rename = "notesGet")]
@@ -107,7 +199,7 @@ pub fn notes_get_history_impl(
     let session = state.require_perm("article.view")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
-    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    let (space_dir, _) = resolve_note(&root, &space_id, &id)?;
     notes::get_history(&space_dir, &id)
 }
 
@@ -263,6 +355,47 @@ pub fn notes_restore_version(
     version: u64,
 ) -> Result<Note, AppError> {
     notes_restore_version_impl(&state, space_id, id, version)
+}
+
+/// Shares a note from its own space with one or more other spaces (read-only
+/// access for members of those spaces).
+pub fn notes_share_impl(
+    state: &AppState,
+    note_id: String,
+    space_id: String,
+    target_space_ids: Vec<String>,
+) -> Result<Note, AppError> {
+    state.require_writable()?;
+    let session = state.require_perm("article.edit")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let own_dir = crate::spaces::space_dir(&root, &space_id)?;
+    if !own_dir.join("notes").join(&note_id).join("meta.json").is_file() {
+        return Err(AppError::new(
+            "NOT_FOUND",
+            format!("note '{note_id}' does not exist in this space"),
+        ));
+    }
+    let mut targets = Vec::new();
+    for target in target_space_ids {
+        if target == space_id {
+            continue;
+        }
+        crate::spaces::require_access(&root, &target, &session)?;
+        targets.push(target);
+    }
+    notes::set_shared_with_spaces(&own_dir, &note_id, targets)?;
+    notes::get(&own_dir, &note_id)
+}
+
+#[write_command(rename = "notesShare")]
+pub fn notes_share(
+    state: State<'_, AppState>,
+    note_id: String,
+    space_id: String,
+    target_space_ids: Vec<String>,
+) -> Result<Note, AppError> {
+    notes_share_impl(&state, note_id, space_id, target_space_ids)
 }
 
 pub fn notes_list_categories_impl(state: &AppState) -> Result<Vec<String>, AppError> {

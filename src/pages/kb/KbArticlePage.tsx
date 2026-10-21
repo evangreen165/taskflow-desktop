@@ -35,6 +35,10 @@ export default function KbArticlePage(): JSX.Element {
   const [history, setHistory] = useState<NoteMeta[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareTargets, setShareTargets] = useState<string[]>([]);
+  const [sharing, setSharing] = useState(false);
+  const spaces = useSpaceStore((s) => s.spaces);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,6 +134,30 @@ export default function KbArticlePage(): JSX.Element {
     }
   }
 
+  function openShare(): void {
+    setShareTargets(note?.meta.sharedWithSpaces ?? []);
+    setShareOpen(true);
+  }
+
+  function toggleShareTarget(id: string): void {
+    setShareTargets((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+  }
+
+  async function submitShare(): Promise<void> {
+    if (!spaceId || !note) {
+      return;
+    }
+    setSharing(true);
+    const result = await NotesService.share(note.meta.id, spaceId, shareTargets);
+    setSharing(false);
+    if (!result.ok) {
+      return;
+    }
+    setNote(result.value);
+    setShareOpen(false);
+    pushToast("Доступ к заметке обновлён", "success");
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -143,14 +171,19 @@ export default function KbArticlePage(): JSX.Element {
           <span>Обновлено {formatDate(meta.updatedAt)}</span>
         </div>
         <div className={styles.headerActions}>
+          {note.shared ? (
+            <span className={styles.sharedBadge} title="Заметка из другого пространства">
+              📤 Общая заметка
+            </span>
+          ) : null}
           {mode === "read" ? (
             <>
-              {can("article.edit") ? (
+              {!note.shared && can("article.edit") ? (
                 <button className="btn-ghost" type="button" onClick={() => setMode("edit")}>
                   Редактировать
                 </button>
               ) : null}
-              {meta.status === "draft" && can("article.publish") ? (
+              {!note.shared && meta.status === "draft" && can("article.publish") ? (
                 <button
                   className="btn-ghost"
                   type="button"
@@ -160,10 +193,15 @@ export default function KbArticlePage(): JSX.Element {
                   Опубликовать
                 </button>
               ) : null}
+              {!note.shared && can("article.edit") ? (
+                <button className="btn-ghost" type="button" onClick={openShare}>
+                  Поделиться
+                </button>
+              ) : null}
               <button className="btn-ghost" type="button" onClick={() => void openHistory()}>
                 История версий
               </button>
-              {can("article.delete") ? (
+              {!note.shared && can("article.delete") ? (
                 <button className="btn-ghost" type="button" onClick={() => setConfirmDelete(true)}>
                   Удалить
                 </button>
@@ -211,6 +249,53 @@ export default function KbArticlePage(): JSX.Element {
           onCancel={() => setMode("read")}
         />
       )}
+
+      {shareOpen ? (
+        <div className={styles.modalBackdrop}>
+          <div className={styles.historyCard}>
+            <div className={styles.historyHead}>
+              <h3>Поделиться заметкой</h3>
+              <button className={styles.close} type="button" onClick={() => setShareOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <p className={styles.muted}>
+              Выберите пространства, которым будет доступна эта заметка.
+            </p>
+            <div className={styles.shareList}>
+              {spaces.filter((space) => space.id !== spaceId).length === 0 ? (
+                <p className={styles.muted}>Других пространств нет.</p>
+              ) : (
+                spaces
+                  .filter((space) => space.id !== spaceId)
+                  .map((space) => (
+                    <label key={space.id} className={styles.shareOption}>
+                      <input
+                        type="checkbox"
+                        checked={shareTargets.includes(space.id)}
+                        onChange={() => toggleShareTarget(space.id)}
+                      />
+                      {space.name}
+                    </label>
+                  ))
+              )}
+            </div>
+            <div className={styles.actions}>
+              <button className="btn-ghost" type="button" onClick={() => setShareOpen(false)}>
+                Отмена
+              </button>
+              <button
+                className="btn-primary"
+                type="button"
+                disabled={sharing}
+                onClick={() => void submitShare()}
+              >
+                {sharing ? "Сохранение…" : "Сохранить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {historyOpen ? (
         <HistoryModal

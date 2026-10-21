@@ -218,6 +218,44 @@ pub fn tasks_delete(
     tasks_delete_impl(&state, space_id, id)
 }
 
+pub fn tasks_move_impl(
+    state: &AppState,
+    task_id: String,
+    from_space_id: String,
+    to_space_id: String,
+) -> Result<Task, AppError> {
+    state.require_writable()?;
+    let session = state.require_perm("task.edit")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &from_space_id, &session)?;
+    crate::spaces::require_access(&root, &to_space_id, &session)?;
+    if from_space_id == to_space_id {
+        return Err(AppError::new(
+            "INVALID_INPUT",
+            "source and target spaces must differ",
+        ));
+    }
+    let from_dir = crate::spaces::space_dir(&root, &from_space_id)?;
+    let to_dir = crate::spaces::space_dir(&root, &to_space_id)?;
+    let mut task = tasks::get(&from_dir, &task_id)?;
+    task.updated_at = crate::audit::now_rfc3339();
+    task.space_id = None;
+    task.space_name = None;
+    tasks::save(&to_dir, &task)?;
+    tasks::delete(&from_dir, &task_id)?;
+    Ok(task)
+}
+
+#[write_command(rename = "tasksMove")]
+pub fn tasks_move(
+    state: State<'_, AppState>,
+    task_id: String,
+    from_space_id: String,
+    to_space_id: String,
+) -> Result<Task, AppError> {
+    tasks_move_impl(&state, task_id, from_space_id, to_space_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
