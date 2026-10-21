@@ -1,4 +1,4 @@
-use serde::Serialize;
+﻿use serde::Serialize;
 use tauri::State;
 
 use crate::error::AppError;
@@ -49,7 +49,32 @@ pub fn dashboard_summary_impl(state: &AppState) -> Result<DashboardSummary, AppE
     let view_all = permissions.iter().any(|p| p == "task.view_all");
     let can_view_articles = permissions.iter().any(|p| p == "article.view");
 
-    let all_tasks = tasks::list(&root)?;
+    let all_spaces = crate::spaces::list(&root)?;
+    let accessible: Vec<crate::spaces::Space> = if crate::spaces::is_admin(&session) {
+        all_spaces
+    } else {
+        all_spaces
+            .into_iter()
+            .filter(|space| crate::spaces::is_member(space, &session.user_id))
+            .collect()
+    };
+
+    let mut all_tasks = Vec::new();
+    let mut all_notes = Vec::new();
+    for space in &accessible {
+        let Ok(space_dir) = crate::spaces::space_dir(&root, &space.id) else {
+            continue;
+        };
+        if let Ok(mut tasks) = tasks::list(&space_dir) {
+            all_tasks.append(&mut tasks);
+        }
+        if can_view_articles {
+            if let Ok(mut notes) = notes::list_meta(&space_dir) {
+                all_notes.append(&mut notes);
+            }
+        }
+    }
+
     let visible_tasks: Vec<Task> = all_tasks
         .into_iter()
         .filter(|task| is_visible(&session, view_all, task))
@@ -96,11 +121,10 @@ pub fn dashboard_summary_impl(state: &AppState) -> Result<DashboardSummary, AppE
     };
 
     let recent_articles = if can_view_articles {
-        let mut metas = notes::list_meta(&root)?;
-        metas.retain(|meta| meta.status == NoteStatus::Published);
-        metas.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-        metas.truncate(5);
-        metas
+        all_notes.retain(|meta| meta.status == NoteStatus::Published);
+        all_notes.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        all_notes.truncate(5);
+        all_notes
     } else {
         Vec::new()
     };
@@ -127,6 +151,8 @@ mod tests {
     use crate::workspace;
     use serde_json::json;
     use tempfile::tempdir;
+
+    const SPACE: &str = "default";
 
     struct Fixture {
         _dir: tempfile::TempDir,
@@ -155,6 +181,15 @@ mod tests {
             users::create(dir.path(), "admin", "password123", "Admin", "admin", None).unwrap();
         let executor =
             users::create(dir.path(), "ex", "password123", "Executor", "executor", None).unwrap();
+        let space = crate::spaces::Space {
+            id: SPACE.to_string(),
+            name: "Основное".to_string(),
+            description: String::new(),
+            created_at: crate::audit::now_rfc3339(),
+            owner_id: admin.id.clone(),
+            members: vec![admin.id.clone(), executor.id.clone()],
+        };
+        crate::spaces::write_space(dir.path(), &space).unwrap();
         let state = AppState::new("m".into());
         state.set_workspace(dir.path().to_path_buf(), info);
         state.set_session(session_for(&admin.id, "admin"));
@@ -168,7 +203,7 @@ mod tests {
 
     fn make_task(fx: &Fixture, title: &str, status: &str, due: &str, assignees: &[&str]) -> Task {
         crate::tasks::create(
-            fx._dir.path(),
+            &crate::spaces::space_dir(fx._dir.path(), SPACE).unwrap(),
             &fx.admin.id,
             serde_json::from_value(json!({
                 "title": title,
@@ -235,11 +270,11 @@ mod tests {
     #[test]
     fn recent_articles_are_published_only() {
         let fx = fixture();
-        crate::notes::create(fx._dir.path(), &fx.admin.id, "Draft", "Процессы", "x").unwrap();
-        let first = crate::notes::create(fx._dir.path(), &fx.admin.id, "One", "Процессы", "x").unwrap();
-        crate::notes::publish(fx._dir.path(), &first.meta.id, 1).unwrap();
-        let second = crate::notes::create(fx._dir.path(), &fx.admin.id, "Two", "Процессы", "x").unwrap();
-        crate::notes::publish(fx._dir.path(), &second.meta.id, 1).unwrap();
+        crate::notes::create(&crate::spaces::space_dir(fx._dir.path(), SPACE).unwrap(), &fx.admin.id, "Draft", "Процессы", "x").unwrap();
+        let first = crate::notes::create(&crate::spaces::space_dir(fx._dir.path(), SPACE).unwrap(), &fx.admin.id, "One", "Процессы", "x").unwrap();
+        crate::notes::publish(&crate::spaces::space_dir(fx._dir.path(), SPACE).unwrap(), &first.meta.id, 1).unwrap();
+        let second = crate::notes::create(&crate::spaces::space_dir(fx._dir.path(), SPACE).unwrap(), &fx.admin.id, "Two", "Процессы", "x").unwrap();
+        crate::notes::publish(&crate::spaces::space_dir(fx._dir.path(), SPACE).unwrap(), &second.meta.id, 1).unwrap();
 
         let summary = dashboard_summary_impl(&fx.state).unwrap();
         let titles: Vec<&str> = summary

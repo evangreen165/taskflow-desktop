@@ -12,6 +12,7 @@ mod path;
 mod permissions;
 mod roles;
 mod session;
+mod spaces;
 mod tasks;
 mod users;
 mod watcher;
@@ -263,6 +264,11 @@ pub fn run() {
             commands::attachment_remove,
             commands::attachment_open,
             commands::dashboard_summary,
+            commands::spaces_list,
+            commands::spaces_get,
+            commands::spaces_create,
+            commands::spaces_update,
+            commands::spaces_delete,
             commands::read_json,
             commands::write_json_atomic,
             commands::read_text,

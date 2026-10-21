@@ -1,4 +1,4 @@
-use std::path::Path;
+﻿use std::path::Path;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -53,7 +53,7 @@ fn run_with_options(
             ),
         ));
     }
-    if cfg.schema_version >= 2 {
+    if cfg.schema_version >= 3 {
         return Ok(false);
     }
 
@@ -139,19 +139,159 @@ fn migrate_workspace(
     heartbeat: &mut LockHeartbeat,
     delay: Option<Duration>,
 ) -> Result<usize, AppError> {
+    let config_path = root.join("config.json");
+    let cfg: WorkspaceConfig = fsops::read_json(&config_path)?;
+    let from_version = cfg.schema_version;
+
     let users_changed = migrate_users(root, heartbeat, delay)?;
     heartbeat.beat()?;
     let roles_changed = migrate_roles(root, heartbeat, delay)?;
     heartbeat.beat()?;
+    let spaces_changed = migrate_spaces(root, heartbeat, delay)?;
+    heartbeat.beat()?;
 
-    let config_path = root.join("config.json");
     let mut cfg: WorkspaceConfig = fsops::read_json(&config_path)?;
     cfg.schema_version = workspace::SCHEMA_VERSION;
     fsops::write_json_atomic(&config_path, &cfg)?;
 
-    let files_changed = users_changed + roles_changed;
-    write_migration_event(root, 1, workspace::SCHEMA_VERSION, files_changed)?;
+    let files_changed = users_changed + roles_changed + spaces_changed;
+    write_migration_event(root, from_version, workspace::SCHEMA_VERSION, files_changed)?;
     Ok(files_changed)
+}
+
+/// v2 → v3: creates the `default` space (all users become members) and moves
+/// legacy root `tasks/` and `notes/` into it. Idempotent.
+fn migrate_spaces(
+    root: &Path,
+    heartbeat: &mut LockHeartbeat,
+    delay: Option<Duration>,
+) -> Result<usize, AppError> {
+    use crate::spaces;
+
+    let mut changed = 0;
+    let users = crate::users::list(root)?;
+    let member_ids: Vec<String> = users.iter().map(|u| u.id.clone()).collect();
+    let owner_id = users
+        .iter()
+        .find(|u| u.role_id == "admin" && u.is_active)
+        .map(|u| u.id.clone())
+        .or_else(|| users.first().map(|u| u.id.clone()))
+        .unwrap_or_else(|| "system".to_string());
+
+    let space_file = root
+        .join("spaces")
+        .join(spaces::DEFAULT_SPACE_ID)
+        .join("space.json");
+    if !space_file.is_file() {
+        let space = spaces::Space {
+            id: spaces::DEFAULT_SPACE_ID.to_string(),
+            name: spaces::DEFAULT_SPACE_NAME.to_string(),
+            description: String::new(),
+            created_at: crate::audit::now_rfc3339(),
+            owner_id: owner_id.clone(),
+            members: member_ids.clone(),
+        };
+        spaces::write_space(root, &space)?;
+        changed += 1;
+    } else {
+        let mut space: spaces::Space = fsops::read_json(&space_file)?;
+        let before = space.members.len();
+        for id in &member_ids {
+            if !space.members.contains(id) {
+                space.members.push(id.clone());
+            }
+        }
+        if space.members.len() != before {
+            spaces::write_space(root, &space)?;
+            changed += 1;
+        }
+    }
+
+    let default_dir = spaces::space_dir(root, spaces::DEFAULT_SPACE_ID)?;
+
+    let legacy_tasks = root.join("tasks");
+    if legacy_tasks.is_dir() {
+        let target_dir = default_dir.join("tasks");
+        for entry in std::fs::read_dir(&legacy_tasks).map_err(|e| AppError::io("list tasks", e))? {
+            heartbeat.beat()?;
+            let entry = entry.map_err(|e| AppError::io("read tasks dir", e))?;
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            std::fs::create_dir_all(&target_dir)
+                .map_err(|e| AppError::io("create space tasks", e))?;
+            let target = target_dir.join(entry.file_name());
+            move_path(&path, &target)?;
+            changed += 1;
+            if let Some(d) = delay {
+                std::thread::sleep(d);
+            }
+        }
+    }
+
+    let legacy_notes = root.join("notes");
+    if legacy_notes.is_dir() {
+        let target_dir = default_dir.join("notes");
+        for entry in std::fs::read_dir(&legacy_notes).map_err(|e| AppError::io("list notes", e))? {
+            heartbeat.beat()?;
+            let entry = entry.map_err(|e| AppError::io("read notes dir", e))?;
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            std::fs::create_dir_all(&target_dir)
+                .map_err(|e| AppError::io("create space notes", e))?;
+            let target = target_dir.join(entry.file_name());
+            move_path(&path, &target)?;
+            changed += 1;
+            if let Some(d) = delay {
+                std::thread::sleep(d);
+            }
+        }
+    }
+
+    Ok(changed)
+}
+
+fn move_path(from: &Path, to: &Path) -> Result<(), AppError> {
+    if to.exists() {
+        // Already migrated; drop the legacy duplicate.
+        if from.is_dir() {
+            std::fs::remove_dir_all(from)
+        } else {
+            std::fs::remove_file(from)
+        }
+        .map_err(|e| AppError::io("remove legacy duplicate", e))?;
+        return Ok(());
+    }
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    copy_recursive(from, to)?;
+    if from.is_dir() {
+        std::fs::remove_dir_all(from)
+    } else {
+        std::fs::remove_file(from)
+    }
+    .map_err(|e| AppError::io("remove legacy path", e))
+}
+
+fn copy_recursive(from: &Path, to: &Path) -> Result<(), AppError> {
+    if from.is_dir() {
+        std::fs::create_dir_all(to).map_err(|e| AppError::io("create dir", e))?;
+        for entry in std::fs::read_dir(from).map_err(|e| AppError::io("read dir", e))? {
+            let entry = entry.map_err(|e| AppError::io("read dir entry", e))?;
+            copy_recursive(&entry.path(), &to.join(entry.file_name()))?;
+        }
+        Ok(())
+    } else {
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| AppError::io("create dir", e))?;
+        }
+        std::fs::copy(from, to).map_err(|e| AppError::io("copy file", e))?;
+        Ok(())
+    }
 }
 
 fn migrate_users(
@@ -371,13 +511,13 @@ mod tests {
     }
 
     #[test]
-    fn migrates_v1_workspace_to_v2() {
+    fn migrates_v1_workspace_to_v3() {
         let dir = tempdir().unwrap();
         write_v1_workspace(dir.path());
 
         assert!(run(dir.path(), "m1").unwrap());
 
-        assert_eq!(config_schema(dir.path()), 2);
+        assert_eq!(config_schema(dir.path()), 3);
 
         let admin: Value = fsops::read_json(&dir.path().join("users").join("admin.json")).unwrap();
         assert!(admin.get("id").is_some());
@@ -411,12 +551,26 @@ mod tests {
             .collect();
         assert_eq!(custom_perms, vec!["task.view", "workspace.settings"]);
 
+        let space: Value = fsops::read_json(
+            &dir.path().join("spaces").join("default").join("space.json"),
+        )
+        .unwrap();
+        assert_eq!(space["id"], "default");
+        assert_eq!(space["name"], "Основное");
+        let members: Vec<&str> = space["members"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m.as_str().unwrap())
+            .collect();
+        assert!(members.contains(&admin["id"].as_str().unwrap()));
+
         let events = migration_events(dir.path());
         assert_eq!(events.len(), 1);
         assert_eq!(events[0]["type"], "workspace.migrated");
         assert_eq!(events[0]["from"], 1);
-        assert_eq!(events[0]["to"], 2);
-        assert_eq!(events[0]["filesChanged"], 3);
+        assert_eq!(events[0]["to"], 3);
+        assert_eq!(events[0]["filesChanged"], 4);
         assert_eq!(events[0]["actor"], "s:migrate");
         assert!(events[0]["ts"].is_string());
     }
@@ -443,7 +597,7 @@ mod tests {
             .collect();
 
         assert!(!run(dir.path(), "m1").unwrap());
-        assert_eq!(config_schema(dir.path()), 2);
+        assert_eq!(config_schema(dir.path()), 3);
 
         for (f, before) in files.iter().zip(mtimes) {
             let after = std::fs::metadata(dir.path().join(f))
@@ -467,7 +621,7 @@ mod tests {
         assert_eq!(config_schema(dir.path()), 1);
 
         assert!(run(dir.path(), "m1").unwrap());
-        assert_eq!(config_schema(dir.path()), 2);
+        assert_eq!(config_schema(dir.path()), 3);
         let admin: Value = fsops::read_json(&dir.path().join("users").join("admin.json")).unwrap();
         assert!(admin.get("id").is_some());
     }
@@ -477,7 +631,7 @@ mod tests {
         let dir = tempdir().unwrap();
         write_v1_workspace(dir.path());
         let mut cfg: WorkspaceConfig = fsops::read_json(&dir.path().join("config.json")).unwrap();
-        cfg.schema_version = 3;
+        cfg.schema_version = 4;
         fsops::write_json_atomic(&dir.path().join("config.json"), &cfg).unwrap();
         let err = run(dir.path(), "m1").unwrap_err();
         assert_eq!(err.code, "SCHEMA_TOO_NEW");
@@ -504,7 +658,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.code, "SESSION_INVALIDATED");
         assert!(state.require_auth().is_err());
-        assert_eq!(config_schema(dir.path()), 2);
+        assert_eq!(config_schema(dir.path()), 3);
     }
 
     #[test]
@@ -529,7 +683,7 @@ mod tests {
         migrate_workspace(dir.path(), &mut heartbeat, Some(Duration::from_millis(500))).unwrap();
 
         assert!(heartbeat.renewals >= 2);
-        assert_eq!(config_schema(dir.path()), 2);
+        assert_eq!(config_schema(dir.path()), 3);
         let _ = locking::release(dir.path(), MIGRATION_LOCK_KEY, &token);
 
         match old_ttl {
@@ -588,5 +742,112 @@ mod tests {
         let err = run(dir.path(), "m1").unwrap_err();
         assert_eq!(err.code, "MIGRATION_FAILED");
         assert_eq!(config_schema(dir.path()), 1);
+    }
+
+    fn write_v2_workspace(dir: &Path) {
+        for d in workspace::WORKSPACE_DIRS {
+            std::fs::create_dir_all(dir.join(d)).unwrap();
+        }
+        let cfg = serde_json::json!({
+            "schemaVersion": 2,
+            "workspaceId": "w2",
+            "name": "V2",
+            "createdAt": "2026-10-01T00:00:00.000Z",
+        });
+        fsops::write_json_atomic(&dir.join("config.json"), &cfg).unwrap();
+
+        let user = serde_json::json!({
+            "id": "u-admin",
+            "login": "admin",
+            "displayName": "Admin",
+            "email": null,
+            "passwordHash": "$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$cGFzcw",
+            "roleId": "admin",
+            "avatarColor": "#5b5bd6",
+            "avatarSha256": null,
+            "createdAt": "2026-10-01T00:00:00.000Z",
+            "lastLoginAt": null,
+            "isActive": true,
+            "mustChangePassword": false,
+        });
+        fsops::write_json_atomic(&dir.join("users").join("admin.json"), &user).unwrap();
+
+        let task_id = "11111111-1111-1111-1111-111111111111";
+        let task = serde_json::json!({
+            "id": task_id,
+            "title": "Legacy task",
+            "description": "",
+            "status": "new",
+            "priority": "medium",
+            "assignees": ["u-admin"],
+            "authorId": "u-admin",
+            "createdAt": "2026-10-01T00:00:00.000Z",
+            "updatedAt": "2026-10-01T00:00:00.000Z",
+            "dueDate": null,
+            "tags": [],
+            "checklist": [],
+            "comments": [],
+            "attachments": [],
+            "version": 1,
+            "watchers": [],
+            "projectId": null,
+        });
+        fsops::write_json_atomic(&dir.join("tasks").join(format!("{task_id}.json")), &task)
+            .unwrap();
+
+        let note_id = "22222222-2222-2222-2222-222222222222";
+        let note_meta = serde_json::json!({
+            "id": note_id,
+            "title": "Legacy note",
+            "category": "Процессы",
+            "tags": [],
+            "authorId": "u-admin",
+            "createdAt": "2026-10-01T00:00:00.000Z",
+            "updatedAt": "2026-10-01T00:00:00.000Z",
+            "publishedAt": null,
+            "status": "draft",
+            "version": 1,
+            "linkedTaskIds": [],
+        });
+        let note_dir = dir.join("notes").join(note_id);
+        std::fs::create_dir_all(&note_dir).unwrap();
+        fsops::write_json_atomic(&note_dir.join("meta.json"), &note_meta).unwrap();
+        std::fs::write(note_dir.join("note.md"), "# Legacy").unwrap();
+    }
+
+    #[test]
+    fn migrates_v2_tasks_and_notes_into_default_space() {
+        let dir = tempdir().unwrap();
+        write_v2_workspace(dir.path());
+
+        assert!(run(dir.path(), "m1").unwrap());
+        assert_eq!(config_schema(dir.path()), 3);
+
+        let default = dir.path().join("spaces").join("default");
+        assert!(default.join("space.json").is_file());
+        assert!(default
+            .join("tasks")
+            .join("11111111-1111-1111-1111-111111111111.json")
+            .is_file());
+        assert!(default
+            .join("notes")
+            .join("22222222-2222-2222-2222-222222222222")
+            .join("note.md")
+            .is_file());
+
+        assert_eq!(std::fs::read_dir(dir.path().join("tasks")).unwrap().count(), 0);
+        assert_eq!(std::fs::read_dir(dir.path().join("notes")).unwrap().count(), 0);
+
+        let space: Value = fsops::read_json(&default.join("space.json")).unwrap();
+        let members: Vec<&str> = space["members"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m.as_str().unwrap())
+            .collect();
+        assert!(members.contains(&"u-admin"));
+
+        // Second run is a no-op.
+        assert!(!run(dir.path(), "m1").unwrap());
     }
 }
