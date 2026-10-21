@@ -1,7 +1,8 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 
 import packageJson from "@/../package.json";
 
+import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
 import { useAppStore } from "@/stores/useAppStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useThemeStore, type AppTheme } from "@/stores/useThemeStore";
@@ -23,6 +24,7 @@ export default function SettingsPage(): JSX.Element {
   const setHideEmptyColumns = useSettingsStore((s) => s.setHideEmptyColumns);
   const workspace = useAppStore((s) => s.workspace);
   const [tab, setTab] = useState<SettingsTab>("appearance");
+  const [changeFolderOpen, setChangeFolderOpen] = useState(false);
 
   return (
     <div className={styles.page}>
@@ -92,10 +94,22 @@ export default function SettingsPage(): JSX.Element {
             <dt>Версия</dt>
             <dd>{packageJson.version}</dd>
             <dt>Workspace</dt>
-            <dd className={styles.path}>{workspace?.path ?? "—"}</dd>
+            <dd className={styles.path}>
+              {workspace?.path ?? "—"}
+              <button
+                className="btn-ghost"
+                type="button"
+                style={{ marginLeft: 8 }}
+                onClick={() => setChangeFolderOpen(true)}
+              >
+                Сменить
+              </button>
+            </dd>
           </dl>
         </div>
       ) : null}
+
+      {changeFolderOpen ? <ChangeFolderModal onClose={() => setChangeFolderOpen(false)} /> : null}
     </div>
   );
 }

@@ -104,6 +104,11 @@ fn role_path(root: &Path, role_id: &str) -> PathBuf {
     root.join("roles").join(format!("{role_id}.json"))
 }
 
+/// Writes a role atomically (used by the boot backfill).
+pub fn write_role(root: &Path, role: &Role) -> Result<(), AppError> {
+    fsops::write_json_atomic(&role_path(root, &role.id), role)
+}
+
 /// Lists every role file in `roles/`, sorted by id.
 pub fn list(root: &Path) -> Result<Vec<Role>, AppError> {
     let dir = root.join("roles");

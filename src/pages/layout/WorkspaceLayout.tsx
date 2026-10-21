@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+﻿import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import Avatar from "@/components/Avatar";
+import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { SpacesService } from "@/services/spaces";
 import { useAppStore } from "@/stores/useAppStore";
@@ -38,7 +39,6 @@ function SideNavLink({
 
 export default function WorkspaceLayout(): JSX.Element {
   const workspace = useAppStore((s) => s.workspace);
-  const chooseDifferentFolder = useAppStore((s) => s.chooseDifferentFolder);
   const session = useAuthStore((s) => s.session);
   const logout = useAuthStore((s) => s.logout);
   const { can, role, user } = usePermissions();
@@ -59,6 +59,7 @@ export default function WorkspaceLayout(): JSX.Element {
   const [newSpaceDesc, setNewSpaceDesc] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [changeFolderOpen, setChangeFolderOpen] = useState(false);
 
   const currentSpace = spaces.find((space) => space.id === currentSpaceId) ?? null;
 
@@ -251,7 +252,7 @@ export default function WorkspaceLayout(): JSX.Element {
             ) : null}
           </div>
           <div className={styles.spacer} />
-          <button className="btn-ghost" type="button" onClick={() => void chooseDifferentFolder()}>
+          <button className="btn-ghost" type="button" onClick={() => setChangeFolderOpen(true)}>
             Сменить папку
           </button>
         </header>
@@ -259,6 +260,8 @@ export default function WorkspaceLayout(): JSX.Element {
           <Outlet />
         </div>
       </div>
+
+      {changeFolderOpen ? <ChangeFolderModal onClose={() => setChangeFolderOpen(false)} /> : null}
 
       {createOpen ? (
         <div className={styles.modalBackdrop} onClick={() => setCreateOpen(false)}>

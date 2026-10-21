@@ -66,6 +66,7 @@ pub fn activate_workspace_impl(
     let had_session = state.require_auth().is_ok();
     let machine_id = state.machine_id();
     let migrated = crate::migrate::run(&root, &machine_id)?;
+    crate::backfill::run(&root)?;
     state.set_workspace(root, info.clone());
     if migrated {
         audit::emit(
