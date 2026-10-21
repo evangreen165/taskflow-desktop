@@ -40,10 +40,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   { id: "roles", label: "Роли", permissions: ["roles.manage"] },
   { id: "audit", label: "Аудит", permissions: ["audit.view"] },
   { id: "workspace", label: "Workspace", permissions: ["workspace.settings"] },
-  { id: "space", label: "Пространства", permissions: ["space.create"] },
+  {
+    id: "space",
+    label: "Пространства",
+    permissions: ["space.create", "space.manage"],
+  },
 ];
 
-/** The 16-registry permission set (mirrors permissions::ALL). */
+/** The 18-registry permission set (mirrors permissions::ALL). */
 export const ALL_PERMISSIONS: readonly string[] = PERMISSION_GROUPS.flatMap(
   (group) => group.permissions,
 );
@@ -67,4 +71,5 @@ export const PERMISSION_LABELS: Record<string, string> = {
   "audit.view": "Просмотр аудита",
   "workspace.settings": "Настройки workspace",
   "space.create": "Создание пространств",
+  "space.manage": "Управление пространствами",
 };

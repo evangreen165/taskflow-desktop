@@ -14,10 +14,10 @@ describe("can", () => {
 });
 
 describe("permission groups", () => {
-  it("cover exactly the 16-registry permission set without duplicates", () => {
+  it("cover exactly the 18-registry permission set without duplicates", () => {
     const grouped = PERMISSION_GROUPS.flatMap((group) => group.permissions);
-    expect(grouped).toHaveLength(17);
-    expect(new Set(grouped).size).toBe(17);
+    expect(grouped).toHaveLength(18);
+    expect(new Set(grouped).size).toBe(18);
     expect(ALL_PERMISSIONS).toEqual(grouped);
   });
 

@@ -1,16 +1,25 @@
-use tauri::State;
+﻿use tauri::State;
 
 use taskflow_macros::write_command;
 
 use crate::error::AppError;
+use crate::roles;
+use crate::session::Session;
 use crate::spaces::{self, Space};
 use crate::AppState;
+
+fn has_perm(root: &std::path::Path, session: &Session, perm: &str) -> Result<bool, AppError> {
+    Ok(roles::permissions_for(root, &session.role_id)?
+        .iter()
+        .any(|p| p == perm))
+}
 
 pub fn spaces_list_impl(state: &AppState) -> Result<Vec<Space>, AppError> {
     let session = state.require_auth()?;
     let root = state.root()?;
     let all = spaces::list(&root)?;
-    Ok(if spaces::is_admin(&session) {
+    let global = spaces::is_admin(&session) || has_perm(&root, &session, "space.manage")?;
+    Ok(if global {
         all
     } else {
         all.into_iter()
@@ -27,7 +36,11 @@ pub fn spaces_list(state: State<'_, AppState>) -> Result<Vec<Space>, AppError> {
 pub fn spaces_get_impl(state: &AppState, id: String) -> Result<Space, AppError> {
     let session = state.require_auth()?;
     let root = state.root()?;
-    spaces::require_access(&root, &id, &session)
+    if has_perm(&root, &session, "space.manage")? {
+        spaces::get(&root, &id)
+    } else {
+        spaces::require_access(&root, &id, &session)
+    }
 }
 
 #[tauri::command(rename = "spacesGet")]
@@ -65,10 +78,11 @@ pub fn spaces_update_impl(
     let session = state.require_auth()?;
     let root = state.root()?;
     let space = spaces::get(&root, &id)?;
-    if !spaces::is_admin(&session) && space.owner_id != session.user_id {
+    let global = spaces::is_admin(&session) || has_perm(&root, &session, "space.manage")?;
+    if !global && space.owner_id != session.user_id {
         return Err(AppError::new(
             "FORBIDDEN",
-            "only the space owner or an administrator can update it",
+            "only the space owner or a space manager can update it",
         ));
     }
     spaces::update(&root, &id, &name, &description, members)
@@ -90,10 +104,11 @@ pub fn spaces_delete_impl(state: &AppState, id: String) -> Result<(), AppError> 
     let session = state.require_auth()?;
     let root = state.root()?;
     let space = spaces::get(&root, &id)?;
-    if !spaces::is_admin(&session) && space.owner_id != session.user_id {
+    let global = spaces::is_admin(&session) || has_perm(&root, &session, "space.manage")?;
+    if !global && space.owner_id != session.user_id {
         return Err(AppError::new(
             "FORBIDDEN",
-            "only the space owner or an administrator can delete it",
+            "only the space owner or a space manager can delete it",
         ));
     }
     spaces::delete(&root, &id)
@@ -153,7 +168,7 @@ mod tests {
         let user_a =
             users::create(dir.path(), "alice", "password123", "Alice", "manager", None).unwrap();
         let user_b =
-            users::create(dir.path(), "bob", "password123", "Bob", "manager", None).unwrap();
+            users::create(dir.path(), "bob", "password123", "Bob", "executor", None).unwrap();
         let space_a = crate::spaces::create(dir.path(), &user_a.id, "Alpha", "").unwrap();
         let space_b = crate::spaces::create(dir.path(), &user_b.id, "Beta", "").unwrap();
         let state = AppState::new("m".into());
@@ -189,10 +204,18 @@ mod tests {
     #[test]
     fn spaces_list_is_scoped_to_membership() {
         let fx = fixture();
+
+        // A space manager (space.manage) sees every space, not only own ones.
         let listed = spaces_list_impl(&fx.state).unwrap();
         assert!(listed.iter().any(|s| s.id == fx.space_a));
-        assert!(!listed.iter().any(|s| s.id == fx.space_b));
-        // Alice also has her auto-created personal space.
+        assert!(listed.iter().any(|s| s.id == fx.space_b));
+
+        // A plain member (executor, owner of Beta) sees only own spaces.
+        fx.state.set_session(session_for(&fx.user_b.id, "executor"));
+        let listed = spaces_list_impl(&fx.state).unwrap();
+        assert!(listed.iter().any(|s| s.id == fx.space_b));
+        assert!(!listed.iter().any(|s| s.id == fx.space_a));
+        // Every account has its auto-created personal space.
         assert!(listed.iter().any(|s| crate::spaces::is_personal(&s.id)));
 
         fx.state.set_session(session_for(&fx.admin.id, "admin"));
@@ -230,7 +253,7 @@ mod tests {
         );
 
         // userB cannot see spaceA, and sees an empty spaceB.
-        fx.state.set_session(session_for(&fx.user_b.id, "manager"));
+        fx.state.set_session(session_for(&fx.user_b.id, "executor"));
         assert_eq!(
             tasks_list_impl(&fx.state, fx.space_a.clone(), TaskFilter::default())
                 .unwrap_err()
@@ -249,9 +272,11 @@ mod tests {
     }
 
     #[test]
-    fn update_and_delete_require_owner_or_admin() {        let fx = fixture();
+    fn update_and_delete_require_owner_or_space_manager() {
+        let fx = fixture();
 
-        fx.state.set_session(session_for(&fx.user_b.id, "manager"));
+        // A non-owner without space.manage (executor) is forbidden.
+        fx.state.set_session(session_for(&fx.user_b.id, "executor"));
         assert_eq!(
             spaces_update_impl(
                 &fx.state,
@@ -271,18 +296,33 @@ mod tests {
             "FORBIDDEN"
         );
 
-        fx.state.set_session(session_for(&fx.user_a.id, "manager"));
-        let updated = spaces_update_impl(
+        // The owner manages their own space even without space.manage.
+        let owned = spaces_update_impl(
             &fx.state,
-            fx.space_a.clone(),
-            "Alpha2".to_string(),
+            fx.space_b.clone(),
+            "Beta2".to_string(),
             "d".to_string(),
-            vec![fx.user_b.id.clone()],
+            vec![],
         )
         .unwrap();
-        assert_eq!(updated.name, "Alpha2");
-        assert!(updated.members.contains(&fx.user_b.id));
+        assert_eq!(owned.name, "Beta2");
 
+        // space.manage grants management over ANY space (Alpha belongs to Alice).
+        fx.state.set_session(session_for(&fx.user_a.id, "manager"));
+        let fetched = spaces_get_impl(&fx.state, fx.space_b.clone()).unwrap();
+        assert_eq!(fetched.id, fx.space_b);
+        let updated = spaces_update_impl(
+            &fx.state,
+            fx.space_b.clone(),
+            "Beta3".to_string(),
+            "managed".to_string(),
+            vec![fx.user_a.id.clone()],
+        )
+        .unwrap();
+        assert_eq!(updated.name, "Beta3");
+        assert!(updated.members.contains(&fx.user_a.id));
+
+        // Admin can delete any space.
         fx.state.set_session(session_for(&fx.admin.id, "admin"));
         spaces_delete_impl(&fx.state, fx.space_a.clone()).unwrap();
         assert!(crate::spaces::get(fx._dir.path(), &fx.space_a).is_err());

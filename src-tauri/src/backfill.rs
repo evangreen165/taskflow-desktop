@@ -8,11 +8,14 @@ use crate::users;
 
 /// Idempotently repairs data created by older app versions:
 /// - the `admin` role always carries the full permission registry;
+/// - every system role keeps its seed permissions (e.g. the manager role
+///   gains `space.manage` on workspaces created before Stage 6);
 /// - every account has its personal space.
 ///
 /// Runs on workspace activation, before login.
 pub fn run(root: &Path) -> Result<(), AppError> {
     ensure_admin_role(root)?;
+    ensure_system_roles(root)?;
     ensure_personal_spaces(root)?;
     Ok(())
 }
@@ -43,6 +46,41 @@ fn ensure_admin_role(root: &Path) -> Result<(), AppError> {
     roles::write_role(root, &role)
 }
 
+/// Repairs non-admin system roles: a role never loses permissions it had, but
+/// it gains any permission its seed role carries that it is missing. Additive
+/// and idempotent, so admin customizations of system roles survive.
+fn ensure_system_roles(root: &Path) -> Result<(), AppError> {
+    for seed in roles::default_roles() {
+        if seed.id == "admin" {
+            continue;
+        }
+        let mut role = match roles::get(root, &seed.id) {
+            Ok(role) => role,
+            Err(e) if e.code == "ROLE_NOT_FOUND" => {
+                roles::write_role(root, &seed)?;
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
+        if !role.is_system {
+            continue;
+        }
+        let missing: Vec<String> = seed
+            .permissions
+            .iter()
+            .filter(|perm| !role.permissions.iter().any(|p| p == *perm))
+            .cloned()
+            .collect();
+        if missing.is_empty() {
+            continue;
+        }
+        role.permissions.extend(missing);
+        role.empty = role.permissions.is_empty();
+        roles::write_role(root, &role)?;
+    }
+    Ok(())
+}
+
 fn ensure_personal_spaces(root: &Path) -> Result<(), AppError> {
     for user in users::list(root)? {
         spaces::ensure_personal(root, &user.id, &user.display_name)?;
@@ -53,6 +91,7 @@ fn ensure_personal_spaces(root: &Path) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fsops;
     use tempfile::tempdir;
 
     #[test]
@@ -90,5 +129,52 @@ mod tests {
             roles::get(dir.path(), "admin").unwrap().permissions.len(),
             permissions::ALL.len()
         );
+    }
+
+    #[test]
+    fn repairs_system_roles_missing_seed_permissions() {
+        let dir = tempdir().unwrap();
+        crate::workspace::init(dir.path(), "Backfill").unwrap();
+        users::create(dir.path(), "admin", "password123", "Admin", "admin", None).unwrap();
+
+        // Simulate a stale v3 workspace: manager role missing space.manage.
+        let mut stale = roles::get(dir.path(), "manager").unwrap();
+        stale.permissions.retain(|p| p != "space.manage");
+        roles::write_role(dir.path(), &stale).unwrap();
+        assert!(!roles::get(dir.path(), "manager")
+            .unwrap()
+            .permissions
+            .iter()
+            .any(|p| p == "space.manage"));
+
+        run(dir.path()).unwrap();
+
+        let manager = roles::get(dir.path(), "manager").unwrap();
+        assert!(manager.permissions.iter().any(|p| p == "space.manage"));
+        assert!(manager.permissions.iter().any(|p| p == "task.create"));
+
+        // Idempotent: a second run does not change the role file.
+        let before = fsops::read_json::<roles::Role>(&dir.path().join("roles").join("manager.json"))
+            .unwrap();
+        run(dir.path()).unwrap();
+        let after = fsops::read_json::<roles::Role>(&dir.path().join("roles").join("manager.json"))
+            .unwrap();
+        assert_eq!(before.permissions, after.permissions);
+    }
+
+    #[test]
+    fn restores_deleted_system_role_from_seed() {
+        let dir = tempdir().unwrap();
+        crate::workspace::init(dir.path(), "Backfill").unwrap();
+        users::create(dir.path(), "admin", "password123", "Admin", "admin", None).unwrap();
+
+        std::fs::remove_file(dir.path().join("roles").join("manager.json")).unwrap();
+        assert_eq!(roles::get(dir.path(), "manager").unwrap_err().code, "ROLE_NOT_FOUND");
+
+        run(dir.path()).unwrap();
+
+        let manager = roles::get(dir.path(), "manager").unwrap();
+        assert!(manager.is_system);
+        assert!(manager.permissions.iter().any(|p| p == "space.manage"));
     }
 }
