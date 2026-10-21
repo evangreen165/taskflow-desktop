@@ -195,7 +195,12 @@ function SpacesTab(): JSX.Element {
             />
           </div>
         </div>
-        <button className="btn-primary" type="button" disabled={busy} onClick={() => void submitCreate()}>
+        <button
+          className="btn-primary"
+          type="button"
+          disabled={busy}
+          onClick={() => void submitCreate()}
+        >
           {busy ? "Создание…" : "Создать пространство"}
         </button>
       </div>
@@ -223,9 +228,7 @@ function SpacesTab(): JSX.Element {
                       type="text"
                       value={draft.description}
                       placeholder="Описание"
-                      onChange={(event) =>
-                        setDraft({ ...draft, description: event.target.value })
-                      }
+                      onChange={(event) => setDraft({ ...draft, description: event.target.value })}
                     />
                   </td>
                   <td>
@@ -235,8 +238,7 @@ function SpacesTab(): JSX.Element {
                           <input
                             type="checkbox"
                             checked={
-                              draft.members.includes(member.id) ||
-                              member.id === space.ownerId
+                              draft.members.includes(member.id) || member.id === space.ownerId
                             }
                             disabled={member.id === space.ownerId}
                             onChange={() => toggleMember(member.id)}
@@ -248,7 +250,12 @@ function SpacesTab(): JSX.Element {
                   </td>
                   <td>
                     <div className={styles.rowActions}>
-                      <button className="btn-ghost" type="button" disabled={busy} onClick={() => void submitEdit(space)}>
+                      <button
+                        className="btn-ghost"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void submitEdit(space)}
+                      >
                         Сохранить
                       </button>
                       <button
@@ -281,7 +288,11 @@ function SpacesTab(): JSX.Element {
                         <span className={styles.muted}>Личное пространство</span>
                       ) : (
                         <>
-                          <button className="btn-ghost" type="button" onClick={() => startEdit(space)}>
+                          <button
+                            className="btn-ghost"
+                            type="button"
+                            onClick={() => startEdit(space)}
+                          >
                             Изменить
                           </button>
                           <button

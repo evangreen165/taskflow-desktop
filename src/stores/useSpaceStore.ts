@@ -43,8 +43,7 @@ export const useSpaceStore = create<SpaceState>((set) => ({
     }
     const spaces = result.value;
     const saved = readSaved();
-    const current =
-      spaces.find((space) => space.id === saved)?.id ?? spaces[0]?.id ?? null;
+    const current = spaces.find((space) => space.id === saved)?.id ?? spaces[0]?.id ?? null;
     set({ spaces, currentSpaceId: current, loading: false });
     if (current) {
       persist(current);

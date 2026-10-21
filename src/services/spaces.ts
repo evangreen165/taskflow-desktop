@@ -23,12 +23,7 @@ export const SpacesService = {
     return invokeCommand<Space>("spacesCreate", { name, description });
   },
 
-  update(
-    id: string,
-    name: string,
-    description: string,
-    members: string[],
-  ): Promise<Result<Space>> {
+  update(id: string, name: string, description: string, members: string[]): Promise<Result<Space>> {
     return invokeCommand<Space>("spacesUpdate", { id, name, description, members });
   },
 
