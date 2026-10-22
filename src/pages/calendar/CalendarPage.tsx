@@ -40,8 +40,38 @@ const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const UNSCHEDULED_DROP_ID = "unscheduled";
 const MAX_CELL_TASKS = 3;
 
-/** Prefers pointer-precise targets; falls back to rectangle intersection. */
+function pointInRect(
+  point: { x: number; y: number },
+  rect: { top: number; left: number; width: number; height: number },
+): boolean {
+  return (
+    point.x >= rect.left &&
+    point.x <= rect.left + rect.width &&
+    point.y >= rect.top &&
+    point.y <= rect.top + rect.height
+  );
+}
+
+/**
+ * Prefers the "Без срока" sidebar while the pointer is over it, then falls back
+ * to pointer-precise hits and finally rectangle intersection.
+ *
+ * The calendar grid scrolls horizontally, so on narrower windows its day cells
+ * extend geometrically under the sidebar and can win `pointerWithin` even though
+ * they are visually clipped. Prioritising the sidebar is what makes dragging a
+ * scheduled task out of a day cell work.
+ */
 const calendarCollision: CollisionDetection = (args) => {
+  const pointer = args.pointerCoordinates;
+  const sidebarRect = args.droppableRects.get(UNSCHEDULED_DROP_ID);
+  if (pointer && sidebarRect && pointInRect(pointer, sidebarRect)) {
+    return pointerWithin({
+      ...args,
+      droppableContainers: args.droppableContainers.filter(
+        (container) => container.id === UNSCHEDULED_DROP_ID,
+      ),
+    });
+  }
   const pointerHits = pointerWithin(args);
   return pointerHits.length > 0 ? pointerHits : rectIntersection(args);
 };
@@ -135,6 +165,12 @@ export default function CalendarPage(): JSX.Element {
 
   function handleDragEnd(event: DragEndEvent): void {
     const { active, over } = event;
+    if (import.meta.env.DEV) {
+      console.debug("[calendar] drag end", {
+        activeId: active.id,
+        overId: over?.id ?? null,
+      });
+    }
     if (!over) {
       return;
     }
