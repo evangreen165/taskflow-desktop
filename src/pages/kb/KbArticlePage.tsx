@@ -6,12 +6,14 @@ import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 
 import { AttachmentImage, AttachmentLink } from "@/components/kb/MarkdownAttachments";
+import { useIsPersonalSpaceOwner } from "@/hooks/useIsPersonalSpaceOwner";
 import { useNoteEditor } from "@/hooks/useNoteEditor";
 import { usePermissions } from "@/hooks/usePermissions";
 import { categoryIcon, formatDate, NOTE_STATUS_LABELS } from "@/lib/kbMeta";
 import { AttachmentsService } from "@/services/attachments";
 import { NotesService, type Note, type NoteMeta } from "@/services/notes";
 import { useNoteStore } from "@/stores/useNoteStore";
+import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useUserDirectory } from "@/stores/useUserDirectory";
 
@@ -19,8 +21,14 @@ import styles from "./KbArticlePage.module.css";
 
 export default function KbArticlePage(): JSX.Element {
   const { id } = useParams();
+  const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const navigate = useNavigate();
   const { can } = usePermissions();
+  const personalOwner = useIsPersonalSpaceOwner();
+  const canEditArticle = can("article.edit") || personalOwner;
+  const canPublishArticle = can("article.publish") || personalOwner;
+  const canDeleteArticle = can("article.delete") || personalOwner;
+  const fetchCategories = useNoteStore((s) => s.fetchCategories);
   const pushToast = useToastStore((s) => s.push);
   const users = useUserDirectory((s) => s.users);
   const ensureUsers = useUserDirectory((s) => s.ensure);
@@ -33,6 +41,10 @@ export default function KbArticlePage(): JSX.Element {
   const [history, setHistory] = useState<NoteMeta[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareTargets, setShareTargets] = useState<string[]>([]);
+  const [sharing, setSharing] = useState(false);
+  const spaces = useSpaceStore((s) => s.spaces);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,12 +52,12 @@ export default function KbArticlePage(): JSX.Element {
     setLoadFailed(false);
     setMode("read");
     setNote(null);
-    if (!id) {
+    if (!id || !spaceId) {
       setLoading(false);
       setLoadFailed(true);
       return;
     }
-    void NotesService.get(id).then((result) => {
+    void NotesService.get(spaceId, id).then((result) => {
       if (cancelled) {
         return;
       }
@@ -59,7 +71,13 @@ export default function KbArticlePage(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, spaceId]);
+
+  useEffect(() => {
+    if (spaceId) {
+      void fetchCategories(spaceId);
+    }
+  }, [spaceId, fetchCategories]);
 
   useEffect(() => {
     if (note) {
@@ -89,7 +107,10 @@ export default function KbArticlePage(): JSX.Element {
 
   async function handlePublish(): Promise<void> {
     setBusy(true);
-    const result = await NotesService.publish(meta.id, meta.version);
+    if (!spaceId) {
+      return;
+    }
+    const result = await NotesService.publish(spaceId, meta.id, meta.version);
     setBusy(false);
     if (!result.ok) {
       return;
@@ -100,7 +121,10 @@ export default function KbArticlePage(): JSX.Element {
 
   async function handleDelete(): Promise<void> {
     setBusy(true);
-    const result = await NotesService.delete(meta.id);
+    if (!spaceId) {
+      return;
+    }
+    const result = await NotesService.delete(spaceId, meta.id);
     setBusy(false);
     if (!result.ok) {
       return;
@@ -113,10 +137,37 @@ export default function KbArticlePage(): JSX.Element {
   async function openHistory(): Promise<void> {
     setHistoryOpen(true);
     setHistory(null);
-    const result = await NotesService.getHistory(meta.id);
+    if (!spaceId) {
+      return;
+    }
+    const result = await NotesService.getHistory(spaceId, meta.id);
     if (result.ok) {
       setHistory(result.value);
     }
+  }
+
+  function openShare(): void {
+    setShareTargets(note?.meta.sharedWithSpaces ?? []);
+    setShareOpen(true);
+  }
+
+  function toggleShareTarget(id: string): void {
+    setShareTargets((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+  }
+
+  async function submitShare(): Promise<void> {
+    if (!spaceId || !note) {
+      return;
+    }
+    setSharing(true);
+    const result = await NotesService.share(note.meta.id, spaceId, shareTargets);
+    setSharing(false);
+    if (!result.ok) {
+      return;
+    }
+    setNote(result.value);
+    setShareOpen(false);
+    pushToast("Доступ к заметке обновлён", "success");
   }
 
   return (
@@ -132,14 +183,19 @@ export default function KbArticlePage(): JSX.Element {
           <span>Обновлено {formatDate(meta.updatedAt)}</span>
         </div>
         <div className={styles.headerActions}>
+          {note.shared ? (
+            <span className={styles.sharedBadge} title="Заметка из другого пространства">
+              📤 Общая заметка
+            </span>
+          ) : null}
           {mode === "read" ? (
             <>
-              {can("article.edit") ? (
+              {!note.shared && canEditArticle ? (
                 <button className="btn-ghost" type="button" onClick={() => setMode("edit")}>
                   Редактировать
                 </button>
               ) : null}
-              {meta.status === "draft" && can("article.publish") ? (
+              {!note.shared && meta.status === "draft" && canPublishArticle ? (
                 <button
                   className="btn-ghost"
                   type="button"
@@ -149,10 +205,15 @@ export default function KbArticlePage(): JSX.Element {
                   Опубликовать
                 </button>
               ) : null}
+              {!note.shared && canEditArticle ? (
+                <button className="btn-ghost" type="button" onClick={openShare}>
+                  Поделиться
+                </button>
+              ) : null}
               <button className="btn-ghost" type="button" onClick={() => void openHistory()}>
                 История версий
               </button>
-              {can("article.delete") ? (
+              {!note.shared && canDeleteArticle ? (
                 <button className="btn-ghost" type="button" onClick={() => setConfirmDelete(true)}>
                   Удалить
                 </button>
@@ -195,14 +256,63 @@ export default function KbArticlePage(): JSX.Element {
         <ArticleEditor
           key={meta.id}
           initial={note}
+          spaceId={spaceId ?? ""}
           onSaved={setNote}
           onCancel={() => setMode("read")}
         />
       )}
 
+      {shareOpen ? (
+        <div className={styles.modalBackdrop}>
+          <div className={styles.historyCard}>
+            <div className={styles.historyHead}>
+              <h3>Поделиться заметкой</h3>
+              <button className={styles.close} type="button" onClick={() => setShareOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <p className={styles.muted}>
+              Выберите пространства, которым будет доступна эта заметка.
+            </p>
+            <div className={styles.shareList}>
+              {spaces.filter((space) => space.id !== spaceId).length === 0 ? (
+                <p className={styles.muted}>Других пространств нет.</p>
+              ) : (
+                spaces
+                  .filter((space) => space.id !== spaceId)
+                  .map((space) => (
+                    <label key={space.id} className={styles.shareOption}>
+                      <input
+                        type="checkbox"
+                        checked={shareTargets.includes(space.id)}
+                        onChange={() => toggleShareTarget(space.id)}
+                      />
+                      {space.name}
+                    </label>
+                  ))
+              )}
+            </div>
+            <div className={styles.actions}>
+              <button className="btn-ghost" type="button" onClick={() => setShareOpen(false)}>
+                Отмена
+              </button>
+              <button
+                className="btn-primary"
+                type="button"
+                disabled={sharing}
+                onClick={() => void submitShare()}
+              >
+                {sharing ? "Сохранение…" : "Сохранить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {historyOpen ? (
         <HistoryModal
           id={meta.id}
+          spaceId={spaceId ?? ""}
           history={history}
           onClose={() => setHistoryOpen(false)}
           onRestored={(updated) => {
@@ -254,10 +364,12 @@ function resizeImageInMarkdown(content: string, sha: string, width: string): str
 
 function ArticleEditor({
   initial,
+  spaceId,
   onSaved,
   onCancel,
 }: {
   initial: Note;
+  spaceId: string;
   onSaved: (note: Note) => void;
   onCancel: () => void;
 }): JSX.Element {
@@ -273,7 +385,7 @@ function ArticleEditor({
     saveNow,
     reload,
     dismissConflict,
-  } = useNoteEditor(initial, onSaved);
+  } = useNoteEditor(initial, spaceId, onSaved);
 
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [tagInput, setTagInput] = useState("");
@@ -334,7 +446,7 @@ function ArticleEditor({
   }
 
   async function loadCurrent(): Promise<void> {
-    const result = await NotesService.get(initial.meta.id);
+    const result = await NotesService.get(spaceId, initial.meta.id);
     if (result.ok) {
       reload(result.value);
     }
@@ -535,11 +647,13 @@ function ArticleEditor({
 
 function HistoryModal({
   id,
+  spaceId,
   history,
   onClose,
   onRestored,
 }: {
   id: string;
+  spaceId: string;
   history: NoteMeta[] | null;
   onClose: () => void;
   onRestored: (note: Note) => void;
@@ -549,7 +663,7 @@ function HistoryModal({
 
   async function restore(version: number): Promise<void> {
     setBusy(true);
-    const result = await NotesService.restoreVersion(id, version);
+    const result = await NotesService.restoreVersion(spaceId, id, version);
     setBusy(false);
     if (result.ok) {
       onRestored(result.value);

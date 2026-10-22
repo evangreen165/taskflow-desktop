@@ -17,6 +17,11 @@ export default function KbCard({ item, author, onOpen }: KbCardProps): JSX.Eleme
     <button type="button" className={styles.card} onClick={onOpen}>
       <div className={styles.head}>
         <span className={styles.icon}>{categoryIcon(item.category)}</span>
+        {item.shared ? (
+          <span className={styles.sharedBadge} title="Общая заметка из другого пространства">
+            📤
+          </span>
+        ) : null}
         {item.status === "draft" ? (
           <span className={styles.draftBadge}>{NOTE_STATUS_LABELS.draft}</span>
         ) : null}

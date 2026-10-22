@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+﻿use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +28,9 @@ pub struct NoteMeta {
     pub version: u64,
     #[serde(default)]
     pub linked_task_ids: Vec<String>,
+    /// Spaces this note is shared with (read-only access).
+    #[serde(default)]
+    pub shared_with_spaces: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -36,6 +39,9 @@ pub struct Note {
     pub meta: NoteMeta,
     pub content: String,
     pub history_versions: Vec<u64>,
+    /// True when the note is being read through a space it was shared with.
+    #[serde(default)]
+    pub shared: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -196,7 +202,7 @@ fn categories_path(root: &Path) -> PathBuf {
     root.join("categories.json")
 }
 
-/// Explicit KB category list (stored at `{workspace}/categories.json`).
+/// Explicit KB category list (stored at `{space}/categories.json`).
 pub fn list_categories(root: &Path) -> Result<Vec<String>, AppError> {
     let path = categories_path(root);
     if !path.is_file() {
@@ -261,6 +267,7 @@ pub fn get(root: &Path, id: &str) -> Result<Note, AppError> {
         meta,
         content,
         history_versions: versions,
+        shared: false,
     })
 }
 
@@ -286,6 +293,7 @@ pub fn create(
         status: NoteStatus::Draft,
         version: 1,
         linked_task_ids: Vec::new(),
+        shared_with_spaces: Vec::new(),
     };
     fsops::write_json_atomic(&meta_path(root, &id)?, &meta)?;
     fsops::write_text_atomic(&content_path(root, &id)?, content)?;
@@ -293,6 +301,7 @@ pub fn create(
         meta,
         content: content.to_string(),
         history_versions: Vec::new(),
+        shared: false,
     })
 }
 
@@ -337,6 +346,25 @@ pub fn publish(root: &Path, id: &str, expected_version: u64) -> Result<Note, App
     meta.updated_at = now_rfc3339();
     fsops::write_json_atomic(&meta_path(root, id)?, &meta)?;
     get(root, id)
+}
+
+/// Replaces the note's sharing list (deduplicated) and persists the meta.
+pub fn set_shared_with_spaces(
+    root: &Path,
+    id: &str,
+    targets: Vec<String>,
+) -> Result<NoteMeta, AppError> {
+    let mut meta = get_meta(root, id)?;
+    let mut targets: Vec<String> = targets
+        .into_iter()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
+    targets.sort();
+    targets.dedup();
+    meta.shared_with_spaces = targets;
+    fsops::write_json_atomic(&meta_path(root, id)?, &meta)?;
+    Ok(meta)
 }
 
 pub fn delete(root: &Path, id: &str) -> Result<(), AppError> {

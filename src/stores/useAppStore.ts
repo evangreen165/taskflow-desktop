@@ -22,6 +22,11 @@ interface AppState {
   activateAndPersist: (workspace: WorkspaceInfo) => Promise<void>;
   /** Forgets the saved path and returns to onboarding. */
   chooseDifferentFolder: () => Promise<void>;
+  /**
+   * Clears the in-memory session and returns to onboarding without touching
+   * the saved path — used after the user has validated a new folder.
+   */
+  switchWorkspace: () => void;
 }
 
 async function startWatcherSafely(): Promise<void> {
@@ -83,5 +88,10 @@ export const useAppStore = create<AppState>((set) => ({
       // the phase change alone does not re-render the onboarding screen.
       appNavigate("/onboarding", { state: { autoPick: true } });
     }
+  },
+
+  switchWorkspace: () => {
+    useAuthStore.getState().setSession(null);
+    set({ phase: "onboarding", workspace: null, error: null });
   },
 }));

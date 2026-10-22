@@ -1,4 +1,4 @@
-import type { Result } from "@/lib/errors";
+﻿import type { Result } from "@/lib/errors";
 import { invokeCommand } from "@/lib/invoke";
 
 export type NoteStatus = "draft" | "published" | "archived";
@@ -15,17 +15,20 @@ export interface NoteMeta {
   status: NoteStatus;
   version: number;
   linkedTaskIds: string[];
+  sharedWithSpaces: string[];
 }
 
 /** `notesList` item: meta flattened plus a content snippet. */
 export interface NoteListItem extends NoteMeta {
   preview: string;
+  shared: boolean;
 }
 
 export interface Note {
   meta: NoteMeta;
   content: string;
   historyVersions: number[];
+  shared: boolean;
 }
 
 export interface NoteListFilter {
@@ -42,8 +45,9 @@ export interface CreateNotePayload {
 }
 
 export const NotesService = {
-  list(filter: NoteListFilter = {}): Promise<Result<NoteListItem[]>> {
+  list(spaceId: string, filter: NoteListFilter = {}): Promise<Result<NoteListItem[]>> {
     return invokeCommand<NoteListItem[]>("notesList", {
+      spaceId,
       category: filter.category ?? null,
       tag: filter.tag ?? null,
       query: filter.query ?? null,
@@ -51,12 +55,13 @@ export const NotesService = {
     });
   },
 
-  get(id: string): Promise<Result<Note>> {
-    return invokeCommand<Note>("notesGet", { id });
+  get(spaceId: string, id: string): Promise<Result<Note>> {
+    return invokeCommand<Note>("notesGet", { spaceId, id });
   },
 
-  create(payload: CreateNotePayload): Promise<Result<Note>> {
+  create(spaceId: string, payload: CreateNotePayload): Promise<Result<Note>> {
     return invokeCommand<Note>("notesCreate", {
+      spaceId,
       title: payload.title,
       category: payload.category,
       content: payload.content ?? "",
@@ -64,6 +69,7 @@ export const NotesService = {
   },
 
   update(
+    spaceId: string,
     id: string,
     title: string,
     category: string,
@@ -72,6 +78,7 @@ export const NotesService = {
     version: number,
   ): Promise<Result<Note>> {
     return invokeCommand<Note>("notesUpdate", {
+      spaceId,
       id,
       title,
       category,
@@ -81,36 +88,41 @@ export const NotesService = {
     });
   },
 
-  publish(id: string, version: number): Promise<Result<Note>> {
-    return invokeCommand<Note>("notesPublish", { id, expectedVersion: version });
+  publish(spaceId: string, id: string, version: number): Promise<Result<Note>> {
+    return invokeCommand<Note>("notesPublish", { spaceId, id, expectedVersion: version });
   },
 
-  delete(id: string): Promise<Result<void>> {
-    return invokeCommand<void>("notesDelete", { id });
+  delete(spaceId: string, id: string): Promise<Result<void>> {
+    return invokeCommand<void>("notesDelete", { spaceId, id });
   },
 
-  getHistory(id: string): Promise<Result<NoteMeta[]>> {
-    return invokeCommand<NoteMeta[]>("notesGetHistory", { id });
+  getHistory(spaceId: string, id: string): Promise<Result<NoteMeta[]>> {
+    return invokeCommand<NoteMeta[]>("notesGetHistory", { spaceId, id });
   },
 
-  restoreVersion(id: string, version: number): Promise<Result<Note>> {
-    return invokeCommand<Note>("notesRestoreVersion", { id, version });
+  restoreVersion(spaceId: string, id: string, version: number): Promise<Result<Note>> {
+    return invokeCommand<Note>("notesRestoreVersion", { spaceId, id, version });
   },
 
-  listCategories(): Promise<Result<string[]>> {
-    return invokeCommand<string[]>("notesListCategories");
+  listCategories(spaceId: string): Promise<Result<string[]>> {
+    return invokeCommand<string[]>("notesListCategories", { spaceId });
   },
 
-  createCategory(name: string): Promise<Result<string[]>> {
-    return invokeCommand<string[]>("notesCreateCategory", { name });
+  createCategory(spaceId: string, name: string): Promise<Result<string[]>> {
+    return invokeCommand<string[]>("notesCreateCategory", { spaceId, name });
   },
 
-  deleteCategory(name: string): Promise<Result<string[]>> {
-    return invokeCommand<string[]>("notesDeleteCategory", { name });
+  deleteCategory(spaceId: string, name: string): Promise<Result<string[]>> {
+    return invokeCommand<string[]>("notesDeleteCategory", { spaceId, name });
   },
 
   /** Imports a local `.md`/`.pdf` file as a note. */
-  importFile(sourcePath: string): Promise<Result<Note>> {
-    return invokeCommand<Note>("notesImport", { sourcePath });
+  importFile(spaceId: string, sourcePath: string): Promise<Result<Note>> {
+    return invokeCommand<Note>("notesImport", { spaceId, sourcePath });
+  },
+
+  /** Shares a note with other spaces (read-only access). */
+  share(noteId: string, spaceId: string, targetSpaceIds: string[]): Promise<Result<Note>> {
+    return invokeCommand<Note>("notesShare", { noteId, spaceId, targetSpaceIds });
   },
 };

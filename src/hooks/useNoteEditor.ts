@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+﻿import { useRef, useState } from "react";
 
 import type { AppError } from "@/lib/errors";
 import { buildNotePatch, noteToDraft, type NoteDraft } from "@/lib/noteEditor";
@@ -28,7 +28,11 @@ export interface UseNoteEditorResult {
  * force a save. `VERSION_CONFLICT` stops autosave and raises `conflict`;
  * other errors revert the draft to the last server-confirmed state.
  */
-export function useNoteEditor(initial: Note, onSaved: (note: Note) => void): UseNoteEditorResult {
+export function useNoteEditor(
+  initial: Note,
+  spaceId: string,
+  onSaved: (note: Note) => void,
+): UseNoteEditorResult {
   const initialDraft = useRef<NoteDraft>(noteToDraft(initial));
   const [draft, setDraft] = useState<NoteDraft>(initialDraft.current);
   const [saving, setSaving] = useState(false);
@@ -88,6 +92,7 @@ export function useNoteEditor(initial: Note, onSaved: (note: Note) => void): Use
     setError(null);
     try {
       const result = await NotesService.update(
+        spaceId,
         initial.meta.id,
         patch.title,
         patch.category,

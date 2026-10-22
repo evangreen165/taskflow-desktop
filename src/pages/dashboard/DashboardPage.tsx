@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import GridLayout, { useContainerWidth, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -11,12 +11,14 @@ import { DashboardService, type DashboardSummary } from "@/services/dashboard";
 import type { NoteMeta } from "@/services/notes";
 import type { Task } from "@/services/tasks";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useDashboardStore, WIDGET_DEFS, type WidgetId } from "@/stores/useDashboardStore";
 
 import styles from "./DashboardPage.module.css";
 
 export default function DashboardPage(): JSX.Element {
   const displayName = useAuthStore((s) => s.session?.user.displayName ?? "Пользователь");
+  const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const { can } = usePermissions();
   const navigate = useNavigate();
   const config = useDashboardStore((s) => s.config);
@@ -31,7 +33,7 @@ export default function DashboardPage(): JSX.Element {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const result = await DashboardService.getSummary();
+    const result = await DashboardService.getSummary(null);
     if (result.ok) {
       setSummary(result.value);
     }
@@ -144,10 +146,11 @@ export default function DashboardPage(): JSX.Element {
         </div>
       ) : null}
 
-      {selectedTask ? (
+      {selectedTask && (selectedTask.spaceId ?? spaceId) ? (
         <TaskDetailPanel
           key={selectedTask.id}
           task={selectedTask}
+          spaceId={selectedTask.spaceId ?? spaceId ?? ""}
           onClose={() => {
             setSelectedTaskId(null);
             void load();
@@ -257,7 +260,10 @@ function TaskRow({
       className={`${styles.taskRow} ${overdue ? styles.taskOverdue : ""}`}
       onClick={onOpen}
     >
-      <span className={styles.taskTitle}>{task.title}</span>
+      <span className={styles.taskTitle}>
+        {task.spaceName ? <span className={styles.spaceBadge}>{task.spaceName}</span> : null}
+        {task.title}
+      </span>
       <span className={styles.taskMeta}>
         <span style={{ color: priorityColor(task.priority) }}>
           {PRIORITY_LABELS[task.priority]}

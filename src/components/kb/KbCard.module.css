@@ -41,6 +41,12 @@
   color: var(--amber);
 }
 
+.sharedBadge {
+  font-size: 14px;
+  line-height: 1;
+  margin-left: auto;
+}
+
 .title {
   font-weight: 650;
   font-size: 14.5px;

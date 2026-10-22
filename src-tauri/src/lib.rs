@@ -1,5 +1,6 @@
 mod audit;
 mod attachments;
+mod backfill;
 mod commands;
 mod error;
 mod fsops;
@@ -12,6 +13,7 @@ mod path;
 mod permissions;
 mod roles;
 mod session;
+mod spaces;
 mod tasks;
 mod users;
 mod watcher;
@@ -246,6 +248,7 @@ pub fn run() {
             commands::tasks_update,
             commands::tasks_change_status,
             commands::tasks_delete,
+            commands::tasks_move,
             commands::notes_list,
             commands::notes_get,
             commands::notes_get_history,
@@ -254,6 +257,7 @@ pub fn run() {
             commands::notes_publish,
             commands::notes_delete,
             commands::notes_restore_version,
+            commands::notes_share,
             commands::notes_list_categories,
             commands::notes_create_category,
             commands::notes_delete_category,
@@ -263,6 +267,11 @@ pub fn run() {
             commands::attachment_remove,
             commands::attachment_open,
             commands::dashboard_summary,
+            commands::spaces_list,
+            commands::spaces_get,
+            commands::spaces_create,
+            commands::spaces_update,
+            commands::spaces_delete,
             commands::read_json,
             commands::write_json_atomic,
             commands::read_text,

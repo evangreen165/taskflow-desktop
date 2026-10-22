@@ -74,8 +74,15 @@ export default function Onboarding(): JSX.Element {
   // "Another folder" / "Change folder" navigates here with `autoPick` so the
   // native folder picker opens immediately instead of appearing to do nothing.
   useEffect(() => {
-    const state = location.state as { autoPick?: boolean } | null;
-    if (state?.autoPick && !autoPickDone.current) {
+    const state = location.state as { autoPick?: boolean; path?: string } | null;
+    if (autoPickDone.current) {
+      return;
+    }
+    if (state?.path) {
+      autoPickDone.current = true;
+      setPath(state.path);
+      void inspect(state.path);
+    } else if (state?.autoPick) {
       autoPickDone.current = true;
       void pickFolder();
     }

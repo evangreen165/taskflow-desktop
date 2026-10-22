@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
 import { ALL_PERMISSIONS, can, PERMISSION_GROUPS } from "@/lib/permissions";
 
@@ -14,10 +14,10 @@ describe("can", () => {
 });
 
 describe("permission groups", () => {
-  it("cover exactly the 16-registry permission set without duplicates", () => {
+  it("cover exactly the 18-registry permission set without duplicates", () => {
     const grouped = PERMISSION_GROUPS.flatMap((group) => group.permissions);
-    expect(grouped).toHaveLength(16);
-    expect(new Set(grouped).size).toBe(16);
+    expect(grouped).toHaveLength(18);
+    expect(new Set(grouped).size).toBe(18);
     expect(ALL_PERMISSIONS).toEqual(grouped);
   });
 
@@ -29,6 +29,7 @@ describe("permission groups", () => {
       "roles",
       "audit",
       "workspace",
+      "space",
     ]);
     for (const group of PERMISSION_GROUPS) {
       for (const perm of group.permissions) {

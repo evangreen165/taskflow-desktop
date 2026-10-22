@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
 import { buildNotePatch, noteToDraft, type NoteDraft } from "@/lib/noteEditor";
 import type { Note } from "@/services/notes";
@@ -17,9 +17,11 @@ function makeNote(overrides: Partial<Note> = {}): Note {
       status: "draft",
       version: 1,
       linkedTaskIds: [],
+      sharedWithSpaces: [],
     },
     content: "Текст статьи.",
     historyVersions: [],
+    shared: false,
     ...overrides,
   };
 }

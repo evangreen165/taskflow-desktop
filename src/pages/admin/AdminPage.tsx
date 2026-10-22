@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSION_GROUPS, PERMISSION_LABELS } from "@/lib/permissions";
 import { canDeleteRole, slugifyRoleId, validateRoleDraft } from "@/lib/roleForm";
 import { AuthService } from "@/services/auth";
 import { PermissionsService } from "@/services/permissions";
 import { RolesService } from "@/services/roles";
+import { SpacesService, type Space } from "@/services/spaces";
 import type { Role, UserInfo, UserPatch } from "@/services/types";
-import { UsersService } from "@/services/users";
+import { UsersService, type UserSummary } from "@/services/users";
+import { isPersonalSpace } from "@/stores/useSpaceStore";
 
 import styles from "./AdminPage.module.css";
 
-type Tab = "users" | "roles";
+type Tab = "users" | "spaces" | "roles";
 
 const COLOR_PRESETS = ["#5b5bd6", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
 
@@ -22,27 +25,311 @@ function formatDate(value: string | null): string {
 }
 
 export default function AdminPage(): JSX.Element {
-  const [tab, setTab] = useState<Tab>("users");
+  const { can } = usePermissions();
+  const [tab, setTab] = useState<Tab | null>(null);
+
+  const tabs = useMemo<{ id: Tab; label: string }[]>(() => {
+    const items: { id: Tab; label: string }[] = [];
+    if (can("users.manage")) {
+      items.push({ id: "users", label: "Пользователи" });
+    }
+    if (can("space.manage")) {
+      items.push({ id: "spaces", label: "Пространства" });
+    }
+    if (can("roles.manage")) {
+      items.push({ id: "roles", label: "Роли" });
+    }
+    return items;
+  }, [can]);
+
+  const activeTab: Tab | null =
+    tab && tabs.some((item) => item.id === tab) ? tab : (tabs[0]?.id ?? null);
+
+  if (!activeTab) {
+    return (
+      <div className={styles.page}>
+        <p className={styles.muted}>Нет доступных разделов администрирования.</p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page}>
       <div className={styles.tabs}>
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`${styles.tab} ${activeTab === item.id ? styles.tabActive : ""}`}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {activeTab === "users" ? <UsersTab /> : activeTab === "spaces" ? <SpacesTab /> : <RolesTab />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Spaces
+// ---------------------------------------------------------------------------
+
+function SpacesTab(): JSX.Element {
+  const { can } = usePermissions();
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [create, setCreate] = useState({ name: "", description: "" });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{
+    name: string;
+    description: string;
+    members: string[];
+  } | null>(null);
+
+  const load = useCallback(async () => {
+    const [spacesResult, usersResult] = await Promise.all([
+      SpacesService.list(),
+      UsersService.directory(),
+    ]);
+    if (!spacesResult.ok) {
+      setError(spacesResult.error.message);
+      return;
+    }
+    setSpaces(spacesResult.value);
+    if (usersResult.ok) {
+      setUsers(usersResult.value);
+    }
+    setError(null);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function submitCreate(): Promise<void> {
+    if (!create.name.trim()) {
+      setError("Укажите название пространства.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const result = await SpacesService.create(create.name.trim(), create.description.trim());
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setCreate({ name: "", description: "" });
+    await load();
+  }
+
+  function startEdit(space: Space): void {
+    setEditingId(space.id);
+    setDraft({
+      name: space.name,
+      description: space.description,
+      members: [...space.members],
+    });
+  }
+
+  function toggleMember(userId: string): void {
+    if (!draft) {
+      return;
+    }
+    setDraft({
+      ...draft,
+      members: draft.members.includes(userId)
+        ? draft.members.filter((id) => id !== userId)
+        : [...draft.members, userId],
+    });
+  }
+
+  async function submitEdit(space: Space): Promise<void> {
+    if (!draft) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const result = await SpacesService.update(
+      space.id,
+      draft.name.trim(),
+      draft.description.trim(),
+      draft.members,
+    );
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setEditingId(null);
+    setDraft(null);
+    await load();
+  }
+
+  async function submitDelete(space: Space): Promise<void> {
+    setBusy(true);
+    setError(null);
+    const result = await SpacesService.delete(space.id);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    await load();
+  }
+
+  return (
+    <div className={styles.section}>
+      {error ? (
+        <div className="alert" style={{ marginBottom: 16 }}>
+          {error}
+        </div>
+      ) : null}
+
+      <div className={styles.card}>
+        <h3>Новое пространство</h3>
+        <div className={styles.formGrid}>
+          <div className="field">
+            <label htmlFor="spc-name">Название</label>
+            <input
+              id="spc-name"
+              type="text"
+              value={create.name}
+              onChange={(event) => setCreate({ ...create, name: event.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="spc-desc">Описание</label>
+            <input
+              id="spc-desc"
+              type="text"
+              value={create.description}
+              onChange={(event) => setCreate({ ...create, description: event.target.value })}
+            />
+          </div>
+        </div>
         <button
+          className="btn-primary"
           type="button"
-          className={`${styles.tab} ${tab === "users" ? styles.tabActive : ""}`}
-          onClick={() => setTab("users")}
+          disabled={busy || !can("space.create")}
+          onClick={() => void submitCreate()}
         >
-          Пользователи
-        </button>
-        <button
-          type="button"
-          className={`${styles.tab} ${tab === "roles" ? styles.tabActive : ""}`}
-          onClick={() => setTab("roles")}
-        >
-          Роли
+          {busy ? "Создание…" : "Создать пространство"}
         </button>
       </div>
-      {tab === "users" ? <UsersTab /> : <RolesTab />}
+
+      <div className={styles.card}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>Пространство</th>
+              <th>Участники</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {spaces.map((space) =>
+              editingId === space.id && draft ? (
+                <tr key={space.id}>
+                  <td>
+                    <input
+                      type="text"
+                      value={draft.name}
+                      onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                    />
+                    <input
+                      type="text"
+                      value={draft.description}
+                      placeholder="Описание"
+                      onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <div className={styles.memberList}>
+                      {users.map((member) => (
+                        <label key={member.id} className={styles.memberOption}>
+                          <input
+                            type="checkbox"
+                            checked={
+                              draft.members.includes(member.id) || member.id === space.ownerId
+                            }
+                            disabled={member.id === space.ownerId}
+                            onChange={() => toggleMember(member.id)}
+                          />
+                          {member.displayName}
+                        </label>
+                      ))}
+                    </div>
+                  </td>
+                  <td>
+                    <div className={styles.rowActions}>
+                      <button
+                        className="btn-ghost"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void submitEdit(space)}
+                      >
+                        Сохранить
+                      </button>
+                      <button
+                        className="btn-ghost"
+                        type="button"
+                        onClick={() => {
+                          setEditingId(null);
+                          setDraft(null);
+                        }}
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={space.id}>
+                  <td>
+                    <b>
+                      {isPersonalSpace(space.id) ? "🔒" : "📁"} {space.name}
+                    </b>
+                    {space.description ? (
+                      <div className={styles.muted}>{space.description}</div>
+                    ) : null}
+                  </td>
+                  <td>{space.members.length}</td>
+                  <td>
+                    <div className={styles.rowActions}>
+                      {isPersonalSpace(space.id) ? (
+                        <span className={styles.muted}>Личное пространство</span>
+                      ) : (
+                        <>
+                          <button
+                            className="btn-ghost"
+                            type="button"
+                            onClick={() => startEdit(space)}
+                          >
+                            Изменить
+                          </button>
+                          <button
+                            className="btn-ghost"
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void submitDelete(space)}
+                          >
+                            Удалить
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ),
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

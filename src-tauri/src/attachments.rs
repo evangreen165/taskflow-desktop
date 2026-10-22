@@ -183,24 +183,49 @@ pub fn get_base64(root: &Path, sha256: &str) -> Result<String, AppError> {
     Ok(format!("data:{mime};base64,{encoded}"))
 }
 
-/// True when any article references `attachment://{sha256}`.
+/// True when any article (in any space, or legacy root notes) references
+/// `attachment://{sha256}`.
 fn is_referenced(root: &Path, sha256: &str) -> Result<bool, AppError> {
     let needle = format!("attachment://{sha256}");
-    let notes_dir = root.join("notes");
-    if !notes_dir.is_dir() {
-        return Ok(false);
-    }
-    for entry in std::fs::read_dir(&notes_dir).map_err(|e| AppError::io("list notes", e))? {
-        let entry = entry.map_err(|e| AppError::io("read notes dir", e))?;
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
+
+    let spaces_dir = root.join("spaces");
+    if spaces_dir.is_dir() {
+        for space in std::fs::read_dir(&spaces_dir).map_err(|e| AppError::io("list spaces", e))? {
+            let space = space.map_err(|e| AppError::io("read spaces dir", e))?;
+            let notes_dir = space.path().join("notes");
+            if !notes_dir.is_dir() {
+                continue;
+            }
+            for note in
+                std::fs::read_dir(&notes_dir).map_err(|e| AppError::io("list notes", e))?
+            {
+                let note = note.map_err(|e| AppError::io("read notes dir", e))?;
+                let content_file = note.path().join("note.md");
+                if content_file.is_file() {
+                    if let Ok(text) = fsops::read_text(&content_file) {
+                        if text.contains(&needle) {
+                            return Ok(true);
+                        }
+                    }
+                }
+            }
         }
-        let content_file = path.join("note.md");
-        if content_file.is_file() {
-            if let Ok(text) = fsops::read_text(&content_file) {
-                if text.contains(&needle) {
-                    return Ok(true);
+    }
+
+    let notes_dir = root.join("notes");
+    if notes_dir.is_dir() {
+        for entry in std::fs::read_dir(&notes_dir).map_err(|e| AppError::io("list notes", e))? {
+            let entry = entry.map_err(|e| AppError::io("read notes dir", e))?;
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let content_file = path.join("note.md");
+            if content_file.is_file() {
+                if let Ok(text) = fsops::read_text(&content_file) {
+                    if text.contains(&needle) {
+                        return Ok(true);
+                    }
                 }
             }
         }

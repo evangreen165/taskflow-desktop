@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
 import {
   categoryIcon,
@@ -22,6 +22,8 @@ function makeItem(overrides: Partial<NoteListItem> = {}): NoteListItem {
     status: "draft",
     version: 1,
     linkedTaskIds: [],
+    sharedWithSpaces: [],
+    shared: false,
     preview: "Шаги по онбордингу нового сотрудника.",
     ...overrides,
   };

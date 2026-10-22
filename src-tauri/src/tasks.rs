@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+﻿use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -34,6 +34,11 @@ pub struct Task {
     pub watchers: Vec<String>,
     #[serde(default)]
     pub project_id: Option<String>,
+    /// Set only in cross-space dashboard responses; never persisted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -152,6 +157,10 @@ pub struct TaskFilter {
     pub start_date: Option<String>,
     #[serde(default)]
     pub end_date: Option<String>,
+    /// `Some(false)` returns only tasks without a due date; `Some(true)` only
+    /// tasks with one. `None` does not filter.
+    #[serde(default)]
+    pub has_due_date: Option<bool>,
 }
 
 mod double_option {
@@ -250,6 +259,8 @@ pub fn create(
         version: 1,
         watchers: payload.watchers,
         project_id: payload.project_id,
+        space_id: None,
+        space_name: None,
     };
     fsops::write_json_atomic(&task_path(root, &task.id)?, &task)?;
     Ok(task)
@@ -316,6 +327,11 @@ pub fn change_status(
     task.updated_at = now_rfc3339();
     fsops::write_json_atomic(&task_path(root, id)?, &task)?;
     Ok(task)
+}
+
+/// Persists an existing task (used by cross-space moves).
+pub fn save(root: &Path, task: &Task) -> Result<(), AppError> {
+    fsops::write_json_atomic(&task_path(root, &task.id)?, task)
 }
 
 pub fn delete(root: &Path, id: &str) -> Result<(), AppError> {

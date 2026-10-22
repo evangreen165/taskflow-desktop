@@ -1,4 +1,4 @@
-use std::path::Path;
+﻿use std::path::Path;
 
 use tauri::State;
 
@@ -61,14 +61,25 @@ fn matches_filter(task: &Task, filter: &TaskFilter) -> bool {
             return false;
         }
     }
+    if let Some(has_due) = filter.has_due_date {
+        if task.due_date.is_some() != has_due {
+            return false;
+        }
+    }
     true
 }
 
-pub fn tasks_list_impl(state: &AppState, filter: TaskFilter) -> Result<Vec<Task>, AppError> {
+pub fn tasks_list_impl(
+    state: &AppState,
+    space_id: String,
+    filter: TaskFilter,
+) -> Result<Vec<Task>, AppError> {
     let session = state.require_perm("task.view")?;
     let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
     let view_all = has_perm(&root, &session, "task.view_all")?;
-    let mut tasks = tasks::list(&root)?;
+    let mut tasks = tasks::list(&space_dir)?;
     tasks.retain(|task| {
         matches_filter(task, &filter)
             && (view_all
@@ -79,43 +90,62 @@ pub fn tasks_list_impl(state: &AppState, filter: TaskFilter) -> Result<Vec<Task>
 }
 
 #[tauri::command(rename = "tasksList")]
-pub fn tasks_list(state: State<'_, AppState>, filter: TaskFilter) -> Result<Vec<Task>, AppError> {
-    tasks_list_impl(&state, filter)
+pub fn tasks_list(
+    state: State<'_, AppState>,
+    space_id: String,
+    filter: TaskFilter,
+) -> Result<Vec<Task>, AppError> {
+    tasks_list_impl(&state, space_id, filter)
 }
 
-pub fn tasks_get_impl(state: &AppState, id: String) -> Result<Task, AppError> {
+pub fn tasks_get_impl(
+    state: &AppState,
+    space_id: String,
+    id: String,
+) -> Result<Task, AppError> {
     let session = state.require_perm("task.view")?;
     let root = state.root()?;
-    let task = tasks::get(&root, &id)?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    let task = tasks::get(&space_dir, &id)?;
     ensure_visible(&root, &session, &task)?;
     Ok(task)
 }
 
 #[tauri::command(rename = "tasksGet")]
-pub fn tasks_get(state: State<'_, AppState>, id: String) -> Result<Task, AppError> {
-    tasks_get_impl(&state, id)
+pub fn tasks_get(
+    state: State<'_, AppState>,
+    space_id: String,
+    id: String,
+) -> Result<Task, AppError> {
+    tasks_get_impl(&state, space_id, id)
 }
 
 pub fn tasks_create_impl(
     state: &AppState,
+    space_id: String,
     payload: CreateTaskPayload,
 ) -> Result<Task, AppError> {
     state.require_writable()?;
     let session = state.require_perm("task.create")?;
     let root = state.root()?;
-    tasks::create(&root, &session.user_id, payload)
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    tasks::create(&space_dir, &session.user_id, payload)
 }
 
 #[write_command(rename = "tasksCreate")]
 pub fn tasks_create(
     state: State<'_, AppState>,
+    space_id: String,
     payload: CreateTaskPayload,
 ) -> Result<Task, AppError> {
-    tasks_create_impl(&state, payload)
+    tasks_create_impl(&state, space_id, payload)
 }
 
 pub fn tasks_update_impl(
     state: &AppState,
+    space_id: String,
     id: String,
     patch: UpdateTaskPayload,
     expected_version: u64,
@@ -123,23 +153,27 @@ pub fn tasks_update_impl(
     state.require_writable()?;
     let session = state.require_perm("task.edit")?;
     let root = state.root()?;
-    let current = tasks::get(&root, &id)?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    let current = tasks::get(&space_dir, &id)?;
     ensure_visible(&root, &session, &current)?;
-    tasks::update(&root, &id, patch, expected_version)
+    tasks::update(&space_dir, &id, patch, expected_version)
 }
 
 #[write_command(rename = "tasksUpdate")]
 pub fn tasks_update(
     state: State<'_, AppState>,
+    space_id: String,
     id: String,
     patch: UpdateTaskPayload,
     expected_version: u64,
 ) -> Result<Task, AppError> {
-    tasks_update_impl(&state, id, patch, expected_version)
+    tasks_update_impl(&state, space_id, id, patch, expected_version)
 }
 
 pub fn tasks_change_status_impl(
     state: &AppState,
+    space_id: String,
     id: String,
     status: TaskStatus,
     expected_version: u64,
@@ -147,33 +181,84 @@ pub fn tasks_change_status_impl(
     state.require_writable()?;
     let session = state.require_perm("task.change_status")?;
     let root = state.root()?;
-    let current = tasks::get(&root, &id)?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    let current = tasks::get(&space_dir, &id)?;
     ensure_visible(&root, &session, &current)?;
-    tasks::change_status(&root, &id, status, expected_version)
+    tasks::change_status(&space_dir, &id, status, expected_version)
 }
 
 #[write_command(rename = "tasksChangeStatus")]
 pub fn tasks_change_status(
     state: State<'_, AppState>,
+    space_id: String,
     id: String,
     status: TaskStatus,
     expected_version: u64,
 ) -> Result<Task, AppError> {
-    tasks_change_status_impl(&state, id, status, expected_version)
+    tasks_change_status_impl(&state, space_id, id, status, expected_version)
 }
 
-pub fn tasks_delete_impl(state: &AppState, id: String) -> Result<(), AppError> {
+pub fn tasks_delete_impl(
+    state: &AppState,
+    space_id: String,
+    id: String,
+) -> Result<(), AppError> {
     state.require_writable()?;
     let session = state.require_perm("task.delete")?;
     let root = state.root()?;
-    let task = tasks::get(&root, &id)?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    let task = tasks::get(&space_dir, &id)?;
     ensure_visible(&root, &session, &task)?;
-    tasks::delete(&root, &id)
+    tasks::delete(&space_dir, &id)
 }
 
 #[write_command(rename = "tasksDelete")]
-pub fn tasks_delete(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
-    tasks_delete_impl(&state, id)
+pub fn tasks_delete(
+    state: State<'_, AppState>,
+    space_id: String,
+    id: String,
+) -> Result<(), AppError> {
+    tasks_delete_impl(&state, space_id, id)
+}
+
+pub fn tasks_move_impl(
+    state: &AppState,
+    task_id: String,
+    from_space_id: String,
+    to_space_id: String,
+) -> Result<Task, AppError> {
+    state.require_writable()?;
+    let session = state.require_perm("task.edit")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &from_space_id, &session)?;
+    crate::spaces::require_access(&root, &to_space_id, &session)?;
+    if from_space_id == to_space_id {
+        return Err(AppError::new(
+            "INVALID_INPUT",
+            "source and target spaces must differ",
+        ));
+    }
+    let from_dir = crate::spaces::space_dir(&root, &from_space_id)?;
+    let to_dir = crate::spaces::space_dir(&root, &to_space_id)?;
+    let mut task = tasks::get(&from_dir, &task_id)?;
+    task.updated_at = crate::audit::now_rfc3339();
+    task.space_id = None;
+    task.space_name = None;
+    tasks::save(&to_dir, &task)?;
+    tasks::delete(&from_dir, &task_id)?;
+    Ok(task)
+}
+
+#[write_command(rename = "tasksMove")]
+pub fn tasks_move(
+    state: State<'_, AppState>,
+    task_id: String,
+    from_space_id: String,
+    to_space_id: String,
+) -> Result<Task, AppError> {
+    tasks_move_impl(&state, task_id, from_space_id, to_space_id)
 }
 
 #[cfg(test)]
@@ -185,6 +270,8 @@ mod tests {
     use crate::workspace;
     use serde_json::json;
     use tempfile::tempdir;
+
+    const SPACE: &str = "default";
 
     struct Fixture {
         _dir: tempfile::TempDir,
@@ -216,6 +303,15 @@ mod tests {
             users::create(dir.path(), "ex", "password123", "Executor", "executor", None).unwrap();
         let observer =
             users::create(dir.path(), "obs", "password123", "Observer", "observer", None).unwrap();
+        let space = crate::spaces::Space {
+            id: SPACE.to_string(),
+            name: "Основное".to_string(),
+            description: String::new(),
+            created_at: crate::audit::now_rfc3339(),
+            owner_id: admin.id.clone(),
+            members: vec![admin.id.clone(), executor.id.clone(), observer.id.clone()],
+        };
+        crate::spaces::write_space(dir.path(), &space).unwrap();
         let state = AppState::new("m".into());
         state.set_workspace(dir.path().to_path_buf(), info);
         state.set_session(session_for(&admin.id, "admin"));
@@ -237,9 +333,7 @@ mod tests {
     }
 
     fn create_task(fx: &Fixture, title: &str, assignees: &[&str]) -> Task {
-        tasks_create_impl(
-            &fx.state,
-            create_payload(json!({
+        tasks_create_impl(&fx.state, SPACE.to_string(), create_payload(json!({
                 "title": title,
                 "assignees": assignees,
             })),
@@ -254,11 +348,11 @@ mod tests {
         assert_eq!(task.version, 1);
         assert_eq!(task.author_id, fx.admin.id);
 
-        let listed = tasks_list_impl(&fx.state, TaskFilter::default()).unwrap();
+        let listed = tasks_list_impl(&fx.state, SPACE.to_string(), TaskFilter::default()).unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].id, task.id);
 
-        let fetched = tasks_get_impl(&fx.state, task.id.clone()).unwrap();
+        let fetched = tasks_get_impl(&fx.state, SPACE.to_string(), task.id.clone()).unwrap();
         assert_eq!(fetched.title, "First");
     }
 
@@ -266,9 +360,7 @@ mod tests {
     fn update_increments_version() {
         let fx = fixture();
         let task = create_task(&fx, "First", &[]);
-        let updated = tasks_update_impl(
-            &fx.state,
-            task.id.clone(),
+        let updated = tasks_update_impl(&fx.state, SPACE.to_string(), task.id.clone(),
             update_payload(json!({ "title": "Renamed", "priority": "high" })),
             1,
         )
@@ -282,9 +374,7 @@ mod tests {
     fn update_version_conflict_returns_current_task() {
         let fx = fixture();
         let task = create_task(&fx, "First", &[]);
-        let err = tasks_update_impl(
-            &fx.state,
-            task.id.clone(),
+        let err = tasks_update_impl(&fx.state, SPACE.to_string(), task.id.clone(),
             update_payload(json!({ "title": "Renamed" })),
             99,
         )
@@ -300,9 +390,9 @@ mod tests {
     fn delete_then_get_not_found() {
         let fx = fixture();
         let task = create_task(&fx, "First", &[]);
-        tasks_delete_impl(&fx.state, task.id.clone()).unwrap();
+        tasks_delete_impl(&fx.state, SPACE.to_string(), task.id.clone()).unwrap();
         assert_eq!(
-            tasks_get_impl(&fx.state, task.id).unwrap_err().code,
+            tasks_get_impl(&fx.state, SPACE.to_string(), task.id).unwrap_err().code,
             "NOT_FOUND"
         );
     }
@@ -313,7 +403,7 @@ mod tests {
         let task = create_task(&fx, "Assigned", &[&fx.executor.id]);
         fx.state
             .set_session(session_for(&fx.executor.id, "executor"));
-        let err = tasks_delete_impl(&fx.state, task.id).unwrap_err();
+        let err = tasks_delete_impl(&fx.state, SPACE.to_string(), task.id).unwrap_err();
         assert_eq!(err.code, "FORBIDDEN");
     }
 
@@ -325,7 +415,7 @@ mod tests {
 
         fx.state
             .set_session(session_for(&fx.executor.id, "executor"));
-        let listed = tasks_list_impl(&fx.state, TaskFilter::default()).unwrap();
+        let listed = tasks_list_impl(&fx.state, SPACE.to_string(), TaskFilter::default()).unwrap();
         let ids: Vec<&str> = listed.iter().map(|t| t.id.as_str()).collect();
         assert_eq!(ids, vec![mine.id.as_str()]);
         assert!(!ids.contains(&other.id.as_str()));
@@ -337,7 +427,7 @@ mod tests {
         let hidden = create_task(&fx, "Hidden", &[]);
         fx.state
             .set_session(session_for(&fx.executor.id, "executor"));
-        let err = tasks_get_impl(&fx.state, hidden.id).unwrap_err();
+        let err = tasks_get_impl(&fx.state, SPACE.to_string(), hidden.id).unwrap_err();
         assert_eq!(err.code, "FORBIDDEN");
     }
 
@@ -348,7 +438,7 @@ mod tests {
         fx.state
             .set_session(session_for(&fx.executor.id, "executor"));
         let err =
-            tasks_change_status_impl(&fx.state, hidden.id, TaskStatus::InProgress, 1).unwrap_err();
+            tasks_change_status_impl(&fx.state, SPACE.to_string(), hidden.id, TaskStatus::InProgress, 1).unwrap_err();
         assert_eq!(err.code, "FORBIDDEN");
     }
 
@@ -357,9 +447,7 @@ mod tests {
         let fx = fixture();
         fx.state
             .set_session(session_for(&fx.observer.id, "observer"));
-        let err = tasks_create_impl(
-            &fx.state,
-            create_payload(json!({ "title": "Nope" })),
+        let err = tasks_create_impl(&fx.state, SPACE.to_string(), create_payload(json!({ "title": "Nope" })),
         )
         .unwrap_err();
         assert_eq!(err.code, "FORBIDDEN");
@@ -370,12 +458,12 @@ mod tests {
         let fx = fixture();
         let task = create_task(&fx, "First", &[]);
         let changed =
-            tasks_change_status_impl(&fx.state, task.id.clone(), TaskStatus::InProgress, 1).unwrap();
+            tasks_change_status_impl(&fx.state, SPACE.to_string(), task.id.clone(), TaskStatus::InProgress, 1).unwrap();
         assert_eq!(changed.status, TaskStatus::InProgress);
         assert_eq!(changed.version, 2);
 
         let err =
-            tasks_change_status_impl(&fx.state, task.id, TaskStatus::Done, 1).unwrap_err();
+            tasks_change_status_impl(&fx.state, SPACE.to_string(), task.id, TaskStatus::Done, 1).unwrap_err();
         assert_eq!(err.code, "VERSION_CONFLICT");
         let current: Task = serde_json::from_str(err.details.as_deref().unwrap()).unwrap();
         assert_eq!(current.version, 2);
@@ -385,9 +473,7 @@ mod tests {
     #[test]
     fn list_filters_by_status_assignee_and_project() {
         let fx = fixture();
-        let first = tasks_create_impl(
-            &fx.state,
-            create_payload(json!({
+        let first = tasks_create_impl(&fx.state, SPACE.to_string(), create_payload(json!({
                 "title": "A",
                 "status": "in_progress",
                 "assignees": [fx.executor.id],
@@ -395,15 +481,11 @@ mod tests {
             })),
         )
         .unwrap();
-        let second = tasks_create_impl(
-            &fx.state,
-            create_payload(json!({ "title": "B", "projectId": "p2" })),
+        let second = tasks_create_impl(&fx.state, SPACE.to_string(), create_payload(json!({ "title": "B", "projectId": "p2" })),
         )
         .unwrap();
 
-        let by_status = tasks_list_impl(
-            &fx.state,
-            TaskFilter {
+        let by_status = tasks_list_impl(&fx.state, SPACE.to_string(), TaskFilter {
                 status: Some(TaskStatus::InProgress),
                 ..Default::default()
             },
@@ -412,9 +494,7 @@ mod tests {
         assert_eq!(by_status.len(), 1);
         assert_eq!(by_status[0].id, first.id);
 
-        let by_assignee = tasks_list_impl(
-            &fx.state,
-            TaskFilter {
+        let by_assignee = tasks_list_impl(&fx.state, SPACE.to_string(), TaskFilter {
                 assignee_id: Some(fx.executor.id.clone()),
                 ..Default::default()
             },
@@ -423,9 +503,7 @@ mod tests {
         assert_eq!(by_assignee.len(), 1);
         assert_eq!(by_assignee[0].id, first.id);
 
-        let by_project = tasks_list_impl(
-            &fx.state,
-            TaskFilter {
+        let by_project = tasks_list_impl(&fx.state, SPACE.to_string(), TaskFilter {
                 project_id: Some("p2".to_string()),
                 ..Default::default()
             },
@@ -438,21 +516,15 @@ mod tests {
     #[test]
     fn list_filters_by_date_range() {
         let fx = fixture();
-        let first = tasks_create_impl(
-            &fx.state,
-            create_payload(json!({ "title": "A", "dueDate": "2026-10-15" })),
+        let first = tasks_create_impl(&fx.state, SPACE.to_string(), create_payload(json!({ "title": "A", "dueDate": "2026-10-15" })),
         )
         .unwrap();
-        let second = tasks_create_impl(
-            &fx.state,
-            create_payload(json!({ "title": "B", "dueDate": "2026-10-20" })),
+        let second = tasks_create_impl(&fx.state, SPACE.to_string(), create_payload(json!({ "title": "B", "dueDate": "2026-10-20" })),
         )
         .unwrap();
-        tasks_create_impl(&fx.state, create_payload(json!({ "title": "C" }))).unwrap();
+        tasks_create_impl(&fx.state, SPACE.to_string(), create_payload(json!({ "title": "C" }))).unwrap();
 
-        let in_range = tasks_list_impl(
-            &fx.state,
-            TaskFilter {
+        let in_range = tasks_list_impl(&fx.state, SPACE.to_string(), TaskFilter {
                 start_date: Some("2026-10-10".to_string()),
                 end_date: Some("2026-10-18".to_string()),
                 ..Default::default()
@@ -462,9 +534,7 @@ mod tests {
         assert_eq!(in_range.len(), 1);
         assert_eq!(in_range[0].id, first.id);
 
-        let unscheduled = tasks_list_impl(
-            &fx.state,
-            TaskFilter {
+        let unscheduled = tasks_list_impl(&fx.state, SPACE.to_string(), TaskFilter {
                 start_date: Some("2026-01-01".to_string()),
                 end_date: Some("2026-12-31".to_string()),
                 ..Default::default()
@@ -475,5 +545,46 @@ mod tests {
         assert!(unscheduled.iter().any(|t| t.id == first.id));
         assert!(unscheduled.iter().any(|t| t.id == second.id));
         assert!(!unscheduled.iter().any(|t| t.title == "C"));
+    }
+
+    #[test]
+    fn list_filters_unscheduled_tasks() {
+        let fx = fixture();
+        let scheduled = tasks_create_impl(
+            &fx.state,
+            SPACE.to_string(),
+            create_payload(json!({ "title": "Dated", "dueDate": "2026-10-15" })),
+        )
+        .unwrap();
+        let undated = tasks_create_impl(
+            &fx.state,
+            SPACE.to_string(),
+            create_payload(json!({ "title": "Undated" })),
+        )
+        .unwrap();
+
+        let only_unscheduled = tasks_list_impl(
+            &fx.state,
+            SPACE.to_string(),
+            TaskFilter {
+                has_due_date: Some(false),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(only_unscheduled.len(), 1);
+        assert_eq!(only_unscheduled[0].id, undated.id);
+
+        let only_scheduled = tasks_list_impl(
+            &fx.state,
+            SPACE.to_string(),
+            TaskFilter {
+                has_due_date: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(only_scheduled.len(), 1);
+        assert_eq!(only_scheduled[0].id, scheduled.id);
     }
 }

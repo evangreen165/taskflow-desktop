@@ -14,6 +14,7 @@ import {
 import { PRIORITY_LABELS } from "@/lib/taskMeta";
 import type { TaskPriority, TaskStatus } from "@/services/tasks";
 import { startTaskWatcher } from "@/stores/taskWatcher";
+import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useTaskStore } from "@/stores/useTaskStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useUserDirectory } from "@/stores/useUserDirectory";
@@ -34,6 +35,7 @@ type BoardView = "kanban" | "list";
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 
 export default function TasksPage(): JSX.Element {
+  const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const tasks = useTaskStore((s) => s.tasks);
   const loading = useTaskStore((s) => s.loading);
   const fetchTasks = useTaskStore((s) => s.fetchTasks);
@@ -56,8 +58,10 @@ export default function TasksPage(): JSX.Element {
   const filterActive = isFilterActive(filter);
 
   useEffect(() => {
-    void fetchTasks();
-  }, [fetchTasks]);
+    if (spaceId) {
+      void fetchTasks(spaceId);
+    }
+  }, [fetchTasks, spaceId]);
 
   // Live updates: another machine or an external editor changing tasks/ files.
   useEffect(() => {
@@ -89,7 +93,10 @@ export default function TasksPage(): JSX.Element {
   }
 
   async function handleMove(id: string, status: TaskStatus, version: number): Promise<void> {
-    const error = await moveTask(id, status, version);
+    if (!spaceId) {
+      return;
+    }
+    const error = await moveTask(spaceId, id, status, version);
     if (error && !GLOBAL_TOAST_CODES.has(error.code)) {
       pushToast(messageForCode(error.code, error.message), "error");
     }
@@ -173,7 +180,11 @@ export default function TasksPage(): JSX.Element {
 
       {loading ? <div className={styles.loading}>Загрузка задач…</div> : null}
 
-      {!loading && filteredTasks.length === 0 && filterActive ? (
+      {!spaceId ? (
+        <div className={styles.emptyState}>Загрузка пространства…</div>
+      ) : !loading && tasks.length === 0 && !filterActive ? (
+        <div className={styles.emptyState}>В этом пространстве пока нет задач.</div>
+      ) : !loading && filteredTasks.length === 0 && filterActive ? (
         <div className={styles.emptyState}>Ничего не найдено</div>
       ) : view === "kanban" ? (
         <KanbanBoard
@@ -191,19 +202,24 @@ export default function TasksPage(): JSX.Element {
         />
       )}
 
-      {modalOpen ? (
+      {modalOpen && spaceId ? (
         <NewTaskModal
+          spaceId={spaceId}
           initialStatus={modalStatus}
           onClose={() => setModalOpen(false)}
           onCreated={addTask}
         />
       ) : null}
 
-      {selectedTask ? (
+      {selectedTask && spaceId ? (
         <TaskDetailPanel
           key={selectedTask.id}
           task={selectedTask}
-          onClose={() => setSelectedId(null)}
+          spaceId={spaceId}
+          onClose={() => {
+            setSelectedId(null);
+            void fetchTasks(spaceId);
+          }}
         />
       ) : null}
     </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 
 import { KANBAN_COLUMNS, PRIORITY_LABELS } from "@/lib/taskMeta";
 import { TasksService, type Task, type TaskPriority, type TaskStatus } from "@/services/tasks";
@@ -6,6 +6,7 @@ import { TasksService, type Task, type TaskPriority, type TaskStatus } from "@/s
 import styles from "./NewTaskModal.module.css";
 
 interface NewTaskModalProps {
+  spaceId: string;
   initialStatus: TaskStatus;
   onClose: () => void;
   onCreated: (task: Task) => void;
@@ -14,6 +15,7 @@ interface NewTaskModalProps {
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 
 export default function NewTaskModal({
+  spaceId,
   initialStatus,
   onClose,
   onCreated,
@@ -32,7 +34,7 @@ export default function NewTaskModal({
     }
     setBusy(true);
     setError(null);
-    const result = await TasksService.create({
+    const result = await TasksService.create(spaceId, {
       title: title.trim(),
       description: description.trim(),
       priority,

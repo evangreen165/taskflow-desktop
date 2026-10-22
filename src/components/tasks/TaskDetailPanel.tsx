@@ -1,18 +1,28 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 import Avatar from "@/components/Avatar";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTaskEditor } from "@/hooks/useTaskEditor";
+import { messageForCode } from "@/lib/errorMessages";
 import { KANBAN_COLUMNS, PRIORITY_LABELS, formatDateTime } from "@/lib/taskMeta";
-import type { Comment, Task, TaskPriority, TaskStatus } from "@/services/tasks";
+import {
+  TasksService,
+  type Comment,
+  type Task,
+  type TaskPriority,
+  type TaskStatus,
+} from "@/services/tasks";
 import type { UserSummary } from "@/services/users";
+import { useSpaceStore } from "@/stores/useSpaceStore";
+import { useToastStore } from "@/stores/useToastStore";
 import { useUserDirectory } from "@/stores/useUserDirectory";
 
 import styles from "./TaskDetailPanel.module.css";
 
 interface TaskDetailPanelProps {
   task: Task;
+  spaceId: string;
   onClose: () => void;
 }
 
@@ -21,7 +31,11 @@ type ViewMode = "read" | "edit";
 
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 
-export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps): JSX.Element {
+export default function TaskDetailPanel({
+  task,
+  spaceId,
+  onClose,
+}: TaskDetailPanelProps): JSX.Element {
   const allUsers = useUserDirectory((s) => s.all);
   const directory = useUserDirectory((s) => s.users);
   const loadAll = useUserDirectory((s) => s.loadAll);
@@ -47,7 +61,7 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
     reloadCurrent,
     dismissConflict,
     adoptExternal,
-  } = useTaskEditor(task);
+  } = useTaskEditor(task, spaceId);
 
   // Text fields (title/description) require an explicit edit mode; the other
   // controls (status/priority/assignees/checklist/comments) stay available.
@@ -55,6 +69,11 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
   const [previewMode, setPreviewMode] = useState<PreviewMode>("edit");
   const [newItem, setNewItem] = useState("");
   const [commentText, setCommentText] = useState("");
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [targetSpaceId, setTargetSpaceId] = useState("");
+  const [moving, setMoving] = useState(false);
+  const spaces = useSpaceStore((s) => s.spaces);
+  const pushToast = useToastStore((s) => s.push);
 
   useEffect(() => {
     void loadAll();
@@ -68,6 +87,23 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
   async function handleDone(): Promise<void> {
     await flush();
     setViewMode("read");
+  }
+
+  async function handleMove(): Promise<void> {
+    if (!targetSpaceId) {
+      return;
+    }
+    setMoving(true);
+    const result = await TasksService.move(task.id, spaceId, targetSpaceId);
+    setMoving(false);
+    if (!result.ok) {
+      pushToast(messageForCode(result.error.code, result.error.message), "error");
+      return;
+    }
+    const target = spaces.find((space) => space.id === targetSpaceId);
+    pushToast(`Задача перемещена в «${target?.name ?? "пространство"}»`, "success");
+    setMoveOpen(false);
+    onClose();
   }
 
   function toggleAssignee(id: string): void {
@@ -188,6 +224,21 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
               />
             </div>
           </div>
+
+          {viewMode === "edit" && can("task.edit") ? (
+            <div className={styles.section}>
+              <button
+                className="btn-ghost"
+                type="button"
+                onClick={() => {
+                  setTargetSpaceId("");
+                  setMoveOpen(true);
+                }}
+              >
+                Переместить в пространство
+              </button>
+            </div>
+          ) : null}
 
           <div className={styles.section}>
             <label>Исполнители</label>
@@ -317,6 +368,45 @@ export default function TaskDetailPanel({ task, onClose }: TaskDetailPanelProps)
             </div>
           </div>
         </div>
+
+        {moveOpen ? (
+          <div className={styles.modalBackdrop}>
+            <div className={styles.conflictCard}>
+              <h3>Переместить задачу</h3>
+              <p>Выберите пространство, в которое нужно переместить задачу.</p>
+              <div className="field">
+                <label htmlFor="move-space">Пространство</label>
+                <select
+                  id="move-space"
+                  value={targetSpaceId}
+                  onChange={(event) => setTargetSpaceId(event.target.value)}
+                >
+                  <option value="">— выберите пространство —</option>
+                  {spaces
+                    .filter((space) => space.id !== spaceId)
+                    .map((space) => (
+                      <option key={space.id} value={space.id}>
+                        {space.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className={styles.actions}>
+                <button className="btn-ghost" type="button" onClick={() => setMoveOpen(false)}>
+                  Отмена
+                </button>
+                <button
+                  className="btn-primary"
+                  type="button"
+                  disabled={!targetSpaceId || moving}
+                  onClick={() => void handleMove()}
+                >
+                  {moving ? "Перемещение…" : "Переместить"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {conflictTask ? (
           <div className={styles.modalBackdrop}>

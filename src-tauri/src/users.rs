@@ -200,6 +200,7 @@ pub fn create(
     let mut bytes = serde_json::to_vec_pretty(&user)?;
     bytes.push(b'\n');
     fsops::create_exclusive(&user_path(root, &login), &bytes)?;
+    crate::spaces::ensure_personal(root, &user.id, &user.display_name)?;
     Ok(UserInfo::from(&user))
 }
 

@@ -1,5 +1,6 @@
 import { StorageService } from "@/services/storage";
 import { TasksService } from "@/services/tasks";
+import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useTaskStore } from "@/stores/useTaskStore";
 
 const DEBOUNCE_MS = 300;
@@ -19,7 +20,11 @@ function scheduleRefetch(): void {
 }
 
 async function refetch(): Promise<void> {
-  const result = await TasksService.list({});
+  const spaceId = useSpaceStore.getState().currentSpaceId;
+  if (!spaceId) {
+    return;
+  }
+  const result = await TasksService.list(spaceId, {});
   if (result.ok) {
     useTaskStore.getState().setTasksSilently(result.value);
   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -31,6 +31,7 @@ import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import { messageForCode } from "@/lib/errorMessages";
 import { priorityColor } from "@/lib/taskMeta";
 import { TasksService, type Task } from "@/services/tasks";
+import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useToastStore } from "@/stores/useToastStore";
 
 import styles from "./CalendarPage.module.css";
@@ -39,8 +40,38 @@ const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const UNSCHEDULED_DROP_ID = "unscheduled";
 const MAX_CELL_TASKS = 3;
 
-/** Prefers pointer-precise targets; falls back to rectangle intersection. */
+function pointInRect(
+  point: { x: number; y: number },
+  rect: { top: number; left: number; width: number; height: number },
+): boolean {
+  return (
+    point.x >= rect.left &&
+    point.x <= rect.left + rect.width &&
+    point.y >= rect.top &&
+    point.y <= rect.top + rect.height
+  );
+}
+
+/**
+ * Prefers the "Без срока" sidebar while the pointer is over it, then falls back
+ * to pointer-precise hits and finally rectangle intersection.
+ *
+ * The calendar grid scrolls horizontally, so on narrower windows its day cells
+ * extend geometrically under the sidebar and can win `pointerWithin` even though
+ * they are visually clipped. Prioritising the sidebar is what makes dragging a
+ * scheduled task out of a day cell work.
+ */
 const calendarCollision: CollisionDetection = (args) => {
+  const pointer = args.pointerCoordinates;
+  const sidebarRect = args.droppableRects.get(UNSCHEDULED_DROP_ID);
+  if (pointer && sidebarRect && pointInRect(pointer, sidebarRect)) {
+    return pointerWithin({
+      ...args,
+      droppableContainers: args.droppableContainers.filter(
+        (container) => container.id === UNSCHEDULED_DROP_ID,
+      ),
+    });
+  }
   const pointerHits = pointerWithin(args);
   return pointerHits.length > 0 ? pointerHits : rectIntersection(args);
 };
@@ -56,6 +87,7 @@ function dayKey(day: Date): string {
 }
 
 export default function CalendarPage(): JSX.Element {
+  const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const pushToast = useToastStore((s) => s.push);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -75,16 +107,29 @@ export default function CalendarPage(): JSX.Element {
   }, [view, cursor]);
 
   const load = useCallback(async () => {
+    if (!spaceId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const result = await TasksService.list({
-      startDate: format(range.start, "yyyy-MM-dd"),
-      endDate: format(range.end, "yyyy-MM-dd"),
-    });
-    if (result.ok) {
-      setTasks(result.value);
+    const [scheduled, unscheduled] = await Promise.all([
+      TasksService.list(spaceId, {
+        startDate: format(range.start, "yyyy-MM-dd"),
+        endDate: format(range.end, "yyyy-MM-dd"),
+      }),
+      // Tasks without a due date never match a date range; fetch them
+      // separately so the "Без срока" sidebar is populated.
+      TasksService.list(spaceId, { hasDueDate: false }),
+    ]);
+    if (scheduled.ok && unscheduled.ok) {
+      const byId = new Map<string, Task>();
+      for (const task of [...scheduled.value, ...unscheduled.value]) {
+        byId.set(task.id, task);
+      }
+      setTasks([...byId.values()]);
     }
     setLoading(false);
-  }, [range]);
+  }, [range, spaceId]);
 
   useEffect(() => {
     void load();
@@ -105,7 +150,10 @@ export default function CalendarPage(): JSX.Element {
   function moveTask(id: string, dueDate: string | null, version: number): void {
     setTasks((prev) => prev.map((task) => (task.id === id ? { ...task, dueDate } : task)));
     void (async () => {
-      const result = await TasksService.update(id, { dueDate }, version);
+      if (!spaceId) {
+        return;
+      }
+      const result = await TasksService.update(spaceId, id, { dueDate }, version);
       if (!result.ok) {
         pushToast(messageForCode(result.error.code, result.error.message), "error");
         void load();
@@ -117,6 +165,12 @@ export default function CalendarPage(): JSX.Element {
 
   function handleDragEnd(event: DragEndEvent): void {
     const { active, over } = event;
+    if (import.meta.env.DEV) {
+      console.debug("[calendar] drag end", {
+        activeId: active.id,
+        overId: over?.id ?? null,
+      });
+    }
     if (!over) {
       return;
     }
@@ -263,10 +317,11 @@ export default function CalendarPage(): JSX.Element {
         </div>
       </DndContext>
 
-      {selectedTask ? (
+      {selectedTask && spaceId ? (
         <TaskDetailPanel
           key={selectedTask.id}
           task={selectedTask}
+          spaceId={spaceId}
           onClose={() => {
             setSelectedTaskId(null);
             void load();

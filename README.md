@@ -18,6 +18,30 @@ TaskFlow is a serverless desktop application designed for small teams. It combin
 - **Concurrency:** Optimistic locking (version numbers) for all write operations to prevent data loss over the network.
 - **Watchers:** Real-time filesystem watchers to sync changes between multiple users via SMB.
 
+## Security Model & Limitations
+
+TaskFlow's RBAC is enforced in the Rust backend and governs what the _application_
+allows each role to do. It protects users from **accidental** damage: a regular
+user cannot edit someone else's tasks, and a space can only be managed by its
+owner or a role with the `space.manage` permission.
+
+These checks are **not** a real security boundary. Every workspace is a plain
+folder with JSON and Markdown files, and any Windows user who has filesystem
+access to the SMB share can open them in Notepad, edit them, or copy them
+elsewhere — completely bypassing the app.
+
+To protect the data for real:
+
+- Configure **NTFS ACLs** on the shared folder (and the share itself) so only
+  intended users can read or write it.
+- Keep user accounts on the Windows machine separate from the SMB credentials;
+  in-app roles are UI-level conveniences, not access control.
+- Passwords are stored as Argon2id hashes, but the hash files sit on the same
+  disk — treat the workspace folder as sensitive data.
+
+In short: **the app protects against accidents; the OS file permissions protect
+against unauthorized access.**
+
 ## Project Stages (History)
 
 - **v0.1.0 (Foundation):** Basic Tauri skeleton, workspace initialization, atomic file operations, secure path resolution.

@@ -44,6 +44,9 @@ export interface Task {
   version: number;
   watchers: string[];
   projectId: string | null;
+  /** Set only in cross-space dashboard responses. */
+  spaceId: string | null;
+  spaceName: string | null;
 }
 
 export interface TaskFilter {
@@ -53,6 +56,8 @@ export interface TaskFilter {
   /** Inclusive `YYYY-MM-DD` range on `dueDate`. */
   startDate?: string;
   endDate?: string;
+  /** `false` returns only tasks without a due date, `true` only with one. */
+  hasDueDate?: boolean;
 }
 
 export interface CreateTaskPayload {
@@ -82,31 +87,52 @@ export interface UpdateTaskPayload {
 }
 
 export const TasksService = {
-  list(filter: TaskFilter = {}): Promise<Result<Task[]>> {
-    return invokeCommand<Task[]>("tasksList", { filter });
+  list(spaceId: string, filter: TaskFilter = {}): Promise<Result<Task[]>> {
+    return invokeCommand<Task[]>("tasksList", { spaceId, filter });
   },
 
-  get(id: string): Promise<Result<Task>> {
-    return invokeCommand<Task>("tasksGet", { id });
+  get(spaceId: string, id: string): Promise<Result<Task>> {
+    return invokeCommand<Task>("tasksGet", { spaceId, id });
   },
 
-  create(payload: CreateTaskPayload): Promise<Result<Task>> {
-    return invokeCommand<Task>("tasksCreate", { payload });
+  create(spaceId: string, payload: CreateTaskPayload): Promise<Result<Task>> {
+    return invokeCommand<Task>("tasksCreate", { spaceId, payload });
   },
 
-  update(id: string, patch: UpdateTaskPayload, version: number): Promise<Result<Task>> {
-    return invokeCommand<Task>("tasksUpdate", { id, patch, expectedVersion: version });
+  update(
+    spaceId: string,
+    id: string,
+    patch: UpdateTaskPayload,
+    version: number,
+  ): Promise<Result<Task>> {
+    return invokeCommand<Task>("tasksUpdate", {
+      spaceId,
+      id,
+      patch,
+      expectedVersion: version,
+    });
   },
 
-  changeStatus(id: string, status: TaskStatus, version: number): Promise<Result<Task>> {
+  changeStatus(
+    spaceId: string,
+    id: string,
+    status: TaskStatus,
+    version: number,
+  ): Promise<Result<Task>> {
     return invokeCommand<Task>("tasksChangeStatus", {
+      spaceId,
       id,
       status,
       expectedVersion: version,
     });
   },
 
-  delete(id: string): Promise<Result<void>> {
-    return invokeCommand<void>("tasksDelete", { id });
+  delete(spaceId: string, id: string): Promise<Result<void>> {
+    return invokeCommand<void>("tasksDelete", { spaceId, id });
+  },
+
+  /** Moves a task between spaces (requires access to both). */
+  move(taskId: string, fromSpaceId: string, toSpaceId: string): Promise<Result<Task>> {
+    return invokeCommand<Task>("tasksMove", { taskId, fromSpaceId, toSpaceId });
   },
 };

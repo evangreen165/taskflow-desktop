@@ -1,20 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
 
 import KbCard from "@/components/kb/KbCard";
 import NewNoteModal from "@/components/kb/NewNoteModal";
+import { useIsPersonalSpaceOwner } from "@/hooks/useIsPersonalSpaceOwner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EMPTY_KB_FILTER, filterNoteItems, type KbFilter } from "@/lib/kbMeta";
 import { NotesService } from "@/services/notes";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNoteStore } from "@/stores/useNoteStore";
+import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useUserDirectory } from "@/stores/useUserDirectory";
 
 import styles from "./KbPage.module.css";
 
 export default function KbPage(): JSX.Element {
+  const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const notes = useNoteStore((s) => s.notes);
   const categories = useNoteStore((s) => s.categories);
   const loading = useNoteStore((s) => s.loading);
@@ -26,6 +29,8 @@ export default function KbPage(): JSX.Element {
   const ensureUsers = useUserDirectory((s) => s.ensure);
   const currentUserId = useAuthStore((s) => s.session?.user.id ?? null);
   const { can } = usePermissions();
+  const personalOwner = useIsPersonalSpaceOwner();
+  const canWriteNotes = can("article.create") || personalOwner;
   const pushToast = useToastStore((s) => s.push);
   const navigate = useNavigate();
 
@@ -35,9 +40,11 @@ export default function KbPage(): JSX.Element {
   const [newCategoryName, setNewCategoryName] = useState("");
 
   useEffect(() => {
-    void fetchNotes();
-    void fetchCategories();
-  }, [fetchNotes, fetchCategories]);
+    if (spaceId) {
+      void fetchNotes(spaceId);
+      void fetchCategories(spaceId);
+    }
+  }, [fetchNotes, fetchCategories, spaceId]);
 
   useEffect(() => {
     const ids = Array.from(new Set(notes.map((note) => note.authorId)));
@@ -56,10 +63,10 @@ export default function KbPage(): JSX.Element {
   async function submitCategory(): Promise<void> {
     const name = newCategoryName.trim();
     setNewCategoryOpen(false);
-    if (!name) {
+    if (!name || !spaceId) {
       return;
     }
-    const created = await addCategory(name);
+    const created = await addCategory(spaceId, name);
     if (created) {
       setFilter((current) => ({ ...current, category: name }));
     }
@@ -73,13 +80,18 @@ export default function KbPage(): JSX.Element {
     if (typeof selected !== "string") {
       return;
     }
-    const result = await NotesService.importFile(selected);
+    if (!spaceId) {
+      return;
+    }
+    const result = await NotesService.importFile(spaceId, selected);
     if (!result.ok) {
       return;
     }
     pushToast(`Заметка «${result.value.meta.title}» импортирована`, "success");
-    void fetchNotes();
-    void fetchCategories();
+    if (spaceId) {
+      void fetchNotes(spaceId);
+      void fetchCategories(spaceId);
+    }
   }
 
   return (
@@ -87,7 +99,7 @@ export default function KbPage(): JSX.Element {
       <aside className={styles.sidebar}>
         <div className={styles.sidebarRow}>
           <div className={styles.sidebarTitle}>Категории</div>
-          {can("article.create") ? (
+          {canWriteNotes ? (
             <button
               className={styles.sidebarPlus}
               type="button"
@@ -138,12 +150,12 @@ export default function KbPage(): JSX.Element {
                 setFilter({ ...filter, category: filter.category === cat ? null : cat })
               }
             />
-            {can("article.create") ? (
+            {canWriteNotes ? (
               <button
                 className={styles.filterDelete}
                 type="button"
                 title={`Удалить категорию «${cat}»`}
-                onClick={() => void removeCategory(cat)}
+                onClick={() => spaceId && void removeCategory(spaceId, cat)}
               >
                 ✕
               </button>
@@ -183,20 +195,26 @@ export default function KbPage(): JSX.Element {
               Сбросить
             </button>
           ) : null}
-          {can("article.create") ? (
+          {canWriteNotes ? (
             <button className="btn-ghost" type="button" onClick={() => void handleImport()}>
               Импорт
             </button>
           ) : null}
-          <button className="btn-primary" type="button" onClick={() => setModalOpen(true)}>
-            Новая статья
-          </button>
+          {canWriteNotes ? (
+            <button className="btn-primary" type="button" onClick={() => setModalOpen(true)}>
+              Новая статья
+            </button>
+          ) : null}
         </div>
 
         {loading ? <div className={styles.loading}>Загрузка…</div> : null}
 
         {!loading && visible.length === 0 ? (
-          <div className={styles.emptyState}>Ничего не найдено</div>
+          <div className={styles.emptyState}>
+            {notes.length === 0 && !filterActive
+              ? "В этом пространстве пока нет заметок."
+              : "Ничего не найдено"}
+          </div>
         ) : (
           <div className={styles.grid}>
             {visible.map((item) => (
@@ -211,8 +229,9 @@ export default function KbPage(): JSX.Element {
         )}
       </div>
 
-      {modalOpen ? (
+      {modalOpen && spaceId ? (
         <NewNoteModal
+          spaceId={spaceId}
           categories={categories}
           onClose={() => setModalOpen(false)}
           onCreated={(note) => navigate(`/app/kb/${note.meta.id}`)}
