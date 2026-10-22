@@ -31,17 +31,24 @@ export default function DashboardPage(): JSX.Element {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
     const result = await DashboardService.getSummary(null);
     if (result.ok) {
       setSummary(result.value);
     }
-    setLoading(false);
+    if (!silent) {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     void load();
+    // SMB watchers can drop events; refresh the dashboard silently every 30 s.
+    const timer = setInterval(() => void load(true), 30_000);
+    return () => clearInterval(timer);
   }, [load]);
 
   const selectedTask: Task | null =

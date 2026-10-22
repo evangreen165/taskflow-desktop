@@ -6,6 +6,7 @@ import { router } from "@/App";
 import Toaster from "@/components/Toast/Toaster";
 import { setAppNavigator } from "@/lib/navigate";
 import { setupAuthWatcher } from "@/stores/useAuthStore";
+import { setupNotificationWatcher } from "@/stores/useNotificationStore";
 import { applyTheme, useThemeStore } from "@/stores/useThemeStore";
 import "@/styles/global.css";
 
@@ -27,3 +28,4 @@ ReactDOM.createRoot(container).render(
 );
 
 setupAuthWatcher();
+setupNotificationWatcher();

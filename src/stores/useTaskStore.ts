@@ -11,6 +11,8 @@ interface TaskState {
   lastWriteAt: number;
   /** Loads all visible tasks (`tasksList` with an empty filter). */
   fetchTasks: (spaceId: string) => Promise<void>;
+  /** Refreshes the list without toggling `loading` (watcher / background poll). */
+  fetchTasksSilently: (spaceId: string) => Promise<void>;
   /** Replaces the list without touching `loading` (watcher refresh). */
   setTasksSilently: (tasks: Task[]) => void;
   addTask: (task: Task) => void;
@@ -46,6 +48,13 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
   setTasksSilently: (tasks) => {
     set({ tasks });
+  },
+
+  fetchTasksSilently: async (spaceId) => {
+    const result = await TasksService.list(spaceId, {});
+    if (result.ok) {
+      set({ tasks: result.value });
+    }
   },
 
   addTask: (task) => {

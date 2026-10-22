@@ -31,10 +31,11 @@ async function refetch(): Promise<void> {
 }
 
 /**
- * Subscribes the board to `workspace://fs-event`: any change under `tasks/`
- * (another machine or an external editor) triggers a debounced, silent
- * refetch. Events produced by our own writes within the quiet window are
- * skipped to avoid redundant refetches. Returns an unsubscribe function.
+ * Subscribes the board to `workspace://fs-event`: any change under the current
+ * space's `spaces/{spaceId}/tasks/` (another machine or an external editor)
+ * triggers a debounced, silent refetch. The legacy root-level `tasks/` path is
+ * still accepted for older workspaces. Events produced by our own writes within
+ * the quiet window are skipped to avoid redundant refetches.
  */
 export function startTaskWatcher(): () => void {
   let disposed = false;
@@ -42,7 +43,12 @@ export function startTaskWatcher(): () => void {
     if (disposed) {
       return;
     }
-    const relevant = batch.events.some((event) => event.path.startsWith("tasks/"));
+    const spaceId = useSpaceStore.getState().currentSpaceId;
+    const relevant = batch.events.some(
+      (event) =>
+        (spaceId !== null && event.path.startsWith(`spaces/${spaceId}/tasks/`)) ||
+        event.path.startsWith("tasks/"),
+    );
     if (!relevant) {
       return;
     }

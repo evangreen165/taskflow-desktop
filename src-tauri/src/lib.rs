@@ -9,6 +9,7 @@ mod locking;
 mod logging;
 mod migrate;
 mod notes;
+mod notifications;
 mod path;
 mod permissions;
 mod roles;
@@ -205,6 +206,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_data_dir)?;
@@ -267,8 +269,15 @@ pub fn run() {
             commands::attachment_remove,
             commands::attachment_open,
             commands::dashboard_summary,
+            commands::global_search,
+            commands::check_offline_update,
+            commands::install_offline_update,
+            commands::notifications_list,
+            commands::notifications_mark_read,
+            commands::notifications_mark_all_read,
             commands::spaces_list,
             commands::spaces_get,
+            commands::spaces_get_members,
             commands::spaces_create,
             commands::spaces_update,
             commands::spaces_delete,

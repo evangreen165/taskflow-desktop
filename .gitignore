@@ -28,3 +28,6 @@ tmp/
 
 # Agent tool state
 .kilo/plans/
+
+# Updater signing keys (never commit private keys)
+*.key

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import KanbanBoard from "@/components/tasks/KanbanBoard";
 import NewTaskModal from "@/components/tasks/NewTaskModal";
@@ -39,6 +40,7 @@ export default function TasksPage(): JSX.Element {
   const tasks = useTaskStore((s) => s.tasks);
   const loading = useTaskStore((s) => s.loading);
   const fetchTasks = useTaskStore((s) => s.fetchTasks);
+  const fetchTasksSilently = useTaskStore((s) => s.fetchTasksSilently);
   const addTask = useTaskStore((s) => s.addTask);
   const moveTask = useTaskStore((s) => s.moveTask);
 
@@ -53,6 +55,8 @@ export default function TasksPage(): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<BoardView>("kanban");
   const [filter, setFilter] = useState<TaskFilterState>(EMPTY_TASK_FILTER);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const taskParam = searchParams.get("task");
 
   const filteredTasks = useMemo(() => filterTasks(tasks, filter), [tasks, filter]);
   const filterActive = isFilterActive(filter);
@@ -63,11 +67,29 @@ export default function TasksPage(): JSX.Element {
     }
   }, [fetchTasks, spaceId]);
 
+  // Deep link from the command palette: /app/tasks?task=<id>.
+  useEffect(() => {
+    if (taskParam) {
+      setSelectedId(taskParam);
+    }
+  }, [taskParam]);
+
   // Live updates: another machine or an external editor changing tasks/ files.
   useEffect(() => {
     const unsubscribe = startTaskWatcher();
     return unsubscribe;
   }, []);
+
+  // SMB watchers can drop events; poll every 30 s as a silent fallback.
+  useEffect(() => {
+    if (!spaceId) {
+      return;
+    }
+    const timer = setInterval(() => {
+      void fetchTasksSilently(spaceId);
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [fetchTasksSilently, spaceId]);
 
   useEffect(() => {
     void loadAll();
@@ -218,6 +240,11 @@ export default function TasksPage(): JSX.Element {
           spaceId={spaceId}
           onClose={() => {
             setSelectedId(null);
+            if (taskParam) {
+              const next = new URLSearchParams(searchParams);
+              next.delete("task");
+              setSearchParams(next, { replace: true });
+            }
             void fetchTasks(spaceId);
           }}
         />

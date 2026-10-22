@@ -2,12 +2,15 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import Avatar from "@/components/Avatar";
+import NotificationBell from "@/components/notifications/NotificationBell";
+import CommandPalette from "@/components/search/CommandPalette";
 import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { SpacesService } from "@/services/spaces";
 import { UsersService, type UserSummary } from "@/services/users";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { useNotificationStore } from "@/stores/useNotificationStore";
 import { isOwnPersonalSpace, isPersonalSpace, useSpaceStore } from "@/stores/useSpaceStore";
 
 import styles from "./WorkspaceLayout.module.css";
@@ -66,15 +69,25 @@ export default function WorkspaceLayout(): JSX.Element {
   const [memberDraft, setMemberDraft] = useState<string[]>([]);
   const [membersBusy, setMembersBusy] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const currentSpace = spaces.find((space) => space.id === currentSpaceId) ?? null;
   const canAdmin =
     can("users.manage") || can("roles.manage") || can("space.manage") || can("audit.view");
   const personalOwner = isOwnPersonalSpace(currentSpace, user?.id);
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const fetchNotifications = useNotificationStore((s) => s.fetch);
 
   useEffect(() => {
     void fetchSpaces();
   }, [fetchSpaces]);
+
+  // Poll notifications so assignments from other users appear without a reload.
+  useEffect(() => {
+    void fetchNotifications();
+    const timer = setInterval(() => void fetchNotifications(), 30_000);
+    return () => clearInterval(timer);
+  }, [fetchNotifications]);
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent): void {
@@ -88,6 +101,18 @@ export default function WorkspaceLayout(): JSX.Element {
     }
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
+  }, []);
+
+  // Ctrl+K on Windows/Linux, Cmd+K on macOS opens the command palette.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   async function createSpace(): Promise<void> {
@@ -313,6 +338,19 @@ export default function WorkspaceLayout(): JSX.Element {
               </div>
             ) : null}
           </div>
+          <button
+            type="button"
+            className={styles.searchButton}
+            onClick={() => setPaletteOpen(true)}
+            aria-label="Глобальный поиск"
+          >
+            <span className={styles.searchIcon} aria-hidden="true">
+              🔍
+            </span>
+            <span className={styles.searchLabel}>Поиск задач и заметок…</span>
+            <kbd className={styles.searchKbd}>{isMac ? "⌘ K" : "Ctrl K"}</kbd>
+          </button>
+          <NotificationBell />
           <div className={styles.spacer} />
           <button className="btn-ghost" type="button" onClick={() => setChangeFolderOpen(true)}>
             Сменить папку
@@ -424,6 +462,8 @@ export default function WorkspaceLayout(): JSX.Element {
           </div>
         </div>
       ) : null}
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </div>
   );
 }

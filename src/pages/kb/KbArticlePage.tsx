@@ -13,6 +13,7 @@ import { categoryIcon, formatDate, NOTE_STATUS_LABELS } from "@/lib/kbMeta";
 import { AttachmentsService } from "@/services/attachments";
 import { NotesService, type Note, type NoteMeta } from "@/services/notes";
 import { useNoteStore } from "@/stores/useNoteStore";
+import { useRecentStore } from "@/stores/useRecentStore";
 import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useUserDirectory } from "@/stores/useUserDirectory";
@@ -29,6 +30,7 @@ export default function KbArticlePage(): JSX.Element {
   const canPublishArticle = can("article.publish") || personalOwner;
   const canDeleteArticle = can("article.delete") || personalOwner;
   const fetchCategories = useNoteStore((s) => s.fetchCategories);
+  const recordRecent = useRecentStore((s) => s.record);
   const pushToast = useToastStore((s) => s.push);
   const users = useUserDirectory((s) => s.users);
   const ensureUsers = useUserDirectory((s) => s.ensure);
@@ -78,6 +80,13 @@ export default function KbArticlePage(): JSX.Element {
       void fetchCategories(spaceId);
     }
   }, [spaceId, fetchCategories]);
+
+  // Remember the last viewed notes for the command palette's "Недавние".
+  useEffect(() => {
+    if (note && spaceId) {
+      recordRecent({ kind: "note", id: note.meta.id, title: note.meta.title, spaceId });
+    }
+  }, [note, recordRecent, spaceId]);
 
   useEffect(() => {
     if (note) {

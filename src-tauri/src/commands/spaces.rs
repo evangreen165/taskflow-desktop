@@ -1,11 +1,14 @@
 ﻿use tauri::State;
 
+use serde::Serialize;
+
 use taskflow_macros::write_command;
 
 use crate::error::AppError;
 use crate::roles;
 use crate::session::Session;
 use crate::spaces::{self, Space};
+use crate::users;
 use crate::AppState;
 
 fn has_perm(root: &std::path::Path, session: &Session, perm: &str) -> Result<bool, AppError> {
@@ -46,6 +49,47 @@ pub fn spaces_get_impl(state: &AppState, id: String) -> Result<Space, AppError> 
 #[tauri::command(rename = "spacesGet")]
 pub fn spaces_get(state: State<'_, AppState>, id: String) -> Result<Space, AppError> {
     spaces_get_impl(&state, id)
+}
+
+/// Minimal projection of a space member for the assignee picker and @mentions.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpaceMember {
+    pub id: String,
+    pub login: String,
+    pub display_name: String,
+    pub avatar_color: String,
+    pub avatar_sha256: Option<String>,
+}
+
+/// Active members of a space. Used by the assignee picker so tasks cannot be
+/// assigned to users from other spaces.
+pub fn spaces_get_members_impl(
+    state: &AppState,
+    space_id: String,
+) -> Result<Vec<SpaceMember>, AppError> {
+    let session = state.require_auth()?;
+    let root = state.root()?;
+    let space = spaces::require_access(&root, &space_id, &session)?;
+    Ok(users::list(&root)?
+        .into_iter()
+        .filter(|user| user.is_active && spaces::is_member(&space, &user.id))
+        .map(|user| SpaceMember {
+            id: user.id,
+            login: user.login,
+            display_name: user.display_name,
+            avatar_color: user.avatar_color,
+            avatar_sha256: user.avatar_sha256,
+        })
+        .collect())
+}
+
+#[tauri::command(rename = "spacesGetMembers")]
+pub fn spaces_get_members(
+    state: State<'_, AppState>,
+    space_id: String,
+) -> Result<Vec<SpaceMember>, AppError> {
+    spaces_get_members_impl(&state, space_id)
 }
 
 pub fn spaces_create_impl(
@@ -89,7 +133,12 @@ pub fn spaces_update_impl(
             ));
         }
     }
-    spaces::update(&root, &id, &name, &description, members)
+    let updated = spaces::update(&root, &id, &name, &description, members)?;
+    if let Err(err) = crate::notifications::on_space_updated(&root, &session.user_id, &space, &updated)
+    {
+        tracing::warn!(error = %err.message, "failed to create space-added notifications");
+    }
+    Ok(updated)
 }
 
 #[write_command(rename = "spacesUpdate")]
@@ -422,5 +471,39 @@ mod tests {
             notes_get_impl(&fx.state, fx.space_b.clone(), note.meta.id.clone()).unwrap();
         assert!(fetched.shared);
         assert_eq!(fetched.content, "body");
+    }
+
+    #[test]
+    fn get_members_returns_only_space_members() {
+        let fx = fixture();
+
+        // Alpha is owned by Alice and initially contains only her.
+        let members = spaces_get_members_impl(&fx.state, fx.space_a.clone()).unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].id, fx.user_a.id);
+
+        // Add the admin to Alpha; Bob stays out.
+        let space = crate::spaces::get(fx._dir.path(), &fx.space_a).unwrap();
+        spaces_update_impl(
+            &fx.state,
+            fx.space_a.clone(),
+            space.name,
+            space.description,
+            vec![fx.user_a.id.clone(), fx.admin.id.clone()],
+        )
+        .unwrap();
+        let members = spaces_get_members_impl(&fx.state, fx.space_a.clone()).unwrap();
+        assert_eq!(members.len(), 2);
+        assert!(members.iter().any(|user| user.id == fx.admin.id));
+        assert!(!members.iter().any(|user| user.id == fx.user_b.id));
+
+        // A non-member cannot enumerate Alpha's members.
+        fx.state.set_session(session_for(&fx.user_b.id, "executor"));
+        assert_eq!(
+            spaces_get_members_impl(&fx.state, fx.space_a.clone())
+                .unwrap_err()
+                .code,
+            "FORBIDDEN"
+        );
     }
 }
