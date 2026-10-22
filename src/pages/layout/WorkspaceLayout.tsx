@@ -3,9 +3,11 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import Avatar from "@/components/Avatar";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import PluginFrame from "@/components/plugins/PluginFrame";
 import CommandPalette from "@/components/search/CommandPalette";
 import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
 import { usePermissions } from "@/hooks/usePermissions";
+import { PluginsService, type PluginManifest } from "@/services/plugins";
 import { SpacesService } from "@/services/spaces";
 import { UsersService, type UserSummary } from "@/services/users";
 import { useAppStore } from "@/stores/useAppStore";
@@ -70,12 +72,21 @@ export default function WorkspaceLayout(): JSX.Element {
   const [membersBusy, setMembersBusy] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [plugins, setPlugins] = useState<PluginManifest[]>([]);
+  const [openPluginId, setOpenPluginId] = useState<string | null>(null);
 
   const currentSpace = spaces.find((space) => space.id === currentSpaceId) ?? null;
   const canAdmin =
     can("users.manage") || can("roles.manage") || can("space.manage") || can("audit.view");
   const personalOwner = isOwnPersonalSpace(currentSpace, user?.id);
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const injectedSidebar = plugins.filter((plugin) => plugin.ui?.inject === "sidebar");
+  const injectedTopbar = plugins.filter((plugin) => plugin.ui?.inject === "topbar");
+  const injectedFloating = plugins.filter((plugin) => plugin.ui?.inject === "floating");
+  const openPluginName =
+    openPluginId !== null
+      ? (plugins.find((plugin) => plugin.id === openPluginId)?.name ?? openPluginId)
+      : null;
   const fetchNotifications = useNotificationStore((s) => s.fetch);
 
   useEffect(() => {
@@ -113,6 +124,19 @@ export default function WorkspaceLayout(): JSX.Element {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Load plugins once so injected sidebar/topbar/floating buttons render.
+  useEffect(() => {
+    let cancelled = false;
+    void PluginsService.list().then((result) => {
+      if (!cancelled && result.ok) {
+        setPlugins(result.value);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function createSpace(): Promise<void> {
@@ -216,6 +240,21 @@ export default function WorkspaceLayout(): JSX.Element {
             <SideNavLink to="/app/admin" disabled={forced}>
               Администрирование
             </SideNavLink>
+          ) : null}
+          {injectedSidebar.length > 0 ? (
+            <>
+              <div className={styles.navLabel}>Плагины</div>
+              {injectedSidebar.map((plugin) => (
+                <button
+                  key={plugin.id}
+                  type="button"
+                  className={styles.pluginNavButton}
+                  onClick={() => setOpenPluginId(plugin.id)}
+                >
+                  <span aria-hidden="true">🧩</span> {plugin.name}
+                </button>
+              ))}
+            </>
           ) : null}
         </nav>
 
@@ -354,6 +393,17 @@ export default function WorkspaceLayout(): JSX.Element {
             <kbd className={styles.searchKbd}>{isMac ? "⌘ K" : "Ctrl K"}</kbd>
           </button>
           <NotificationBell />
+          {injectedTopbar.map((plugin) => (
+            <button
+              key={plugin.id}
+              type="button"
+              className={styles.pluginTopbarButton}
+              onClick={() => setOpenPluginId(plugin.id)}
+              title={plugin.name}
+            >
+              🧩 {plugin.name}
+            </button>
+          ))}
           <div className={styles.spacer} />
           <button className="btn-ghost" type="button" onClick={() => setChangeFolderOpen(true)}>
             Сменить папку
@@ -466,7 +516,39 @@ export default function WorkspaceLayout(): JSX.Element {
         </div>
       ) : null}
 
+      {injectedFloating.map((plugin) => (
+        <button
+          key={plugin.id}
+          type="button"
+          className={styles.pluginFab}
+          onClick={() => setOpenPluginId(plugin.id)}
+          title={plugin.name}
+          aria-label={`Открыть плагин ${plugin.name}`}
+        >
+          🧩
+        </button>
+      ))}
+
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+
+      {openPluginId !== null ? (
+        <div className={styles.pluginModalBackdrop} onClick={() => setOpenPluginId(null)}>
+          <div
+            className={styles.pluginModalCard}
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.pluginModalHeader}>
+              <span className={styles.pluginModalTitle}>🧩 {openPluginName}</span>
+              <button className="btn-ghost" type="button" onClick={() => setOpenPluginId(null)}>
+                Закрыть
+              </button>
+            </div>
+            <PluginFrame pluginId={openPluginId} />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

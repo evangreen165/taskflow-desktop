@@ -1,6 +1,7 @@
 mod attachments;
 mod auth;
 mod dashboard;
+mod llm;
 mod notes;
 mod notifications;
 mod plugins;
@@ -16,6 +17,7 @@ mod workspace;
 pub use attachments::*;
 pub use auth::*;
 pub use dashboard::*;
+pub use llm::*;
 pub use notes::*;
 pub use notifications::*;
 pub use plugins::*;

@@ -275,6 +275,7 @@ pub fn run() {
             commands::install_offline_update,
             commands::plugins_list,
             commands::plugin_get_content,
+            commands::llm_proxy_request,
             commands::notifications_list,
             commands::notifications_mark_read,
             commands::notifications_mark_all_read,

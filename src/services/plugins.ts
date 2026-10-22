@@ -7,6 +7,8 @@ export interface PluginManifest {
   version: string;
   entry: string;
   permissions: string[];
+  /** Injection point for the plugin UI: "sidebar" | "topbar" | "floating". */
+  ui: { inject: string } | null;
 }
 
 export const PluginsService = {

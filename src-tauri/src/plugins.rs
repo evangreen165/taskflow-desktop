@@ -19,6 +19,15 @@ pub struct PluginManifest {
     pub entry: String,
     #[serde(default)]
     pub permissions: Vec<String>,
+    /// Where the plugin wants its UI injected ("sidebar" | "topbar" | "floating").
+    #[serde(default)]
+    pub ui: Option<PluginUi>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginUi {
+    pub inject: String,
 }
 
 fn default_entry() -> String {
@@ -126,6 +135,7 @@ mod tests {
                 "version": "1.0.0",
                 "entry": "index.html",
                 "permissions": ["read_notes"],
+                "ui": { "inject": "sidebar" },
             }),
         );
         // A folder without a manifest.
@@ -139,6 +149,10 @@ mod tests {
         assert_eq!(plugins[0].name, "Граф заметок");
         assert_eq!(plugins[0].entry, "index.html");
         assert_eq!(plugins[0].permissions, vec!["read_notes".to_string()]);
+        assert_eq!(
+            plugins[0].ui.as_ref().map(|ui| ui.inject.as_str()),
+            Some("sidebar")
+        );
     }
 
     #[test]

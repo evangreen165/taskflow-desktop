@@ -87,13 +87,34 @@ The host replies into the iframe:
 
 ### Supported actions
 
-| Action           | Payload                          | Returns                           |
-| ---------------- | -------------------------------- | --------------------------------- |
-| `getTasks`       | —                                | tasks of the current space        |
-| `getNotes`       | —                                | note list of the current space    |
-| `getNoteContent` | `{ noteId }` (or `{ id }`)       | the `Note` (meta + content)       |
-| `createNote`     | `{ title, category?, content? }` | the created `Note`                |
-| `showToast`      | `{ message }`                    | `null` (shows a toast in the app) |
+| Action           | Payload                          | Returns                             |
+| ---------------- | -------------------------------- | ----------------------------------- |
+| `getTasks`       | —                                | tasks of the current space          |
+| `getNotes`       | —                                | note list of the current space      |
+| `getNoteContent` | `{ noteId }` (or `{ id }`)       | the `Note` (meta + content)         |
+| `createNote`     | `{ title, category?, content? }` | the created `Note`                  |
+| `showToast`      | `{ message }`                    | `null` (shows a toast in the app)   |
+| `llmChat`        | `{ url, apiKey?, body }`         | raw LLM provider JSON (CORS bypass) |
+
+### LLM proxy (`llmChat`)
+
+Browsers block cross-origin `fetch` from the sandboxed iframe. `llmChat` routes
+the request through TaskFlow's Rust backend (`llmProxyRequest`, `reqwest`),
+which forwards `body` to `url` with `Content-Type: application/json` and, when
+`apiKey` is set, `Authorization: Bearer <apiKey>`, then returns the raw provider
+JSON text. Only `http://`/`https://` URLs are allowed.
+
+```js
+const raw = await callPlugin("llmChat", {
+  url: "https://openrouter.ai/api/v1/chat/completions",
+  apiKey: "sk-...",
+  body: JSON.stringify({
+    model: "openai/gpt-4o-mini",
+    messages: [{ role: "user", content: "Привет!" }],
+  }),
+});
+const reply = JSON.parse(raw)?.choices?.[0]?.message?.content;
+```
 
 Only these actions exist: plugins cannot delete tasks, change roles, or touch
 any data outside the current user's permissions (the backend enforces RBAC on
