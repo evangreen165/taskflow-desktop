@@ -19,4 +19,9 @@ export const UpdaterService = {
   checkOffline(): Promise<Result<OfflineUpdate | null>> {
     return invokeCommand<OfflineUpdate | null>("checkOfflineUpdate");
   },
+
+  /** Spawns the offline installer; the app exits immediately afterwards. */
+  installOffline(path: string): Promise<Result<void>> {
+    return invokeCommand<void>("installOfflineUpdate", { path });
+  },
 };

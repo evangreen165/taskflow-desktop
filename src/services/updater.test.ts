@@ -28,4 +28,12 @@ describe("UpdaterService", () => {
     await expect(UpdaterService.checkOnline()).resolves.toBe(update);
     expect(checkMock).toHaveBeenCalled();
   });
+
+  it("installOffline sends the installer path", async () => {
+    invokeMock.mockResolvedValue(undefined);
+    await UpdaterService.installOffline("updates/setup.exe");
+    expect(invokeMock).toHaveBeenCalledWith("installOfflineUpdate", {
+      path: "updates/setup.exe",
+    });
+  });
 });

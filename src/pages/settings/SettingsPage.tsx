@@ -67,6 +67,21 @@ export default function SettingsPage(): JSX.Element {
     setChecking(false);
   }
 
+  async function installOffline(): Promise<void> {
+    if (!offlineUpdate?.path) {
+      return;
+    }
+    setInstalling(true);
+    setInstallMessage("Запуск установщика…");
+    const result = await UpdaterService.installOffline(offlineUpdate.path);
+    if (!result.ok) {
+      setInstalling(false);
+      setInstallMessage(null);
+      pushToast(result.error.message, "error");
+    }
+    // On success the backend launches the installer and exits the app.
+  }
+
   async function installOnline(): Promise<void> {
     if (!onlineUpdate) {
       return;
@@ -215,9 +230,21 @@ export default function SettingsPage(): JSX.Element {
               <div className={styles.updateCard}>
                 <strong>Офлайн-обновление {offlineUpdate.version}</strong>
                 {offlineUpdate.notes ? <p>{offlineUpdate.notes}</p> : null}
-                <p className={styles.muted}>
-                  Файл: {offlineUpdate.path ?? "updates/update.json"}. Установите вручную.
-                </p>
+                <p className={styles.muted}>Файл: {offlineUpdate.path ?? "updates/update.json"}</p>
+                {offlineUpdate.path ? (
+                  <button
+                    className="btn-primary"
+                    type="button"
+                    disabled={installing}
+                    onClick={() => void installOffline()}
+                  >
+                    {installing ? "Запуск…" : "Установить и перезапустить"}
+                  </button>
+                ) : (
+                  <p className={styles.muted}>
+                    В манифесте не указан путь к установщику — установите вручную.
+                  </p>
+                )}
               </div>
             ) : null}
 

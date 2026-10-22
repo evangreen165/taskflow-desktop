@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -80,6 +80,84 @@ pub fn check_offline_update(
     check_offline_update_impl(&root, &current)
 }
 
+/// Resolves and validates an offline installer. Only files inside the
+/// workspace's `updates/` folder with an `.exe`/`.msi` extension are allowed.
+fn resolve_installer(root: &Path, path: &str) -> Result<PathBuf, AppError> {
+    let candidate = Path::new(path);
+    let full = if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else {
+        crate::path::resolve_rel(root, path)?
+    };
+    if !full.is_file() {
+        return Err(AppError::new("NOT_FOUND", "installer file does not exist"));
+    }
+    let canonical = full
+        .canonicalize()
+        .map_err(|e| AppError::io("resolve installer", e))?;
+    let updates = root
+        .join("updates")
+        .canonicalize()
+        .map_err(|e| AppError::io("resolve updates folder", e))?;
+    if !canonical.starts_with(&updates) {
+        return Err(AppError::new(
+            "FORBIDDEN",
+            "installer must be inside the updates folder",
+        ));
+    }
+    let extension = canonical
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if extension != "exe" && extension != "msi" {
+        return Err(AppError::new(
+            "INVALID_INPUT",
+            "installer must be an .exe or .msi file",
+        ));
+    }
+    Ok(canonical)
+}
+
+/// Validation half of `installOfflineUpdate` (kept separate so it is testable
+/// without spawning a process or exiting the app).
+pub fn install_offline_update_impl(root: &Path, path: &str) -> Result<PathBuf, AppError> {
+    resolve_installer(root, path)
+}
+
+#[cfg(windows)]
+fn spawn_installer(installer: &Path) -> std::io::Result<std::process::Child> {
+    let is_msi = installer
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.eq_ignore_ascii_case("msi"))
+        .unwrap_or(false);
+    if is_msi {
+        std::process::Command::new("msiexec")
+            .arg("/i")
+            .arg(installer)
+            .spawn()
+    } else {
+        std::process::Command::new(installer).spawn()
+    }
+}
+
+#[cfg(not(windows))]
+fn spawn_installer(installer: &Path) -> std::io::Result<std::process::Child> {
+    std::process::Command::new(installer).spawn()
+}
+
+/// Launches the offline installer and immediately exits so the running app
+/// does not lock files the installer needs to replace.
+#[tauri::command(rename = "installOfflineUpdate")]
+pub fn install_offline_update(state: State<'_, AppState>, path: String) -> Result<(), AppError> {
+    state.require_auth()?;
+    let root = state.root()?;
+    let installer = install_offline_update_impl(&root, &path)?;
+    spawn_installer(&installer).map_err(|e| AppError::io("spawn installer", e))?;
+    std::process::exit(0);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,5 +218,50 @@ mod tests {
         assert!(is_newer("1.0.0-beta.1", "0.9.9"));
         assert!(!is_newer("0.6.0", "0.6.0"));
         assert!(!is_newer("not-a-version", "0.6.0"));
+    }
+
+    #[test]
+    fn resolves_installer_inside_updates_folder() {
+        let dir = tempdir().unwrap();
+        let updates = dir.path().join("updates");
+        std::fs::create_dir_all(&updates).unwrap();
+        std::fs::write(updates.join("setup.exe"), b"dummy").unwrap();
+        std::fs::write(updates.join("setup.msi"), b"dummy").unwrap();
+
+        assert!(install_offline_update_impl(dir.path(), "updates/setup.exe").is_ok());
+        assert!(install_offline_update_impl(dir.path(), "updates/setup.msi").is_ok());
+    }
+
+    #[test]
+    fn rejects_installers_outside_updates_or_with_wrong_extension() {
+        let dir = tempdir().unwrap();
+        let updates = dir.path().join("updates");
+        std::fs::create_dir_all(&updates).unwrap();
+        std::fs::write(updates.join("notes.txt"), b"x").unwrap();
+
+        assert_eq!(
+            install_offline_update_impl(dir.path(), "updates/notes.txt")
+                .unwrap_err()
+                .code,
+            "INVALID_INPUT"
+        );
+
+        let outside = dir.path().join("outside.exe");
+        std::fs::write(&outside, b"x").unwrap();
+        assert_eq!(
+            install_offline_update_impl(dir.path(), outside.to_str().unwrap())
+                .unwrap_err()
+                .code,
+            "FORBIDDEN"
+        );
+
+        assert_eq!(
+            install_offline_update_impl(dir.path(), "updates/missing.exe")
+                .unwrap_err()
+                .code,
+            "NOT_FOUND"
+        );
+
+        assert!(install_offline_update_impl(dir.path(), "../evil.exe").is_err());
     }
 }

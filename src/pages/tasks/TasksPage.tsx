@@ -40,6 +40,7 @@ export default function TasksPage(): JSX.Element {
   const tasks = useTaskStore((s) => s.tasks);
   const loading = useTaskStore((s) => s.loading);
   const fetchTasks = useTaskStore((s) => s.fetchTasks);
+  const fetchTasksSilently = useTaskStore((s) => s.fetchTasksSilently);
   const addTask = useTaskStore((s) => s.addTask);
   const moveTask = useTaskStore((s) => s.moveTask);
 
@@ -78,6 +79,17 @@ export default function TasksPage(): JSX.Element {
     const unsubscribe = startTaskWatcher();
     return unsubscribe;
   }, []);
+
+  // SMB watchers can drop events; poll every 30 s as a silent fallback.
+  useEffect(() => {
+    if (!spaceId) {
+      return;
+    }
+    const timer = setInterval(() => {
+      void fetchTasksSilently(spaceId);
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [fetchTasksSilently, spaceId]);
 
   useEffect(() => {
     void loadAll();

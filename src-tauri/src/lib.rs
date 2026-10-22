@@ -271,6 +271,7 @@ pub fn run() {
             commands::dashboard_summary,
             commands::global_search,
             commands::check_offline_update,
+            commands::install_offline_update,
             commands::notifications_list,
             commands::notifications_mark_read,
             commands::notifications_mark_all_read,
