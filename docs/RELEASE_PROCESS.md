@@ -26,22 +26,29 @@ The updater verifies release signatures with the public key stored in
 `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`).
 
 The matching **private key must never be committed** (`*.key` is git-ignored).
-Generate a keypair with:
+Generate a **passwordless** keypair with:
 
 ```bash
-npx tauri signer generate --ci -p "<password>" -w taskflow-updater.key -f
+npx tauri signer generate --ci -w ./taskflow-updater.key --force
 ```
 
-Add these repository secrets (Settings → Secrets and variables → Actions):
+> The key intentionally has **no password** (`--ci` skips the prompt; press
+> Enter if you run it interactively). This keeps CI simple: there is no password
+> to mismatch.
 
-| Secret                               | Value                              |
-| ------------------------------------ | ---------------------------------- |
-| `TAURI_SIGNING_PRIVATE_KEY`          | contents of `taskflow-updater.key` |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | the password used above            |
+Add this repository secret (Settings → Secrets and variables → Actions):
+
+| Secret                      | Value                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| `TAURI_SIGNING_PRIVATE_KEY` | entire contents of `taskflow-updater.key` (the `untrusted comment:` line + base64 key) |
+
+**Do not add `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.** The workflow does not use
+it. If it already exists from an older setup, **delete it** — a stale password
+makes the signer fail even though the new key has none.
 
 If the key is ever regenerated, update `plugins.updater.pubkey` in
-`tauri.conf.json` **and** the secrets together; otherwise every update will fail
-signature verification.
+`tauri.conf.json` **and** the `TAURI_SIGNING_PRIVATE_KEY` secret together;
+otherwise every update will fail signature verification.
 
 ### Updater endpoint
 
@@ -206,7 +213,8 @@ The version comparison is `major.minor.patch`; `v` prefixes and
 | Symptom                                       | Likely cause                                                                                                |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Actions workflow did not run                  | Tag not pushed, Actions disabled, or workflow added after the tag; use **Actions → Release → Run workflow** |
-| "signature verification failed"               | Private key/password in CI does not match `plugins.updater.pubkey`                                          |
+| "signature verification failed"               | `TAURI_SIGNING_PRIVATE_KEY` does not match `plugins.updater.pubkey`                                         |
+| Signing fails with a password/decrypt error   | Stale `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secret; the key is passwordless — delete it                      |
 | Online check returns 404                      | Repo is private, `latest.json` is missing, or the release is a draft/prerelease                             |
 | `latest.json` signature mismatch              | `.sig` content does not belong to the uploaded installer / wrong signing key                                |
 | Offline update not detected                   | Wrong folder (`updates/` must be in the workspace root), or `version` is not higher                         |
