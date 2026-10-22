@@ -2,6 +2,24 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.6.0] - 2026-10-22
+
+### Added
+
+- Spaces (personal & shared) with a space switcher and per-space data isolation
+- Personal spaces (`personal_{userId}`) with full owner rights regardless of global role
+- Cross-space collaboration: task transfer between spaces and note sharing
+- Per-space knowledge base categories (`spaces/{spaceId}/categories.json`)
+- Space-scoped permissions (`space.manage`), admin permission backfill, and safe folder switching
+
+### Fixed
+
+- Calendar drag-and-drop to/from the "Без срока" sidebar, including geometric overlap between the scrollable grid and the sidebar
+
+### Security
+
+- Documented the security model: in-app RBAC protects against accidents; configure NTFS ACLs on the SMB share for real access control
+
 ## [0.5.0] - 2026-10-21
 
 ### Added
