@@ -202,7 +202,7 @@ fn categories_path(root: &Path) -> PathBuf {
     root.join("categories.json")
 }
 
-/// Explicit KB category list (stored at `{workspace}/categories.json`).
+/// Explicit KB category list (stored at `{space}/categories.json`).
 pub fn list_categories(root: &Path) -> Result<Vec<String>, AppError> {
     let path = categories_path(root);
     if !path.is_file() {

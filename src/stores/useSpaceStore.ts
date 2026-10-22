@@ -59,3 +59,11 @@ export const useSpaceStore = create<SpaceState>((set) => ({
 export function isPersonalSpace(spaceId: string | null): boolean {
   return spaceId !== null && spaceId.startsWith("personal_");
 }
+
+/** True when `space` is a personal space owned by `userId`. */
+export function isOwnPersonalSpace(
+  space: Pick<Space, "id" | "ownerId"> | null | undefined,
+  userId: string | null | undefined,
+): boolean {
+  return !!space && !!userId && isPersonalSpace(space.id) && space.ownerId === userId;
+}

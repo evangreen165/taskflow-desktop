@@ -56,6 +56,8 @@ export interface TaskFilter {
   /** Inclusive `YYYY-MM-DD` range on `dueDate`. */
   startDate?: string;
   endDate?: string;
+  /** `false` returns only tasks without a due date, `true` only with one. */
+  hasDueDate?: boolean;
 }
 
 export interface CreateTaskPayload {

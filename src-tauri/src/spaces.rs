@@ -182,6 +182,24 @@ pub fn is_personal(space_id: &str) -> bool {
     space_id.starts_with("personal_")
 }
 
+/// True when `space_id` is a personal space owned by `user_id`. A missing
+/// space is simply not owned (never an error), so callers can fall back to
+/// their normal permission checks.
+pub fn is_personal_owner(
+    root: &Path,
+    space_id: &str,
+    user_id: &str,
+) -> Result<bool, AppError> {
+    if !is_personal(space_id) {
+        return Ok(false);
+    }
+    match get(root, space_id) {
+        Ok(space) => Ok(space.owner_id == user_id),
+        Err(e) if e.code == "NOT_FOUND" => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
 pub fn is_admin(session: &Session) -> bool {
     session.role_id == "admin"
 }

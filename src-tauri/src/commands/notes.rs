@@ -10,7 +10,24 @@ use crate::attachments;
 use crate::error::AppError;
 use crate::fsops;
 use crate::notes::{self, Note, NoteMeta, NoteStatus};
+use crate::session::Session;
 use crate::AppState;
+
+/// Requires `perm`, except in the user's own personal space: the owner always
+/// has full control there regardless of their global role (Stage 6 fix).
+fn require_space_perm(
+    state: &AppState,
+    space_id: &str,
+    perm: &str,
+) -> Result<Session, AppError> {
+    let session = state.require_auth()?;
+    let root = state.root()?;
+    if crate::spaces::is_personal_owner(&root, space_id, &session.user_id)? {
+        Ok(session)
+    } else {
+        state.require_perm(perm)
+    }
+}
 
 /// `notesList` item: flattened meta plus a content snippet for the grid.
 #[derive(Debug, Clone, Serialize)]
@@ -69,7 +86,7 @@ pub fn notes_list_impl(
     query: Option<String>,
     status: Option<NoteStatus>,
 ) -> Result<Vec<NoteListItem>, AppError> {
-    let session = state.require_perm("article.view")?;
+    let session = require_space_perm(state, &space_id, "article.view")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
@@ -175,7 +192,7 @@ pub fn notes_get_impl(
     space_id: String,
     id: String,
 ) -> Result<Note, AppError> {
-    let session = state.require_perm("article.view")?;
+    let session = require_space_perm(state, &space_id, "article.view")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let (_, note) = resolve_note(&root, &space_id, &id)?;
@@ -196,7 +213,7 @@ pub fn notes_get_history_impl(
     space_id: String,
     id: String,
 ) -> Result<Vec<NoteMeta>, AppError> {
-    let session = state.require_perm("article.view")?;
+    let session = require_space_perm(state, &space_id, "article.view")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let (space_dir, _) = resolve_note(&root, &space_id, &id)?;
@@ -220,7 +237,7 @@ pub fn notes_create_impl(
     content: String,
 ) -> Result<Note, AppError> {
     state.require_writable()?;
-    let session = state.require_perm("article.create")?;
+    let session = require_space_perm(state, &space_id, "article.create")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
@@ -249,7 +266,7 @@ pub fn notes_update_impl(
     expected_version: u64,
 ) -> Result<Note, AppError> {
     state.require_writable()?;
-    let session = state.require_perm("article.edit")?;
+    let session = require_space_perm(state, &space_id, "article.edit")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
@@ -294,7 +311,7 @@ pub fn notes_publish_impl(
     expected_version: u64,
 ) -> Result<Note, AppError> {
     state.require_writable()?;
-    let session = state.require_perm("article.publish")?;
+    let session = require_space_perm(state, &space_id, "article.publish")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
@@ -317,7 +334,7 @@ pub fn notes_delete_impl(
     id: String,
 ) -> Result<(), AppError> {
     state.require_writable()?;
-    let session = state.require_perm("article.delete")?;
+    let session = require_space_perm(state, &space_id, "article.delete")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
@@ -340,7 +357,7 @@ pub fn notes_restore_version_impl(
     version: u64,
 ) -> Result<Note, AppError> {
     state.require_writable()?;
-    let session = state.require_perm("article.edit")?;
+    let session = require_space_perm(state, &space_id, "article.edit")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
@@ -366,7 +383,7 @@ pub fn notes_share_impl(
     target_space_ids: Vec<String>,
 ) -> Result<Note, AppError> {
     state.require_writable()?;
-    let session = state.require_perm("article.edit")?;
+    let session = require_space_perm(state, &space_id, "article.edit")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let own_dir = crate::spaces::space_dir(&root, &space_id)?;
@@ -398,48 +415,67 @@ pub fn notes_share(
     notes_share_impl(&state, note_id, space_id, target_space_ids)
 }
 
-pub fn notes_list_categories_impl(state: &AppState) -> Result<Vec<String>, AppError> {
-    state.require_auth()?;
-    notes::list_categories(&state.root()?)
+pub fn notes_list_categories_impl(
+    state: &AppState,
+    space_id: String,
+) -> Result<Vec<String>, AppError> {
+    let session = state.require_auth()?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    notes::list_categories(&space_dir)
 }
 
 #[tauri::command(rename = "notesListCategories")]
-pub fn notes_list_categories(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
-    notes_list_categories_impl(&state)
+pub fn notes_list_categories(
+    state: State<'_, AppState>,
+    space_id: String,
+) -> Result<Vec<String>, AppError> {
+    notes_list_categories_impl(&state, space_id)
 }
 
 pub fn notes_create_category_impl(
     state: &AppState,
+    space_id: String,
     name: String,
 ) -> Result<Vec<String>, AppError> {
     state.require_writable()?;
-    state.require_perm("article.create")?;
-    notes::create_category(&state.root()?, &name)
+    let session = require_space_perm(state, &space_id, "article.create")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    notes::create_category(&space_dir, &name)
 }
 
 #[write_command(rename = "notesCreateCategory")]
 pub fn notes_create_category(
     state: State<'_, AppState>,
+    space_id: String,
     name: String,
 ) -> Result<Vec<String>, AppError> {
-    notes_create_category_impl(&state, name)
+    notes_create_category_impl(&state, space_id, name)
 }
 
 pub fn notes_delete_category_impl(
     state: &AppState,
+    space_id: String,
     name: String,
 ) -> Result<Vec<String>, AppError> {
     state.require_writable()?;
-    state.require_perm("article.create")?;
-    notes::delete_category(&state.root()?, &name)
+    let session = require_space_perm(state, &space_id, "article.create")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    notes::delete_category(&space_dir, &name)
 }
 
 #[write_command(rename = "notesDeleteCategory")]
 pub fn notes_delete_category(
     state: State<'_, AppState>,
+    space_id: String,
     name: String,
 ) -> Result<Vec<String>, AppError> {
-    notes_delete_category_impl(&state, name)
+    notes_delete_category_impl(&state, space_id, name)
 }
 
 /// Imports a local file as a note. `.md` files become the note body; `.pdf`
@@ -450,7 +486,7 @@ pub fn notes_import_impl(
     source_path: String,
 ) -> Result<Note, AppError> {
     state.require_writable()?;
-    let session = state.require_perm("article.create")?;
+    let session = require_space_perm(state, &space_id, "article.create")?;
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
@@ -745,22 +781,109 @@ mod tests {
     #[test]
     fn categories_create_list_delete() {
         let fx = fixture();
-        let created = notes_create_category_impl(&fx.state, "Онбординг".to_string()).unwrap();
+        let created =
+            notes_create_category_impl(&fx.state, SPACE.to_string(), "Онбординг".to_string())
+                .unwrap();
         assert!(created.iter().any(|c| c == "Онбординг"));
 
         // Idempotent create.
-        notes_create_category_impl(&fx.state, "Онбординг".to_string()).unwrap();
-        let listed = notes_list_categories_impl(&fx.state).unwrap();
+        notes_create_category_impl(&fx.state, SPACE.to_string(), "Онбординг".to_string()).unwrap();
+        let listed = notes_list_categories_impl(&fx.state, SPACE.to_string()).unwrap();
         assert_eq!(listed, vec!["Онбординг".to_string()]);
 
         assert_eq!(
-            notes_create_category_impl(&fx.state, "  ".to_string()).unwrap_err().code,
+            notes_create_category_impl(&fx.state, SPACE.to_string(), "  ".to_string())
+                .unwrap_err()
+                .code,
             "INVALID_INPUT"
         );
 
-        let after_delete = notes_delete_category_impl(&fx.state, "Онбординг".to_string()).unwrap();
+        let after_delete =
+            notes_delete_category_impl(&fx.state, SPACE.to_string(), "Онбординг".to_string())
+                .unwrap();
         assert!(after_delete.is_empty());
-        assert!(notes_list_categories_impl(&fx.state).unwrap().is_empty());
+        assert!(notes_list_categories_impl(&fx.state, SPACE.to_string())
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn categories_are_scoped_per_space() {
+        let fx = fixture();
+        notes_create_category_impl(&fx.state, SPACE.to_string(), "HR".to_string()).unwrap();
+
+        let other = crate::spaces::create(fx._dir.path(), &fx.admin.id, "Other", "").unwrap();
+        let other_categories =
+            notes_list_categories_impl(&fx.state, other.id.clone()).unwrap();
+        assert!(other_categories.is_empty(), "categories must not leak across spaces");
+
+        notes_create_category_impl(&fx.state, other.id.clone(), "Finance".to_string()).unwrap();
+        let space_categories = notes_list_categories_impl(&fx.state, SPACE.to_string()).unwrap();
+        assert_eq!(space_categories, vec!["HR".to_string()]);
+        let other_categories = notes_list_categories_impl(&fx.state, other.id).unwrap();
+        assert_eq!(other_categories, vec!["Finance".to_string()]);
+
+        // Stored inside the space directory, not at the workspace root.
+        assert!(fx
+            ._dir
+            .path()
+            .join("spaces")
+            .join(SPACE)
+            .join("categories.json")
+            .is_file());
+        assert!(!fx._dir.path().join("categories.json").is_file());
+    }
+
+    #[test]
+    fn personal_space_owner_bypasses_global_rbac() {
+        let fx = fixture();
+        // The observer role has no article.create/edit/delete.
+        fx.state
+            .set_session(session_for(&fx.observer.id, "observer"));
+        let personal = format!("personal_{}", fx.observer.id);
+        assert!(crate::spaces::is_personal_owner(
+            fx._dir.path(),
+            &personal,
+            &fx.observer.id
+        )
+        .unwrap());
+
+        // In their own personal space the owner may write regardless of role.
+        let note = notes_create_impl(
+            &fx.state,
+            personal.clone(),
+            "Private".to_string(),
+            "Личное".to_string(),
+            "secret".to_string(),
+        )
+        .unwrap();
+        notes_update_impl(
+            &fx.state,
+            personal.clone(),
+            note.meta.id.clone(),
+            "Private 2".to_string(),
+            "Личное".to_string(),
+            vec![],
+            "updated".to_string(),
+            1,
+        )
+        .unwrap();
+        notes_create_category_impl(&fx.state, personal.clone(), "Идеи".to_string()).unwrap();
+        notes_delete_impl(&fx.state, personal.clone(), note.meta.id).unwrap();
+
+        // The same role is still blocked in a shared (non-personal) space.
+        assert_eq!(
+            notes_create_impl(
+                &fx.state,
+                SPACE.to_string(),
+                "Nope".to_string(),
+                "Процессы".to_string(),
+                "x".to_string(),
+            )
+            .unwrap_err()
+            .code,
+            "FORBIDDEN"
+        );
     }
 
     #[test]

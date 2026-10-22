@@ -78,12 +78,16 @@ pub fn spaces_update_impl(
     let session = state.require_auth()?;
     let root = state.root()?;
     let space = spaces::get(&root, &id)?;
-    let global = spaces::is_admin(&session) || has_perm(&root, &session, "space.manage")?;
-    if !global && space.owner_id != session.user_id {
-        return Err(AppError::new(
-            "FORBIDDEN",
-            "only the space owner or a space manager can update it",
-        ));
+    // The owner always controls their own space (including a personal space),
+    // independent of global role permissions.
+    if space.owner_id != session.user_id {
+        let global = spaces::is_admin(&session) || has_perm(&root, &session, "space.manage")?;
+        if !global {
+            return Err(AppError::new(
+                "FORBIDDEN",
+                "only the space owner or a space manager can update it",
+            ));
+        }
     }
     spaces::update(&root, &id, &name, &description, members)
 }
@@ -104,12 +108,16 @@ pub fn spaces_delete_impl(state: &AppState, id: String) -> Result<(), AppError> 
     let session = state.require_auth()?;
     let root = state.root()?;
     let space = spaces::get(&root, &id)?;
-    let global = spaces::is_admin(&session) || has_perm(&root, &session, "space.manage")?;
-    if !global && space.owner_id != session.user_id {
-        return Err(AppError::new(
-            "FORBIDDEN",
-            "only the space owner or a space manager can delete it",
-        ));
+    // The owner always controls their own space (including a personal space),
+    // independent of global role permissions.
+    if space.owner_id != session.user_id {
+        let global = spaces::is_admin(&session) || has_perm(&root, &session, "space.manage")?;
+        if !global {
+            return Err(AppError::new(
+                "FORBIDDEN",
+                "only the space owner or a space manager can delete it",
+            ));
+        }
     }
     spaces::delete(&root, &id)
 }
@@ -326,6 +334,30 @@ mod tests {
         fx.state.set_session(session_for(&fx.admin.id, "admin"));
         spaces_delete_impl(&fx.state, fx.space_a.clone()).unwrap();
         assert!(crate::spaces::get(fx._dir.path(), &fx.space_a).is_err());
+    }
+
+    #[test]
+    fn personal_space_owner_manages_members_without_space_manage() {
+        let fx = fixture();
+        // user_b has the executor role (no space.manage).
+        fx.state.set_session(session_for(&fx.user_b.id, "executor"));
+        let personal = format!("personal_{}", fx.user_b.id);
+
+        let updated = spaces_update_impl(
+            &fx.state,
+            personal.clone(),
+            "Личное пространство".to_string(),
+            "shared".to_string(),
+            vec![fx.user_a.id.clone()],
+        )
+        .unwrap();
+        assert!(updated.members.contains(&fx.user_a.id));
+        assert!(updated.members.contains(&fx.user_b.id));
+
+        // The invited colleague can now access the personal space.
+        fx.state.set_session(session_for(&fx.user_a.id, "executor"));
+        let fetched = spaces_get_impl(&fx.state, personal.clone()).unwrap();
+        assert_eq!(fetched.id, personal);
     }
 
     #[test]

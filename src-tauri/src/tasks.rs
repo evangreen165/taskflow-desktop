@@ -157,6 +157,10 @@ pub struct TaskFilter {
     pub start_date: Option<String>,
     #[serde(default)]
     pub end_date: Option<String>,
+    /// `Some(false)` returns only tasks without a due date; `Some(true)` only
+    /// tasks with one. `None` does not filter.
+    #[serde(default)]
+    pub has_due_date: Option<bool>,
 }
 
 mod double_option {

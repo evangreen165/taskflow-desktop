@@ -82,12 +82,21 @@ export default function CalendarPage(): JSX.Element {
       return;
     }
     setLoading(true);
-    const result = await TasksService.list(spaceId, {
-      startDate: format(range.start, "yyyy-MM-dd"),
-      endDate: format(range.end, "yyyy-MM-dd"),
-    });
-    if (result.ok) {
-      setTasks(result.value);
+    const [scheduled, unscheduled] = await Promise.all([
+      TasksService.list(spaceId, {
+        startDate: format(range.start, "yyyy-MM-dd"),
+        endDate: format(range.end, "yyyy-MM-dd"),
+      }),
+      // Tasks without a due date never match a date range; fetch them
+      // separately so the "Без срока" sidebar is populated.
+      TasksService.list(spaceId, { hasDueDate: false }),
+    ]);
+    if (scheduled.ok && unscheduled.ok) {
+      const byId = new Map<string, Task>();
+      for (const task of [...scheduled.value, ...unscheduled.value]) {
+        byId.set(task.id, task);
+      }
+      setTasks([...byId.values()]);
     }
     setLoading(false);
   }, [range, spaceId]);

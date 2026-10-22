@@ -43,6 +43,36 @@ fn ensure_parent(path: &Path) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Windows wide path with the extended-length (`\\?\`) prefix. Rust's std adds
+/// this automatically, but the raw `MoveFileExW` call below does not, so paths
+/// longer than `MAX_PATH` (common under deep personal-space directories) would
+/// otherwise fail with `ERROR_PATH_NOT_FOUND`.
+#[cfg(windows)]
+fn wide_path(path: &Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    let is_prefixed = wide.len() >= 4
+        && wide[0] == b'\\' as u16
+        && wide[1] == b'\\' as u16
+        && wide[2] == b'?' as u16
+        && wide[3] == b'\\' as u16;
+    if !is_prefixed {
+        let is_unc = wide.len() >= 2 && wide[0] == b'\\' as u16 && wide[1] == b'\\' as u16;
+        let mut prefixed: Vec<u16> = Vec::with_capacity(wide.len() + 8);
+        if is_unc {
+            prefixed.extend(r"\\?\UNC\".encode_utf16());
+            prefixed.extend_from_slice(&wide[2..]);
+        } else {
+            prefixed.extend(r"\\?\".encode_utf16());
+            prefixed.extend_from_slice(&wide);
+        }
+        wide = prefixed;
+    }
+    wide.push(0);
+    wide
+}
+
 /// Atomically replaces `dst` with `src`.
 ///
 /// `std::fs::rename` cannot overwrite an existing file on Windows, so the
@@ -51,20 +81,11 @@ fn ensure_parent(path: &Path) -> Result<(), AppError> {
 pub fn atomic_replace(src: &Path, dst: &Path) -> Result<(), AppError> {
     #[cfg(windows)]
     {
-        use std::os::windows::ffi::OsStrExt;
-        use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_REPLACE_EXISTING};
         use windows_sys::Win32::Foundation::GetLastError;
+        use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_REPLACE_EXISTING};
 
-        let src_wide: Vec<u16> = src
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
-        let dst_wide: Vec<u16> = dst
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
+        let src_wide = wide_path(src);
+        let dst_wide = wide_path(dst);
         // SAFETY: wide NUL-terminated buffers live for the call duration.
         let ok = unsafe { MoveFileExW(src_wide.as_ptr(), dst_wide.as_ptr(), MOVEFILE_REPLACE_EXISTING) };
         if ok == 0 {
@@ -251,6 +272,21 @@ mod tests {
         write_json_atomic(&p, &serde_json::json!({ "x": 1 })).unwrap();
         let v: serde_json::Value = read_json(&p).unwrap();
         assert_eq!(v["x"], 1);
+    }
+
+    #[test]
+    fn atomic_write_supports_paths_beyond_max_path() {
+        let dir = tempdir().unwrap();
+        let mut path = dir.path().to_path_buf();
+        // Deep personal-space-like tree: the temp sibling pushes the path past
+        // the Windows MAX_PATH limit.
+        for _ in 0..8 {
+            path.push("a".repeat(40));
+        }
+        path.push("history.json");
+        write_json_atomic(&path, &serde_json::json!({ "ok": true })).unwrap();
+        let v: serde_json::Value = read_json(&path).unwrap();
+        assert_eq!(v["ok"], true);
     }
 
     #[test]

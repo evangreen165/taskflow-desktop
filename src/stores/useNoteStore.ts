@@ -8,10 +8,10 @@ interface NoteState {
   loading: boolean;
   error: string | null;
   fetchNotes: (spaceId: string) => Promise<void>;
-  fetchCategories: () => Promise<void>;
+  fetchCategories: (spaceId: string) => Promise<void>;
   /** Creates a category and updates the list; false when the backend failed. */
-  addCategory: (name: string) => Promise<boolean>;
-  removeCategory: (name: string) => Promise<boolean>;
+  addCategory: (spaceId: string, name: string) => Promise<boolean>;
+  removeCategory: (spaceId: string, name: string) => Promise<boolean>;
 }
 
 export const useNoteStore = create<NoteState>((set) => ({
@@ -30,15 +30,17 @@ export const useNoteStore = create<NoteState>((set) => ({
     }
   },
 
-  fetchCategories: async () => {
-    const result = await NotesService.listCategories();
+  fetchCategories: async (spaceId) => {
+    const result = await NotesService.listCategories(spaceId);
     if (result.ok) {
       set({ categories: result.value });
+    } else {
+      set({ categories: [] });
     }
   },
 
-  addCategory: async (name) => {
-    const result = await NotesService.createCategory(name);
+  addCategory: async (spaceId, name) => {
+    const result = await NotesService.createCategory(spaceId, name);
     if (result.ok) {
       set({ categories: result.value });
       return true;
@@ -46,8 +48,8 @@ export const useNoteStore = create<NoteState>((set) => ({
     return false;
   },
 
-  removeCategory: async (name) => {
-    const result = await NotesService.deleteCategory(name);
+  removeCategory: async (spaceId, name) => {
+    const result = await NotesService.deleteCategory(spaceId, name);
     if (result.ok) {
       set({ categories: result.value });
       return true;

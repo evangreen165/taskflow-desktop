@@ -26,6 +26,15 @@ describe("TasksService", () => {
     });
   });
 
+  it("list forwards the unscheduled filter", async () => {
+    invokeMock.mockResolvedValue([]);
+    await TasksService.list("sp1", { hasDueDate: false });
+    expect(invokeMock).toHaveBeenCalledWith("tasksList", {
+      spaceId: "sp1",
+      filter: { hasDueDate: false },
+    });
+  });
+
   it("get sends spaceId and id", async () => {
     invokeMock.mockResolvedValue({ id: "t1" });
     await TasksService.get("sp1", "t1");

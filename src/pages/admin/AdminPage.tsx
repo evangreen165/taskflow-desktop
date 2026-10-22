@@ -1,5 +1,6 @@
-﻿import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSION_GROUPS, PERMISSION_LABELS } from "@/lib/permissions";
 import { canDeleteRole, slugifyRoleId, validateRoleDraft } from "@/lib/roleForm";
 import { AuthService } from "@/services/auth";
@@ -24,34 +25,49 @@ function formatDate(value: string | null): string {
 }
 
 export default function AdminPage(): JSX.Element {
-  const [tab, setTab] = useState<Tab>("users");
+  const { can } = usePermissions();
+  const [tab, setTab] = useState<Tab | null>(null);
+
+  const tabs = useMemo<{ id: Tab; label: string }[]>(() => {
+    const items: { id: Tab; label: string }[] = [];
+    if (can("users.manage")) {
+      items.push({ id: "users", label: "Пользователи" });
+    }
+    if (can("space.manage")) {
+      items.push({ id: "spaces", label: "Пространства" });
+    }
+    if (can("roles.manage")) {
+      items.push({ id: "roles", label: "Роли" });
+    }
+    return items;
+  }, [can]);
+
+  const activeTab: Tab | null =
+    tab && tabs.some((item) => item.id === tab) ? tab : (tabs[0]?.id ?? null);
+
+  if (!activeTab) {
+    return (
+      <div className={styles.page}>
+        <p className={styles.muted}>Нет доступных разделов администрирования.</p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page}>
       <div className={styles.tabs}>
-        <button
-          type="button"
-          className={`${styles.tab} ${tab === "users" ? styles.tabActive : ""}`}
-          onClick={() => setTab("users")}
-        >
-          Пользователи
-        </button>
-        <button
-          type="button"
-          className={`${styles.tab} ${tab === "spaces" ? styles.tabActive : ""}`}
-          onClick={() => setTab("spaces")}
-        >
-          Пространства
-        </button>
-        <button
-          type="button"
-          className={`${styles.tab} ${tab === "roles" ? styles.tabActive : ""}`}
-          onClick={() => setTab("roles")}
-        >
-          Роли
-        </button>
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`${styles.tab} ${activeTab === item.id ? styles.tabActive : ""}`}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
-      {tab === "users" ? <UsersTab /> : tab === "spaces" ? <SpacesTab /> : <RolesTab />}
+      {activeTab === "users" ? <UsersTab /> : activeTab === "spaces" ? <SpacesTab /> : <RolesTab />}
     </div>
   );
 }
@@ -61,6 +77,7 @@ export default function AdminPage(): JSX.Element {
 // ---------------------------------------------------------------------------
 
 function SpacesTab(): JSX.Element {
+  const { can } = usePermissions();
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -198,7 +215,7 @@ function SpacesTab(): JSX.Element {
         <button
           className="btn-primary"
           type="button"
-          disabled={busy}
+          disabled={busy || !can("space.create")}
           onClick={() => void submitCreate()}
         >
           {busy ? "Создание…" : "Создать пространство"}

@@ -9,10 +9,14 @@ import NoAccess from "./NoAccess";
 /** Gates a route by permission; renders `fallback` (default: NoAccess). */
 export default function RequirePerm({
   perm,
+  anyOf,
   fallback,
   children,
 }: {
-  perm: string;
+  /** A single required permission. */
+  perm?: string;
+  /** Succeeds when the session has at least one of these permissions. */
+  anyOf?: string[];
   fallback?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
@@ -24,7 +28,12 @@ export default function RequirePerm({
   if (session.mustChangePassword) {
     return <Navigate to="/app/profile" replace />;
   }
-  if (!can(session.permissions, perm)) {
+  const allowed = anyOf
+    ? anyOf.some((item) => can(session.permissions, item))
+    : perm
+      ? can(session.permissions, perm)
+      : true;
+  if (!allowed) {
     return <>{fallback ?? <NoAccess />}</>;
   }
   return <>{children}</>;

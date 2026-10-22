@@ -5,9 +5,10 @@ import Avatar from "@/components/Avatar";
 import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { SpacesService } from "@/services/spaces";
+import { UsersService, type UserSummary } from "@/services/users";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
-import { isPersonalSpace, useSpaceStore } from "@/stores/useSpaceStore";
+import { isOwnPersonalSpace, isPersonalSpace, useSpaceStore } from "@/stores/useSpaceStore";
 
 import styles from "./WorkspaceLayout.module.css";
 
@@ -60,8 +61,16 @@ export default function WorkspaceLayout(): JSX.Element {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [changeFolderOpen, setChangeFolderOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [memberUsers, setMemberUsers] = useState<UserSummary[]>([]);
+  const [memberDraft, setMemberDraft] = useState<string[]>([]);
+  const [membersBusy, setMembersBusy] = useState(false);
+  const [membersError, setMembersError] = useState<string | null>(null);
 
   const currentSpace = spaces.find((space) => space.id === currentSpaceId) ?? null;
+  const canAdmin =
+    can("users.manage") || can("roles.manage") || can("space.manage") || can("audit.view");
+  const personalOwner = isOwnPersonalSpace(currentSpace, user?.id);
 
   useEffect(() => {
     void fetchSpaces();
@@ -101,6 +110,50 @@ export default function WorkspaceLayout(): JSX.Element {
     setNewSpaceDesc("");
   }
 
+  async function openMembers(): Promise<void> {
+    if (!currentSpace) {
+      return;
+    }
+    setSpaceMenuOpen(false);
+    setMemberDraft([...currentSpace.members]);
+    setMembersError(null);
+    setMembersOpen(true);
+    const result = await UsersService.directory();
+    if (result.ok) {
+      setMemberUsers(result.value);
+    }
+  }
+
+  function toggleMember(userId: string): void {
+    if (!currentSpace || userId === currentSpace.ownerId) {
+      return;
+    }
+    setMemberDraft((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
+    );
+  }
+
+  async function saveMembers(): Promise<void> {
+    if (!currentSpace) {
+      return;
+    }
+    setMembersBusy(true);
+    setMembersError(null);
+    const result = await SpacesService.update(
+      currentSpace.id,
+      currentSpace.name,
+      currentSpace.description,
+      memberDraft,
+    );
+    setMembersBusy(false);
+    if (!result.ok) {
+      setMembersError(result.error.message);
+      return;
+    }
+    await fetchSpaces();
+    setMembersOpen(false);
+  }
+
   async function handleLogout(): Promise<void> {
     await logout();
     navigate("/login", { replace: true });
@@ -131,7 +184,7 @@ export default function WorkspaceLayout(): JSX.Element {
             Заметки
           </SideNavLink>
           <div className={styles.navLabel}>Управление</div>
-          {can("users.manage") ? (
+          {canAdmin ? (
             <SideNavLink to="/app/admin" disabled={forced}>
               Администрирование
             </SideNavLink>
@@ -248,6 +301,15 @@ export default function WorkspaceLayout(): JSX.Element {
                     + Создать пространство
                   </button>
                 ) : null}
+                {personalOwner ? (
+                  <button
+                    type="button"
+                    className={styles.spaceMembers}
+                    onClick={() => void openMembers()}
+                  >
+                    👥 Участники
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -262,6 +324,56 @@ export default function WorkspaceLayout(): JSX.Element {
       </div>
 
       {changeFolderOpen ? <ChangeFolderModal onClose={() => setChangeFolderOpen(false)} /> : null}
+
+      {membersOpen && currentSpace ? (
+        <div className={styles.modalBackdrop} onClick={() => setMembersOpen(false)}>
+          <div
+            className={styles.spaceModal}
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>Участники «{currentSpace.name}»</h3>
+            <p className={styles.membersHint}>
+              Добавьте коллег, чтобы открыть им доступ к этому личному пространству.
+            </p>
+            {membersError ? (
+              <div className="alert" style={{ marginBottom: 14 }}>
+                {membersError}
+              </div>
+            ) : null}
+            <div className={styles.memberList}>
+              {memberUsers.map((member) => (
+                <label key={member.id} className={styles.memberOption}>
+                  <input
+                    type="checkbox"
+                    checked={memberDraft.includes(member.id) || member.id === currentSpace.ownerId}
+                    disabled={member.id === currentSpace.ownerId}
+                    onChange={() => toggleMember(member.id)}
+                  />
+                  <span>{member.displayName}</span>
+                  {member.id === currentSpace.ownerId ? (
+                    <span className={styles.ownerBadge}>владелец</span>
+                  ) : null}
+                </label>
+              ))}
+            </div>
+            <div className={styles.modalActions}>
+              <button className="btn-ghost" type="button" onClick={() => setMembersOpen(false)}>
+                Отмена
+              </button>
+              <button
+                className="btn-primary"
+                type="button"
+                disabled={membersBusy}
+                onClick={() => void saveMembers()}
+              >
+                {membersBusy ? "Сохранение…" : "Сохранить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {createOpen ? (
         <div className={styles.modalBackdrop} onClick={() => setCreateOpen(false)}>

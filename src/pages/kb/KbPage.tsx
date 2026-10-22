@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import KbCard from "@/components/kb/KbCard";
 import NewNoteModal from "@/components/kb/NewNoteModal";
+import { useIsPersonalSpaceOwner } from "@/hooks/useIsPersonalSpaceOwner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EMPTY_KB_FILTER, filterNoteItems, type KbFilter } from "@/lib/kbMeta";
 import { NotesService } from "@/services/notes";
@@ -28,6 +29,8 @@ export default function KbPage(): JSX.Element {
   const ensureUsers = useUserDirectory((s) => s.ensure);
   const currentUserId = useAuthStore((s) => s.session?.user.id ?? null);
   const { can } = usePermissions();
+  const personalOwner = useIsPersonalSpaceOwner();
+  const canWriteNotes = can("article.create") || personalOwner;
   const pushToast = useToastStore((s) => s.push);
   const navigate = useNavigate();
 
@@ -39,8 +42,8 @@ export default function KbPage(): JSX.Element {
   useEffect(() => {
     if (spaceId) {
       void fetchNotes(spaceId);
+      void fetchCategories(spaceId);
     }
-    void fetchCategories();
   }, [fetchNotes, fetchCategories, spaceId]);
 
   useEffect(() => {
@@ -60,10 +63,10 @@ export default function KbPage(): JSX.Element {
   async function submitCategory(): Promise<void> {
     const name = newCategoryName.trim();
     setNewCategoryOpen(false);
-    if (!name) {
+    if (!name || !spaceId) {
       return;
     }
-    const created = await addCategory(name);
+    const created = await addCategory(spaceId, name);
     if (created) {
       setFilter((current) => ({ ...current, category: name }));
     }
@@ -87,8 +90,8 @@ export default function KbPage(): JSX.Element {
     pushToast(`Заметка «${result.value.meta.title}» импортирована`, "success");
     if (spaceId) {
       void fetchNotes(spaceId);
+      void fetchCategories(spaceId);
     }
-    void fetchCategories();
   }
 
   return (
@@ -96,7 +99,7 @@ export default function KbPage(): JSX.Element {
       <aside className={styles.sidebar}>
         <div className={styles.sidebarRow}>
           <div className={styles.sidebarTitle}>Категории</div>
-          {can("article.create") ? (
+          {canWriteNotes ? (
             <button
               className={styles.sidebarPlus}
               type="button"
@@ -147,12 +150,12 @@ export default function KbPage(): JSX.Element {
                 setFilter({ ...filter, category: filter.category === cat ? null : cat })
               }
             />
-            {can("article.create") ? (
+            {canWriteNotes ? (
               <button
                 className={styles.filterDelete}
                 type="button"
                 title={`Удалить категорию «${cat}»`}
-                onClick={() => void removeCategory(cat)}
+                onClick={() => spaceId && void removeCategory(spaceId, cat)}
               >
                 ✕
               </button>
@@ -192,14 +195,16 @@ export default function KbPage(): JSX.Element {
               Сбросить
             </button>
           ) : null}
-          {can("article.create") ? (
+          {canWriteNotes ? (
             <button className="btn-ghost" type="button" onClick={() => void handleImport()}>
               Импорт
             </button>
           ) : null}
-          <button className="btn-primary" type="button" onClick={() => setModalOpen(true)}>
-            Новая статья
-          </button>
+          {canWriteNotes ? (
+            <button className="btn-primary" type="button" onClick={() => setModalOpen(true)}>
+              Новая статья
+            </button>
+          ) : null}
         </div>
 
         {loading ? <div className={styles.loading}>Загрузка…</div> : null}

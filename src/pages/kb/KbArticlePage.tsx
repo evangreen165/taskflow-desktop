@@ -6,6 +6,7 @@ import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 
 import { AttachmentImage, AttachmentLink } from "@/components/kb/MarkdownAttachments";
+import { useIsPersonalSpaceOwner } from "@/hooks/useIsPersonalSpaceOwner";
 import { useNoteEditor } from "@/hooks/useNoteEditor";
 import { usePermissions } from "@/hooks/usePermissions";
 import { categoryIcon, formatDate, NOTE_STATUS_LABELS } from "@/lib/kbMeta";
@@ -23,6 +24,11 @@ export default function KbArticlePage(): JSX.Element {
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const navigate = useNavigate();
   const { can } = usePermissions();
+  const personalOwner = useIsPersonalSpaceOwner();
+  const canEditArticle = can("article.edit") || personalOwner;
+  const canPublishArticle = can("article.publish") || personalOwner;
+  const canDeleteArticle = can("article.delete") || personalOwner;
+  const fetchCategories = useNoteStore((s) => s.fetchCategories);
   const pushToast = useToastStore((s) => s.push);
   const users = useUserDirectory((s) => s.users);
   const ensureUsers = useUserDirectory((s) => s.ensure);
@@ -66,6 +72,12 @@ export default function KbArticlePage(): JSX.Element {
       cancelled = true;
     };
   }, [id, spaceId]);
+
+  useEffect(() => {
+    if (spaceId) {
+      void fetchCategories(spaceId);
+    }
+  }, [spaceId, fetchCategories]);
 
   useEffect(() => {
     if (note) {
@@ -178,12 +190,12 @@ export default function KbArticlePage(): JSX.Element {
           ) : null}
           {mode === "read" ? (
             <>
-              {!note.shared && can("article.edit") ? (
+              {!note.shared && canEditArticle ? (
                 <button className="btn-ghost" type="button" onClick={() => setMode("edit")}>
                   Редактировать
                 </button>
               ) : null}
-              {!note.shared && meta.status === "draft" && can("article.publish") ? (
+              {!note.shared && meta.status === "draft" && canPublishArticle ? (
                 <button
                   className="btn-ghost"
                   type="button"
@@ -193,7 +205,7 @@ export default function KbArticlePage(): JSX.Element {
                   Опубликовать
                 </button>
               ) : null}
-              {!note.shared && can("article.edit") ? (
+              {!note.shared && canEditArticle ? (
                 <button className="btn-ghost" type="button" onClick={openShare}>
                   Поделиться
                 </button>
@@ -201,7 +213,7 @@ export default function KbArticlePage(): JSX.Element {
               <button className="btn-ghost" type="button" onClick={() => void openHistory()}>
                 История версий
               </button>
-              {!note.shared && can("article.delete") ? (
+              {!note.shared && canDeleteArticle ? (
                 <button className="btn-ghost" type="button" onClick={() => setConfirmDelete(true)}>
                   Удалить
                 </button>

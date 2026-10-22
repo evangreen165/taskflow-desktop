@@ -98,22 +98,22 @@ describe("NotesService", () => {
     });
   });
 
-  it("listCategories has no args", async () => {
+  it("listCategories sends spaceId", async () => {
     invokeMock.mockResolvedValue([]);
-    await NotesService.listCategories();
-    expect(invokeMock).toHaveBeenCalledWith("notesListCategories", undefined);
+    await NotesService.listCategories("sp1");
+    expect(invokeMock).toHaveBeenCalledWith("notesListCategories", { spaceId: "sp1" });
   });
 
-  it("createCategory sends the name", async () => {
+  it("createCategory sends spaceId and the name", async () => {
     invokeMock.mockResolvedValue(["HR"]);
-    await NotesService.createCategory("HR");
-    expect(invokeMock).toHaveBeenCalledWith("notesCreateCategory", { name: "HR" });
+    await NotesService.createCategory("sp1", "HR");
+    expect(invokeMock).toHaveBeenCalledWith("notesCreateCategory", { spaceId: "sp1", name: "HR" });
   });
 
-  it("deleteCategory sends the name", async () => {
+  it("deleteCategory sends spaceId and the name", async () => {
     invokeMock.mockResolvedValue([]);
-    await NotesService.deleteCategory("HR");
-    expect(invokeMock).toHaveBeenCalledWith("notesDeleteCategory", { name: "HR" });
+    await NotesService.deleteCategory("sp1", "HR");
+    expect(invokeMock).toHaveBeenCalledWith("notesDeleteCategory", { spaceId: "sp1", name: "HR" });
   });
 
   it("share sends noteId, spaceId and targets", async () => {

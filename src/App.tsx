@@ -42,7 +42,10 @@ export const router = createHashRouter([
       {
         path: "admin",
         element: (
-          <RequirePerm perm="users.manage" fallback={<NoAccess />}>
+          <RequirePerm
+            anyOf={["users.manage", "roles.manage", "space.manage", "audit.view"]}
+            fallback={<NoAccess />}
+          >
             <AdminPage />
           </RequirePerm>
         ),

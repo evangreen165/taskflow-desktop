@@ -61,6 +61,11 @@ fn matches_filter(task: &Task, filter: &TaskFilter) -> bool {
             return false;
         }
     }
+    if let Some(has_due) = filter.has_due_date {
+        if task.due_date.is_some() != has_due {
+            return false;
+        }
+    }
     true
 }
 
@@ -540,5 +545,46 @@ mod tests {
         assert!(unscheduled.iter().any(|t| t.id == first.id));
         assert!(unscheduled.iter().any(|t| t.id == second.id));
         assert!(!unscheduled.iter().any(|t| t.title == "C"));
+    }
+
+    #[test]
+    fn list_filters_unscheduled_tasks() {
+        let fx = fixture();
+        let scheduled = tasks_create_impl(
+            &fx.state,
+            SPACE.to_string(),
+            create_payload(json!({ "title": "Dated", "dueDate": "2026-10-15" })),
+        )
+        .unwrap();
+        let undated = tasks_create_impl(
+            &fx.state,
+            SPACE.to_string(),
+            create_payload(json!({ "title": "Undated" })),
+        )
+        .unwrap();
+
+        let only_unscheduled = tasks_list_impl(
+            &fx.state,
+            SPACE.to_string(),
+            TaskFilter {
+                has_due_date: Some(false),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(only_unscheduled.len(), 1);
+        assert_eq!(only_unscheduled[0].id, undated.id);
+
+        let only_scheduled = tasks_list_impl(
+            &fx.state,
+            SPACE.to_string(),
+            TaskFilter {
+                has_due_date: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(only_scheduled.len(), 1);
+        assert_eq!(only_scheduled[0].id, scheduled.id);
     }
 }

@@ -104,16 +104,16 @@ export const NotesService = {
     return invokeCommand<Note>("notesRestoreVersion", { spaceId, id, version });
   },
 
-  listCategories(): Promise<Result<string[]>> {
-    return invokeCommand<string[]>("notesListCategories");
+  listCategories(spaceId: string): Promise<Result<string[]>> {
+    return invokeCommand<string[]>("notesListCategories", { spaceId });
   },
 
-  createCategory(name: string): Promise<Result<string[]>> {
-    return invokeCommand<string[]>("notesCreateCategory", { name });
+  createCategory(spaceId: string, name: string): Promise<Result<string[]>> {
+    return invokeCommand<string[]>("notesCreateCategory", { spaceId, name });
   },
 
-  deleteCategory(name: string): Promise<Result<string[]>> {
-    return invokeCommand<string[]>("notesDeleteCategory", { name });
+  deleteCategory(spaceId: string, name: string): Promise<Result<string[]>> {
+    return invokeCommand<string[]>("notesDeleteCategory", { spaceId, name });
   },
 
   /** Imports a local `.md`/`.pdf` file as a note. */

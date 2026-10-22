@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::error::AppError;
+use crate::fsops;
 use crate::permissions;
 use crate::roles;
 use crate::spaces;
@@ -10,13 +11,15 @@ use crate::users;
 /// - the `admin` role always carries the full permission registry;
 /// - every system role keeps its seed permissions (e.g. the manager role
 ///   gains `space.manage` on workspaces created before Stage 6);
-/// - every account has its personal space.
+/// - every account has its personal space;
+/// - legacy workspace-level KB categories are copied into each space.
 ///
 /// Runs on workspace activation, before login.
 pub fn run(root: &Path) -> Result<(), AppError> {
     ensure_admin_role(root)?;
     ensure_system_roles(root)?;
     ensure_personal_spaces(root)?;
+    ensure_space_categories(root)?;
     Ok(())
 }
 
@@ -84,6 +87,26 @@ fn ensure_system_roles(root: &Path) -> Result<(), AppError> {
 fn ensure_personal_spaces(root: &Path) -> Result<(), AppError> {
     for user in users::list(root)? {
         spaces::ensure_personal(root, &user.id, &user.display_name)?;
+    }
+    Ok(())
+}
+
+/// Stage 6 made KB categories space-scoped. Copy a legacy workspace-level
+/// `categories.json` into every space that does not have its own list yet.
+fn ensure_space_categories(root: &Path) -> Result<(), AppError> {
+    let legacy = root.join("categories.json");
+    if !legacy.is_file() {
+        return Ok(());
+    }
+    let categories = fsops::read_json::<Vec<String>>(&legacy)?;
+    if categories.is_empty() {
+        return Ok(());
+    }
+    for space in spaces::list(root)? {
+        let path = spaces::space_dir(root, &space.id)?.join("categories.json");
+        if !path.is_file() {
+            fsops::write_json_atomic(&path, &categories)?;
+        }
     }
     Ok(())
 }
@@ -176,5 +199,32 @@ mod tests {
         let manager = roles::get(dir.path(), "manager").unwrap();
         assert!(manager.is_system);
         assert!(manager.permissions.iter().any(|p| p == "space.manage"));
+    }
+
+    #[test]
+    fn migrates_legacy_categories_into_spaces() {
+        let dir = tempdir().unwrap();
+        crate::workspace::init(dir.path(), "Backfill").unwrap();
+        let admin =
+            users::create(dir.path(), "admin", "password123", "Admin", "admin", None).unwrap();
+        let personal = format!("personal_{}", admin.id);
+        let shared = spaces::create(dir.path(), &admin.id, "Shared", "").unwrap();
+
+        // Legacy workspace-level category file from before Stage 6.
+        fsops::write_json_atomic(
+            &dir.path().join("categories.json"),
+            &vec!["HR".to_string(), "Процессы".to_string()],
+        )
+        .unwrap();
+
+        run(dir.path()).unwrap();
+
+        for space_id in [shared.id.as_str(), personal.as_str()] {
+            let path = spaces::space_dir(dir.path(), space_id)
+                .unwrap()
+                .join("categories.json");
+            let categories = fsops::read_json::<Vec<String>>(&path).unwrap();
+            assert_eq!(categories, vec!["HR".to_string(), "Процессы".to_string()]);
+        }
     }
 }
