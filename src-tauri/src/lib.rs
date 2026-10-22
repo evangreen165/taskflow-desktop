@@ -9,6 +9,7 @@ mod locking;
 mod logging;
 mod migrate;
 mod notes;
+mod notifications;
 mod path;
 mod permissions;
 mod roles;
@@ -268,6 +269,9 @@ pub fn run() {
             commands::attachment_open,
             commands::dashboard_summary,
             commands::global_search,
+            commands::notifications_list,
+            commands::notifications_mark_read,
+            commands::notifications_mark_all_read,
             commands::spaces_list,
             commands::spaces_get,
             commands::spaces_create,

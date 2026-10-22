@@ -89,7 +89,12 @@ pub fn spaces_update_impl(
             ));
         }
     }
-    spaces::update(&root, &id, &name, &description, members)
+    let updated = spaces::update(&root, &id, &name, &description, members)?;
+    if let Err(err) = crate::notifications::on_space_updated(&root, &session.user_id, &space, &updated)
+    {
+        tracing::warn!(error = %err.message, "failed to create space-added notifications");
+    }
+    Ok(updated)
 }
 
 #[write_command(rename = "spacesUpdate")]

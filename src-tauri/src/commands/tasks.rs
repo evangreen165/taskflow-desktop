@@ -131,7 +131,13 @@ pub fn tasks_create_impl(
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
-    tasks::create(&space_dir, &session.user_id, payload)
+    let task = tasks::create(&space_dir, &session.user_id, payload)?;
+    if let Err(err) =
+        crate::notifications::on_task_created(&root, &session.user_id, &space_id, &task)
+    {
+        tracing::warn!(error = %err.message, "failed to create task-assigned notifications");
+    }
+    Ok(task)
 }
 
 #[write_command(rename = "tasksCreate")]
@@ -157,7 +163,17 @@ pub fn tasks_update_impl(
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
     let current = tasks::get(&space_dir, &id)?;
     ensure_visible(&root, &session, &current)?;
-    tasks::update(&space_dir, &id, patch, expected_version)
+    let updated = tasks::update(&space_dir, &id, patch, expected_version)?;
+    if let Err(err) = crate::notifications::on_task_updated(
+        &root,
+        &session.user_id,
+        &space_id,
+        &current,
+        &updated,
+    ) {
+        tracing::warn!(error = %err.message, "failed to create task-update notifications");
+    }
+    Ok(updated)
 }
 
 #[write_command(rename = "tasksUpdate")]
