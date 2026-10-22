@@ -276,6 +276,7 @@ pub fn run() {
             commands::plugins_list,
             commands::plugin_get_content,
             commands::llm_proxy_request,
+            commands::llm_proxy_get,
             commands::notifications_list,
             commands::notifications_mark_read,
             commands::notifications_mark_all_read,

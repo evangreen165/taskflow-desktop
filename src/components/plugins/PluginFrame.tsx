@@ -5,6 +5,7 @@ import { NotesService } from "@/services/notes";
 import { PluginsService } from "@/services/plugins";
 import { TasksService } from "@/services/tasks";
 import { useSpaceStore } from "@/stores/useSpaceStore";
+import { useThemeStore } from "@/stores/useThemeStore";
 import { useToastStore } from "@/stores/useToastStore";
 
 import styles from "./PluginFrame.module.css";
@@ -99,6 +100,24 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
             "info",
           );
           return null;
+        }
+        case "getTheme": {
+          const theme = useThemeStore.getState().theme;
+          if (theme === "dark" || theme === "light") {
+            return theme;
+          }
+          return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        case "llmGet": {
+          const url = payload.url;
+          if (typeof url !== "string" || !url) {
+            throw new Error("Параметр url обязателен");
+          }
+          const result = await LlmService.get(url);
+          if (!result.ok) {
+            throw new Error(result.error.message);
+          }
+          return result.value;
         }
         case "llmChat": {
           const url = payload.url;

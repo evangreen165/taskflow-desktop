@@ -8,8 +8,23 @@ fn valid_http_url(url: &str) -> bool {
     url.starts_with("https://") || url.starts_with("http://")
 }
 
-/// Proxies an LLM API request on behalf of a plugin, bypassing browser CORS.
-/// The raw provider JSON text is returned to the plugin.
+/// OpenRouter (and some other providers) expect these two headers on every
+/// request; they are harmless for local endpoints like Ollama.
+fn add_provider_headers(request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    request
+        .header("HTTP-Referer", "https://github.com/evangreen165/taskflow-desktop")
+        .header("X-Title", "TaskFlow")
+}
+
+fn build_client(timeout_secs: u64) -> Result<reqwest::Client, AppError> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| AppError::new("NETWORK", e.to_string()))
+}
+
+/// Proxies an LLM chat request on behalf of a plugin, bypassing browser CORS.
+/// Returns the raw provider JSON text.
 #[tauri::command(rename = "llmProxyRequest")]
 pub async fn llm_proxy_request(
     state: State<'_, AppState>,
@@ -25,15 +40,12 @@ pub async fn llm_proxy_request(
         return Err(AppError::new("INVALID_INPUT", "body must not be empty"));
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
-        .build()
-        .map_err(|e| AppError::new("NETWORK", e.to_string()))?;
-
+    let client = build_client(120)?;
     let mut request = client
         .post(&url)
         .header("Content-Type", "application/json")
         .body(body);
+    request = add_provider_headers(request);
     if !api_key.is_empty() {
         request = request.header("Authorization", format!("Bearer {api_key}"));
     }
@@ -51,6 +63,38 @@ pub async fn llm_proxy_request(
         return Err(AppError::new(
             "LLM_ERROR",
             format!("LLM provider returned {status}: {text}"),
+        ));
+    }
+    Ok(text)
+}
+
+/// GET proxy (e.g. `https://openrouter.ai/api/v1/models`) so plugins can load
+/// dynamic model lists without CORS.
+#[tauri::command(rename = "llmProxyGet")]
+pub async fn llm_proxy_get(
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<String, AppError> {
+    state.require_auth()?;
+    if !valid_http_url(&url) {
+        return Err(AppError::new("INVALID_INPUT", "url must be http(s)"));
+    }
+
+    let client = build_client(60)?;
+    let request = add_provider_headers(client.get(&url));
+    let response = request
+        .send()
+        .await
+        .map_err(|e| AppError::new("NETWORK", e.to_string()))?;
+    let status = response.status();
+    let text = response
+        .text()
+        .await
+        .map_err(|e| AppError::new("NETWORK", e.to_string()))?;
+    if !status.is_success() {
+        return Err(AppError::new(
+            "LLM_ERROR",
+            format!("provider returned {status}: {text}"),
         ));
     }
     Ok(text)

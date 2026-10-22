@@ -87,14 +87,16 @@ The host replies into the iframe:
 
 ### Supported actions
 
-| Action           | Payload                          | Returns                             |
-| ---------------- | -------------------------------- | ----------------------------------- |
-| `getTasks`       | —                                | tasks of the current space          |
-| `getNotes`       | —                                | note list of the current space      |
-| `getNoteContent` | `{ noteId }` (or `{ id }`)       | the `Note` (meta + content)         |
-| `createNote`     | `{ title, category?, content? }` | the created `Note`                  |
-| `showToast`      | `{ message }`                    | `null` (shows a toast in the app)   |
-| `llmChat`        | `{ url, apiKey?, body }`         | raw LLM provider JSON (CORS bypass) |
+| Action           | Payload                          | Returns                                    |
+| ---------------- | -------------------------------- | ------------------------------------------ |
+| `getTasks`       | —                                | tasks of the current space                 |
+| `getNotes`       | —                                | note list of the current space             |
+| `getNoteContent` | `{ noteId }` (or `{ id }`)       | the `Note` (meta + content)                |
+| `createNote`     | `{ title, category?, content? }` | the created `Note`                         |
+| `showToast`      | `{ message }`                    | `null` (shows a toast in the app)          |
+| `getTheme`       | —                                | `"dark"` or `"light"` (resolved app theme) |
+| `llmGet`         | `{ url }`                        | raw provider JSON text (GET proxy)         |
+| `llmChat`        | `{ url, apiKey?, body }`         | raw LLM provider JSON (CORS bypass)        |
 
 ### LLM proxy (`llmChat`)
 

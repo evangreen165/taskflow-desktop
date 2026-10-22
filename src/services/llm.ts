@@ -6,4 +6,9 @@ export const LlmService = {
   proxy(url: string, apiKey: string, body: string): Promise<Result<string>> {
     return invokeCommand<string>("llmProxyRequest", { url, apiKey, body });
   },
+
+  /** GET proxy for public endpoints such as the OpenRouter model list. */
+  get(url: string): Promise<Result<string>> {
+    return invokeCommand<string>("llmProxyGet", { url });
+  },
 };

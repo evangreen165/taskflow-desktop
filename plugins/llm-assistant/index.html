@@ -8,35 +8,130 @@
       * {
         box-sizing: border-box;
       }
+      :root {
+        --bg: #ffffff;
+        --surface: #f6f7f9;
+        --surface-2: #f1f2f5;
+        --border: #e6e8ec;
+        --text: #1a1d23;
+        --muted: #6b7280;
+        --accent: #5b5bd6;
+        --accent-soft: #ececfd;
+      }
+      body.dark {
+        --bg: #0e1013;
+        --surface: #16181d;
+        --surface-2: #1c1f26;
+        --border: #262a33;
+        --text: #e6e8ec;
+        --muted: #9aa0a8;
+        --accent: #7c7cf0;
+        --accent-soft: #23234a;
+      }
+      html,
+      body {
+        height: 100%;
+      }
       body {
         margin: 0;
-        height: 100vh;
         display: flex;
-        background: #fff;
-        color: #1a1d23;
+        background: var(--bg);
+        color: var(--text);
         font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
       }
       .app {
         display: flex;
-        flex-direction: column;
         flex: 1;
         min-width: 0;
+      }
+      .sidebar {
+        width: 200px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+      }
+      .sidebarHead {
+        padding: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .newChat {
+        width: 100%;
+        border: 1px solid var(--accent);
+        border-radius: 8px;
+        background: var(--accent);
+        color: #fff;
+        padding: 8px 10px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .chatList {
+        flex: 1;
+        overflow-y: auto;
+        padding: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .chatRow {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        padding: 7px 8px;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text);
+        font-size: 12.5px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .chatRow.active {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .chatRow:hover {
+        background: var(--surface-2);
+      }
+      .chatTitle {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .chatDelete {
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .main {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
       }
       header {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 10px;
         padding: 10px 14px;
-        border-bottom: 1px solid #e6e8ec;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
       }
       header h1 {
         margin: 0;
         font-size: 14px;
       }
-      #settingsBtn {
-        border: 1px solid #e6e8ec;
+      .settingsBtn {
+        border: 1px solid var(--border);
         border-radius: 6px;
-        background: #f1f2f5;
+        background: var(--surface-2);
+        color: var(--text);
         padding: 6px 10px;
         cursor: pointer;
         font-size: 12.5px;
@@ -50,53 +145,80 @@
         gap: 10px;
       }
       .msg {
-        max-width: 85%;
-        padding: 8px 12px;
-        border-radius: 10px;
+        max-width: 82%;
+        padding: 9px 13px;
+        border-radius: 12px;
         font-size: 13.5px;
-        line-height: 1.45;
-        white-space: pre-wrap;
-        word-break: break-word;
+        line-height: 1.5;
+        overflow-wrap: break-word;
       }
       .msg.user {
         align-self: flex-end;
-        background: #5b5bd6;
+        background: var(--accent);
         color: #fff;
       }
       .msg.assistant {
         align-self: flex-start;
-        background: #f1f2f5;
-        color: #1a1d23;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
       }
-      .status {
-        padding: 6px 14px;
-        color: #6b7280;
+      .msg.assistant pre {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        overflow-x: auto;
         font-size: 12px;
+      }
+      .msg.assistant code {
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 12.5px;
+        background: var(--surface);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+      .msg.assistant pre code {
+        background: none;
+        padding: 0;
+      }
+      .msg.assistant ul,
+      .msg.assistant ol {
+        margin: 4px 0;
+        padding-left: 18px;
+      }
+      .msg.assistant a {
+        color: var(--accent);
+      }
+      .typing {
+        color: var(--muted);
+        font-size: 12.5px;
       }
       .composer {
         display: flex;
         gap: 8px;
         padding: 10px 14px;
-        border-top: 1px solid #e6e8ec;
+        border-top: 1px solid var(--border);
       }
       #input {
         flex: 1;
         resize: none;
-        border: 1px solid #e6e8ec;
+        border: 1px solid var(--border);
         border-radius: 8px;
+        background: var(--surface);
+        color: var(--text);
         padding: 9px 12px;
         font-size: 13.5px;
         font-family: inherit;
         outline: none;
       }
       #input:focus {
-        border-color: #5b5bd6;
+        border-color: var(--accent);
       }
       #send {
         border: none;
         border-radius: 8px;
         width: 42px;
-        background: #5b5bd6;
+        background: var(--accent);
         color: #fff;
         font-size: 16px;
         cursor: pointer;
@@ -107,20 +229,22 @@
         z-index: 10;
         display: grid;
         place-items: center;
-        background: rgba(10, 12, 16, 0.45);
+        background: rgba(10, 12, 16, 0.55);
       }
       .hidden {
         display: none !important;
       }
       .modalCard {
-        width: min(420px, 92vw);
+        width: min(440px, 94vw);
+        max-height: 90vh;
+        overflow-y: auto;
         display: flex;
         flex-direction: column;
         gap: 12px;
         padding: 18px;
-        border: 1px solid #e6e8ec;
+        border: 1px solid var(--border);
         border-radius: 12px;
-        background: #fff;
+        background: var(--surface);
         box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
       }
       .modalCard h2 {
@@ -132,13 +256,29 @@
         flex-direction: column;
         gap: 4px;
         font-size: 12px;
-        color: #6b7280;
+        color: var(--muted);
       }
-      input {
-        border: 1px solid #e6e8ec;
+      input[type="text"],
+      input[type="password"],
+      select {
+        border: 1px solid var(--border);
         border-radius: 6px;
+        background: var(--bg);
+        color: var(--text);
         padding: 8px 10px;
         font-size: 13px;
+      }
+      .checkRow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-direction: row;
+        font-size: 13px;
+        color: var(--text);
+      }
+      .modelActions {
+        display: flex;
+        gap: 8px;
       }
       .actions {
         display: flex;
@@ -146,35 +286,48 @@
         gap: 8px;
       }
       .btn {
-        border: 1px solid #e6e8ec;
+        border: 1px solid var(--border);
         border-radius: 6px;
-        background: #f1f2f5;
+        background: var(--surface-2);
+        color: var(--text);
         padding: 8px 14px;
         font-size: 13px;
         cursor: pointer;
       }
       .btn-primary {
-        border-color: #5b5bd6;
-        background: #5b5bd6;
+        border-color: var(--accent);
+        background: var(--accent);
         color: #fff;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 11.5px;
       }
     </style>
   </head>
   <body>
     <div class="app">
-      <header>
-        <h1>AI Ассистент</h1>
-        <button id="settingsBtn" title="Настройки">⚙ Настройки</button>
-      </header>
-      <div class="status" id="status">Настройте API в ⚙ и отправьте сообщение.</div>
-      <div class="messages" id="messages"></div>
-      <div class="composer">
-        <textarea
-          id="input"
-          rows="2"
-          placeholder="Например: создай заметку про архитектуру"
-        ></textarea>
-        <button id="send" title="Отправить">➤</button>
+      <aside class="sidebar">
+        <div class="sidebarHead">
+          <button class="newChat" id="newChatBtn">＋ Новый чат</button>
+        </div>
+        <div class="chatList" id="chatList"></div>
+      </aside>
+
+      <div class="main">
+        <header>
+          <h1>AI Ассистент</h1>
+          <button class="settingsBtn" id="settingsBtn">⚙ Настройки</button>
+        </header>
+        <div class="messages" id="messages"></div>
+        <div class="composer">
+          <textarea
+            id="input"
+            rows="2"
+            placeholder="Например: создай заметку про архитектуру TaskFlow"
+          ></textarea>
+          <button id="send" title="Отправить">➤</button>
+        </div>
       </div>
     </div>
 
@@ -183,7 +336,7 @@
         <h2>Настройки API</h2>
         <label>
           API URL
-          <input id="apiUrl" value="https://openrouter.ai/api/v1/chat/completions" />
+          <input id="apiUrl" type="text" value="https://openrouter.ai/api/v1/chat/completions" />
         </label>
         <label>
           API Key
@@ -191,8 +344,16 @@
         </label>
         <label>
           Модель
-          <input id="model" value="openai/gpt-4o-mini" />
+          <select id="model"></select>
         </label>
+        <label class="checkRow">
+          <input id="freeOnly" type="checkbox" checked />
+          Только бесплатные
+        </label>
+        <div class="modelActions">
+          <button class="btn" id="loadModels">Загрузить список моделей</button>
+          <span class="hint" id="modelsHint"></span>
+        </div>
         <div class="actions">
           <button class="btn" id="closeSettings">Закрыть</button>
           <button class="btn btn-primary" id="saveSettings">Сохранить</button>
@@ -203,38 +364,95 @@
     <script>
       const $ = (id) => document.getElementById(id);
       const messagesEl = $("messages");
-      const history = [];
-      let busy = false;
+      const chatListEl = $("chatList");
 
+      const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+      const MODELS_URL = "https://openrouter.ai/api/v1/models";
+      const FREE_MODELS = [
+        "meta-llama/llama-3-8b-instruct:free",
+        "meta-llama/llama-3.1-8b-instruct:free",
+        "mistralai/mistral-7b-instruct:free",
+        "google/gemma-7b-it:free",
+        "google/gemma-2-9b-it:free",
+        "nousresearch/hermes-3-llama-3.1-8b:free",
+      ];
       const DEFAULT_SETTINGS = {
-        url: "https://openrouter.ai/api/v1/chat/completions",
+        url: OPENROUTER_URL,
         apiKey: "",
-        model: "openai/gpt-4o-mini",
+        model: FREE_MODELS[0],
+        freeOnly: true,
       };
+
       const settings = {
         ...DEFAULT_SETTINGS,
-        ...JSON.parse(localStorage.getItem("llm-assistant") || "{}"),
+        ...JSON.parse(localStorage.getItem("taskflow_llm_settings") || "{}"),
       };
+      let allModels = [];
+      let busy = false;
 
-      $("apiUrl").value = settings.url;
-      $("apiKey").value = settings.apiKey;
-      $("model").value = settings.model;
+      // ---- chat history -------------------------------------------------
+      let chats = [];
+      let currentChatId = null;
+      try {
+        chats = JSON.parse(localStorage.getItem("taskflow_llm_chats") || "[]") || [];
+      } catch {
+        chats = [];
+      }
 
-      $("settingsBtn").addEventListener("click", () =>
-        $("settingsModal").classList.remove("hidden"),
-      );
-      $("closeSettings").addEventListener("click", () =>
-        $("settingsModal").classList.add("hidden"),
-      );
-      $("saveSettings").addEventListener("click", () => {
-        settings.url = $("apiUrl").value.trim() || DEFAULT_SETTINGS.url;
-        settings.apiKey = $("apiKey").value.trim();
-        settings.model = $("model").value.trim() || DEFAULT_SETTINGS.model;
-        localStorage.setItem("llm-assistant", JSON.stringify(settings));
-        $("settingsModal").classList.add("hidden");
-        setStatus("Настройки сохранены.");
-      });
+      function currentChat() {
+        return chats.find((chat) => chat.id === currentChatId) || null;
+      }
 
+      function saveChats() {
+        localStorage.setItem("taskflow_llm_chats", JSON.stringify(chats));
+        renderChatList();
+      }
+
+      function newChat() {
+        const chat = { id: Date.now().toString(), title: "Новый чат", messages: [] };
+        chats.unshift(chat);
+        currentChatId = chat.id;
+        saveChats();
+        renderMessages();
+      }
+
+      function selectChat(id) {
+        currentChatId = id;
+        renderChatList();
+        renderMessages();
+      }
+
+      function deleteChat(id, event) {
+        event.stopPropagation();
+        chats = chats.filter((chat) => chat.id !== id);
+        if (currentChatId === id) {
+          currentChatId = chats[0] ? chats[0].id : null;
+        }
+        saveChats();
+        renderMessages();
+      }
+
+      function renderChatList() {
+        chatListEl.textContent = "";
+        for (const chat of chats) {
+          const row = document.createElement("button");
+          row.className = "chatRow" + (chat.id === currentChatId ? " active" : "");
+          row.addEventListener("click", () => selectChat(chat.id));
+          const title = document.createElement("span");
+          title.className = "chatTitle";
+          title.textContent = chat.title;
+          const del = document.createElement("button");
+          del.className = "chatDelete";
+          del.textContent = "✕";
+          del.title = "Удалить чат";
+          del.addEventListener("click", (event) => deleteChat(chat.id, event));
+          row.appendChild(title);
+          row.appendChild(del);
+          chatListEl.appendChild(row);
+        }
+      }
+
+      // ---- bridge -------------------------------------------------------
       function callPlugin(action, payload = {}) {
         return new Promise((resolve, reject) => {
           const id = Math.random().toString(36).slice(2);
@@ -250,21 +468,103 @@
         });
       }
 
-      function setStatus(text) {
-        $("status").textContent = text;
+      // ---- markdown -----------------------------------------------------
+      function escapeHtml(text) {
+        return text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
       }
 
-      function addMessage(role, text) {
-        const el = document.createElement("div");
-        el.className = "msg " + role;
-        el.textContent = text;
-        messagesEl.appendChild(el);
+      function renderMarkdown(text) {
+        const codeBlocks = [];
+        let html = escapeHtml(text).replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+          const key = "__CB" + codeBlocks.length + "__";
+          codeBlocks.push(
+            '<pre><code class="lang-' +
+              (lang || "").toLowerCase() +
+              '">' +
+              code.trim() +
+              "</code></pre>",
+          );
+          return key;
+        });
+        html = html.replace(/^###### (.*)$/gm, "<h6>$1</h6>");
+        html = html.replace(/^##### (.*)$/gm, "<h5>$1</h5>");
+        html = html.replace(/^#### (.*)$/gm, "<h4>$1</h4>");
+        html = html.replace(/^### (.*)$/gm, "<h3>$1</h3>");
+        html = html.replace(/^## (.*)$/gm, "<h2>$1</h2>");
+        html = html.replace(/^# (.*)$/gm, "<h1>$1</h1>");
+        html = html.replace(/^\s*[-*]\s+(.*)$/gm, "<ul><li>$1</li></ul>");
+        html = html.replace(/^\s*\d+\.\s+(.*)$/gm, "<ol><li>$1</li></ol>");
+        html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+        html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+        html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+        html = html.replace(
+          /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+          '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+        );
+        html = html.replace(/__CB(\d+)__/g, (_, i) => codeBlocks[Number(i)]);
+        html = html.replace(/\n{2,}/g, "</p><p>");
+        html = html.replace(/\n/g, "<br />");
+        return "<p>" + html + "</p>";
+      }
+
+      // ---- messages -----------------------------------------------------
+      function addMessage(role, content) {
+        const chat = currentChat();
+        if (!chat) return;
+        chat.messages.push({ role, content });
+        saveChats();
+        if (chat.messages.length === 1 && role === "user") {
+          chat.title = content.length > 40 ? content.slice(0, 40) + "…" : content;
+          saveChats();
+        }
+        renderMessages();
+      }
+
+      function renderMessages() {
+        messagesEl.textContent = "";
+        const chat = currentChat();
+        if (!chat) {
+          const empty = document.createElement("div");
+          empty.className = "typing";
+          empty.textContent = "Нажмите «＋ Новый чат» и спросите о чём угодно.";
+          messagesEl.appendChild(empty);
+          return;
+        }
+        for (const message of chat.messages) {
+          const el = document.createElement("div");
+          el.className = "msg " + (message.role === "user" ? "user" : "assistant");
+          if (message.role === "user") {
+            el.textContent = message.content;
+          } else {
+            el.innerHTML = renderMarkdown(message.content);
+          }
+          messagesEl.appendChild(el);
+        }
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
 
+      let typingEl = null;
+      function setTyping(typing) {
+        if (typing && !typingEl) {
+          typingEl = document.createElement("div");
+          typingEl.className = "typing";
+          typingEl.textContent = "Печатает…";
+          messagesEl.appendChild(typingEl);
+        } else if (!typing && typingEl) {
+          typingEl.remove();
+          typingEl = null;
+        }
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      // ---- agent logic -------------------------------------------------
       const SYSTEM_PROMPT =
-        "Ты — ИИ-ассистент, встроенный в десктоп-приложение TaskFlow (трекер задач и база знаний). " +
-        "Отвечай кратко и по делу на русском языке. " +
+        "Ты — «AI Ассистент», встроенный в десктоп-приложение TaskFlow (трекер задач и база знаний). " +
+        "Ты полезный, краткий и точный помощник. Отвечай на русском языке, используй Markdown для структуры. " +
         "Если пользователь просит создать заметки, верни ТОЛЬКО JSON-блок без пояснений и без markdown-кода: " +
         '{"action":"create_notes","notes":[{"title":"Название","content":"Содержание","tags":["тег"]}]}';
 
@@ -299,10 +599,8 @@
         const plan = extractCreateNotes(content);
         if (!plan) {
           addMessage("assistant", content);
-          history.push({ role: "assistant", content });
           return;
         }
-        addMessage("assistant", "Создаю заметки…");
         let created = 0;
         for (const note of plan.notes || []) {
           try {
@@ -313,30 +611,44 @@
             });
             created += 1;
           } catch (err) {
-            addMessage("assistant", "Не удалось создать заметку: " + err.message);
+            addMessage(
+              "assistant",
+              "Не удалось создать заметку: **" + (note.title || "?") + "** — " + err.message,
+            );
           }
         }
-        const message = `Создано ${created} ${plural(created)}`;
+        const message =
+          created > 0
+            ? "Готово! Создано **" +
+              created +
+              " " +
+              plural(created) +
+              "** в текущем пространстве. 🎉"
+            : "Не удалось создать заметки.";
         addMessage("assistant", message);
-        await callPlugin("showToast", { message });
+        await callPlugin("showToast", { message: "Создано " + created + " " + plural(created) });
       }
 
       async function send() {
         if (busy) return;
         const text = $("input").value.trim();
         if (!text) return;
+        if (!currentChat()) newChat();
         $("input").value = "";
         addMessage("user", text);
-        history.push({ role: "user", content: text });
         busy = true;
-        setStatus("Запрос к LLM…");
+        setTyping(true);
         try {
+          const chat = currentChat();
           const body = JSON.stringify({
             model: settings.model,
-            messages: [{ role: "system", content: SYSTEM_PROMPT }, ...history],
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              ...chat.messages.map((m) => ({ role: m.role, content: m.content })),
+            ],
           });
           const raw = await callPlugin("llmChat", {
-            url: settings.url,
+            url: settings.url || OPENROUTER_URL,
             apiKey: settings.apiKey,
             body,
           });
@@ -344,15 +656,79 @@
           const content = json?.choices?.[0]?.message?.content ?? "";
           if (!content) throw new Error("Пустой ответ от модели");
           await handleReply(content);
-          setStatus("");
         } catch (err) {
           addMessage("assistant", "Ошибка: " + err.message);
-          setStatus("");
         } finally {
+          setTyping(false);
           busy = false;
         }
       }
 
+      // ---- settings -----------------------------------------------------
+      function renderModelOptions() {
+        const select = $("model");
+        const freeOnly = $("freeOnly").checked;
+        const list = freeOnly ? allModels.filter((m) => m.id && m.id.includes(":free")) : allModels;
+        const fallback = freeOnly
+          ? FREE_MODELS
+          : [...FREE_MODELS, ...(allModels.length ? allModels.map((m) => m.id) : [])];
+        const ids = list.length ? list.map((m) => m.id) : fallback;
+        select.textContent = "";
+        for (const id of ids) {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = id;
+          if (id === settings.model) option.selected = true;
+          select.appendChild(option);
+        }
+        if (!ids.includes(settings.model) && ids.length) {
+          settings.model = ids[0];
+        }
+      }
+
+      async function loadModels() {
+        const btn = $("loadModels");
+        btn.disabled = true;
+        $("modelsHint").textContent = "Загрузка…";
+        try {
+          const raw = await callPlugin("llmGet", { url: MODELS_URL });
+          const json = JSON.parse(raw);
+          allModels = (json?.data || []).filter((m) => typeof m?.id === "string");
+          renderModelOptions();
+          $("modelsHint").textContent = "Загружено " + allModels.length + " моделей.";
+        } catch (err) {
+          $("modelsHint").textContent = "Не удалось загрузить: " + err.message;
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      function openSettings() {
+        $("apiUrl").value = settings.url || OPENROUTER_URL;
+        $("apiKey").value = settings.apiKey;
+        $("freeOnly").checked = settings.freeOnly;
+        renderModelOptions();
+        $("settingsModal").classList.remove("hidden");
+      }
+
+      function saveSettings() {
+        settings.url = ($("apiUrl").value.trim() || OPENROUTER_URL).trim();
+        settings.apiKey = $("apiKey").value.trim();
+        settings.model = $("model").value || FREE_MODELS[0];
+        settings.freeOnly = $("freeOnly").checked;
+        localStorage.setItem("taskflow_llm_settings", JSON.stringify(settings));
+        $("settingsModal").classList.add("hidden");
+      }
+
+      $("settingsBtn").addEventListener("click", openSettings);
+      $("closeSettings").addEventListener("click", () =>
+        $("settingsModal").classList.add("hidden"),
+      );
+      $("saveSettings").addEventListener("click", saveSettings);
+      $("loadModels").addEventListener("click", () => void loadModels());
+      $("freeOnly").addEventListener("change", renderModelOptions);
+
+      $("newChatBtn").addEventListener("click", newChat);
       $("send").addEventListener("click", () => void send());
       $("input").addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.shiftKey) {
@@ -360,6 +736,16 @@
           void send();
         }
       });
+
+      // ---- boot ---------------------------------------------------------
+      function applyTheme(theme) {
+        document.body.classList.toggle("dark", theme === "dark");
+      }
+
+      void callPlugin("getTheme")
+        .then((theme) => applyTheme(theme))
+        .catch(() => {});
+      if (!currentChat()) newChat();
     </script>
   </body>
 </html>

@@ -20,4 +20,12 @@ describe("LlmService", () => {
       body: '{"model":"x"}',
     });
   });
+
+  it("get forwards the url", async () => {
+    invokeMock.mockResolvedValue('{"data":[]}');
+    await LlmService.get("https://openrouter.ai/api/v1/models");
+    expect(invokeMock).toHaveBeenCalledWith("llmProxyGet", {
+      url: "https://openrouter.ai/api/v1/models",
+    });
+  });
 });
