@@ -2,6 +2,28 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.7.0] - 2026-10-22
+
+### Added
+
+- Global search / command palette (Ctrl/Cmd+K) for tasks and notes across accessible spaces, with recent items
+- In-app notifications: bell with unread dot, task assignment / comment mention / space added events, 30 s polling and instant file-watcher refresh
+- Auto-updater: online GitHub Releases channel (signed artifacts) and offline `updates/update.json` detection + «Установить и перезапустить»
+- Dashboard analytics widget: tasks-by-status pie and per-assignee workload bar (recharts)
+- Loading skeletons for the task board, knowledge base, and dashboard
+- GitHub Actions release workflow with manual dispatch, updater artifact signing and `latest.json`
+
+### Fixed
+
+- Space isolation for assignees: only space members can be assigned (`INVALID_ASSIGNEE`), and the picker lists space members only
+- `@login` mentions now trigger notifications, with a space-member autocomplete in the comment box
+- Real-time sync across spaces: the task watcher matches `spaces/{spaceId}/tasks/`; notifications react to `notifications/{userId}.json`
+- 30 s polling fallback for task boards and the dashboard when SMB file events are dropped
+
+### Security
+
+- Passwordless updater signing key; CI uses only `TAURI_SIGNING_PRIVATE_KEY`
+
 ## [0.6.0] - 2026-10-22
 
 ### Added
