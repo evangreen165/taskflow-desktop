@@ -5,6 +5,7 @@ import KanbanBoard from "@/components/tasks/KanbanBoard";
 import NewTaskModal from "@/components/tasks/NewTaskModal";
 import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import TaskListView from "@/components/tasks/TaskListView";
+import Skeleton from "@/components/ui/Skeleton";
 import { messageForCode } from "@/lib/errorMessages";
 import {
   EMPTY_TASK_FILTER,
@@ -200,13 +201,25 @@ export default function TasksPage(): JSX.Element {
         ) : null}
       </div>
 
-      {loading ? <div className={styles.loading}>Загрузка задач…</div> : null}
-
-      {!spaceId ? (
+      {loading ? (
+        <div className={styles.skeletonBoard}>
+          {Array.from({ length: 3 }).map((_, column) => (
+            <div key={column} className={styles.skeletonColumn}>
+              <Skeleton height={16} width="45%" />
+              {Array.from({ length: 3 }).map((_, card) => (
+                <div key={card} className={styles.skeletonCard}>
+                  <Skeleton height={13} width="80%" />
+                  <Skeleton height={10} width="55%" />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : !spaceId ? (
         <div className={styles.emptyState}>Загрузка пространства…</div>
-      ) : !loading && tasks.length === 0 && !filterActive ? (
+      ) : tasks.length === 0 && !filterActive ? (
         <div className={styles.emptyState}>В этом пространстве пока нет задач.</div>
-      ) : !loading && filteredTasks.length === 0 && filterActive ? (
+      ) : filteredTasks.length === 0 && filterActive ? (
         <div className={styles.emptyState}>Ничего не найдено</div>
       ) : view === "kanban" ? (
         <KanbanBoard

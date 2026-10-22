@@ -1,7 +1,7 @@
 ﻿import { create } from "zustand";
 import type { Layout } from "react-grid-layout";
 
-export type WidgetId = "active" | "today" | "overdue" | "stats" | "notes";
+export type WidgetId = "active" | "today" | "overdue" | "stats" | "notes" | "analytics";
 
 export const WIDGET_DEFS: { id: WidgetId; title: string }[] = [
   { id: "active", title: "Мои активные задачи" },
@@ -9,6 +9,7 @@ export const WIDGET_DEFS: { id: WidgetId; title: string }[] = [
   { id: "overdue", title: "Просроченные" },
   { id: "stats", title: "Статистика" },
   { id: "notes", title: "Последние заметки" },
+  { id: "analytics", title: "Аналитика" },
 ];
 
 export interface DashboardConfig {
@@ -25,11 +26,19 @@ function defaultLayout(): Layout {
     { i: "overdue", x: 8, y: 0, w: 4, h: 4, minW: 3, minH: 3 },
     { i: "stats", x: 0, y: 4, w: 4, h: 2, minW: 3, minH: 2 },
     { i: "notes", x: 4, y: 4, w: 4, h: 4, minW: 3, minH: 3 },
+    { i: "analytics", x: 8, y: 4, w: 4, h: 5, minW: 4, minH: 4 },
   ];
 }
 
 function defaultVisible(): Record<WidgetId, boolean> {
-  return { active: true, today: true, overdue: true, stats: true, notes: true };
+  return {
+    active: true,
+    today: true,
+    overdue: true,
+    stats: true,
+    notes: true,
+    analytics: true,
+  };
 }
 
 function readInitial(): DashboardConfig {
@@ -38,8 +47,15 @@ function readInitial(): DashboardConfig {
     if (saved) {
       const parsed = JSON.parse(saved) as DashboardConfig;
       if (Array.isArray(parsed.layout) && parsed.visible && typeof parsed.visible === "object") {
+        // Merge widgets added in newer versions into an existing saved layout.
+        const layout = [...parsed.layout];
+        for (const item of defaultLayout()) {
+          if (!layout.some((entry) => entry.i === item.i)) {
+            layout.push(item);
+          }
+        }
         return {
-          layout: parsed.layout,
+          layout,
           visible: { ...defaultVisible(), ...parsed.visible },
         };
       }
