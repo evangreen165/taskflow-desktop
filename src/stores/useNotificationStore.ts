@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
 import { NotificationsService, type Notification } from "@/services/notifications";
+import { StorageService } from "@/services/storage";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 interface NotificationState {
   items: Notification[];
@@ -53,3 +55,52 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     }
   },
 }));
+
+let notificationTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Subscribes to `workspace://fs-event`: a change to
+ * `notifications/{currentUserId}.json` (written by another PC or user) triggers
+ * an immediate refetch instead of waiting for the 30 s poll. Returns an
+ * unsubscribe function.
+ */
+export function setupNotificationWatcher(): () => void {
+  let disposed = false;
+  let unlisten: (() => void) | null = null;
+
+  void StorageService.watch((batch) => {
+    if (disposed) {
+      return;
+    }
+    const session = useAuthStore.getState().session;
+    if (!session) {
+      return;
+    }
+    const ownFile = `notifications/${session.user.id}.json`;
+    if (!batch.events.some((event) => event.path === ownFile)) {
+      return;
+    }
+    if (notificationTimer !== null) {
+      clearTimeout(notificationTimer);
+    }
+    notificationTimer = setTimeout(() => {
+      notificationTimer = null;
+      void useNotificationStore.getState().fetch();
+    }, 150);
+  }).then((fn) => {
+    if (disposed) {
+      fn();
+    } else {
+      unlisten = fn;
+    }
+  });
+
+  return () => {
+    disposed = true;
+    unlisten?.();
+    if (notificationTimer !== null) {
+      clearTimeout(notificationTimer);
+      notificationTimer = null;
+    }
+  };
+}

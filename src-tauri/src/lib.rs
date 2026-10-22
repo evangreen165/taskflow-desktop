@@ -206,6 +206,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_data_dir)?;
@@ -269,6 +270,7 @@ pub fn run() {
             commands::attachment_open,
             commands::dashboard_summary,
             commands::global_search,
+            commands::check_offline_update,
             commands::notifications_list,
             commands::notifications_mark_read,
             commands::notifications_mark_all_read,

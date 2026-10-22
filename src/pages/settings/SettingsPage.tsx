@@ -1,11 +1,14 @@
 ﻿import { useState } from "react";
+import type { Update } from "@tauri-apps/plugin-updater";
 
 import packageJson from "@/../package.json";
 
 import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
+import { UpdaterService, type OfflineUpdate } from "@/services/updater";
 import { useAppStore } from "@/stores/useAppStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useThemeStore, type AppTheme } from "@/stores/useThemeStore";
+import { useToastStore } from "@/stores/useToastStore";
 
 import styles from "./SettingsPage.module.css";
 
@@ -23,8 +26,80 @@ export default function SettingsPage(): JSX.Element {
   const hideEmptyColumns = useSettingsStore((s) => s.hideEmptyColumns);
   const setHideEmptyColumns = useSettingsStore((s) => s.setHideEmptyColumns);
   const workspace = useAppStore((s) => s.workspace);
+  const pushToast = useToastStore((s) => s.push);
   const [tab, setTab] = useState<SettingsTab>("appearance");
   const [changeFolderOpen, setChangeFolderOpen] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const [onlineUpdate, setOnlineUpdate] = useState<Update | null>(null);
+  const [offlineUpdate, setOfflineUpdate] = useState<OfflineUpdate | null>(null);
+  const [onlineError, setOnlineError] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installMessage, setInstallMessage] = useState<string | null>(null);
+
+  async function checkUpdates(): Promise<void> {
+    setChecking(true);
+    setChecked(false);
+    setOnlineUpdate(null);
+    setOfflineUpdate(null);
+    setOnlineError(null);
+    setInstallMessage(null);
+
+    // Offline drop-in file first: it must work without network access.
+    const offline = await UpdaterService.checkOffline();
+    if (offline.ok) {
+      setOfflineUpdate(offline.value);
+    } else {
+      pushToast(offline.error.message, "error");
+    }
+
+    try {
+      const online = await UpdaterService.checkOnline();
+      setOnlineUpdate(online);
+      if (online) {
+        pushToast(`Доступно обновление ${online.version}`, "success");
+      }
+    } catch (error) {
+      setOnlineError(error instanceof Error ? error.message : String(error));
+    }
+
+    setChecked(true);
+    setChecking(false);
+  }
+
+  async function installOnline(): Promise<void> {
+    if (!onlineUpdate) {
+      return;
+    }
+    setInstalling(true);
+    setInstallMessage("Загрузка обновления…");
+    let downloaded = 0;
+    let total = 0;
+    try {
+      await onlineUpdate.downloadAndInstall((event) => {
+        if (event.event === "Started") {
+          total = event.data.contentLength ?? 0;
+          setInstallMessage("Загрузка обновления…");
+        } else if (event.event === "Progress") {
+          downloaded += event.data.chunkLength;
+          if (total > 0) {
+            setInstallMessage(
+              `Загрузка… ${Math.min(100, Math.round((downloaded / total) * 100))}%`,
+            );
+          }
+        } else {
+          setInstallMessage("Установка…");
+        }
+      });
+      setInstallMessage("Обновление установлено. Перезапустите приложение.");
+      pushToast("Обновление установлено", "success");
+    } catch (error) {
+      setInstallMessage(null);
+      pushToast(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      setInstalling(false);
+    }
+  }
 
   return (
     <div className={styles.page}>
@@ -106,6 +181,55 @@ export default function SettingsPage(): JSX.Element {
               </button>
             </dd>
           </dl>
+
+          <div className={styles.updateBlock}>
+            <h3>Обновления</h3>
+            <p className={styles.muted}>
+              Проверяет онлайн-канал и файл <code>updates/update.json</code> в папке workspace.
+            </p>
+            <button
+              className="btn-primary"
+              type="button"
+              disabled={checking}
+              onClick={() => void checkUpdates()}
+            >
+              {checking ? "Проверка…" : "Проверить обновления"}
+            </button>
+
+            {onlineUpdate ? (
+              <div className={styles.updateCard}>
+                <strong>Доступна версия {onlineUpdate.version}</strong>
+                {onlineUpdate.body ? <p>{onlineUpdate.body}</p> : null}
+                <button
+                  className="btn-primary"
+                  type="button"
+                  disabled={installing}
+                  onClick={() => void installOnline()}
+                >
+                  {installing ? "Загрузка…" : "Скачать и установить"}
+                </button>
+              </div>
+            ) : null}
+
+            {offlineUpdate ? (
+              <div className={styles.updateCard}>
+                <strong>Офлайн-обновление {offlineUpdate.version}</strong>
+                {offlineUpdate.notes ? <p>{offlineUpdate.notes}</p> : null}
+                <p className={styles.muted}>
+                  Файл: {offlineUpdate.path ?? "updates/update.json"}. Установите вручную.
+                </p>
+              </div>
+            ) : null}
+
+            {installMessage ? <p className={styles.muted}>{installMessage}</p> : null}
+
+            {checked && !onlineUpdate && !offlineUpdate && onlineError ? (
+              <p className={styles.muted}>Онлайн-проверка недоступна: {onlineError}</p>
+            ) : null}
+            {checked && !onlineUpdate && !offlineUpdate && !onlineError ? (
+              <p className={styles.muted}>Обновлений не найдено.</p>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

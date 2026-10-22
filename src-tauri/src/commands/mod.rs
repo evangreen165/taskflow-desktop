@@ -8,6 +8,7 @@ mod search;
 mod spaces;
 mod storage;
 mod tasks;
+mod updater;
 mod users;
 mod workspace;
 
@@ -21,5 +22,6 @@ pub use search::*;
 pub use spaces::*;
 pub use storage::*;
 pub use tasks::*;
+pub use updater::*;
 pub use users::*;
 pub use workspace::*;
