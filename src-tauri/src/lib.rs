@@ -267,6 +267,7 @@ pub fn run() {
             commands::attachment_remove,
             commands::attachment_open,
             commands::dashboard_summary,
+            commands::global_search,
             commands::spaces_list,
             commands::spaces_get,
             commands::spaces_create,

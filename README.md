@@ -42,6 +42,14 @@ To protect the data for real:
 In short: **the app protects against accidents; the OS file permissions protect
 against unauthorized access.**
 
+## Development Workflow
+
+- Every stage or step gets a detailed report in `docs/reports/`; the chat
+  summary is intentionally brief. See `.ai/INSTRUCTIONS.md` for the rule.
+- Stage commits use `stage<N>(<step>): ...`.
+- Before committing, run `cargo test` (in `src-tauri/`), `npm run test`,
+  `npm run lint`, and `npm run build`.
+
 ## Project Stages (History)
 
 - **v0.1.0 (Foundation):** Basic Tauri skeleton, workspace initialization, atomic file operations, secure path resolution.

@@ -14,6 +14,7 @@ import {
   type TaskStatus,
 } from "@/services/tasks";
 import type { UserSummary } from "@/services/users";
+import { useRecentStore } from "@/stores/useRecentStore";
 import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useUserDirectory } from "@/stores/useUserDirectory";
@@ -74,10 +75,16 @@ export default function TaskDetailPanel({
   const [moving, setMoving] = useState(false);
   const spaces = useSpaceStore((s) => s.spaces);
   const pushToast = useToastStore((s) => s.push);
+  const recordRecent = useRecentStore((s) => s.record);
 
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  // Remember the last viewed tasks for the command palette's "Недавние".
+  useEffect(() => {
+    recordRecent({ kind: "task", id: task.id, title: task.title, spaceId });
+  }, [recordRecent, task.id, task.title, spaceId]);
 
   async function handleClose(): Promise<void> {
     await flush();

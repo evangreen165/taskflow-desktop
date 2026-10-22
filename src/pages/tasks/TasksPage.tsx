@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import KanbanBoard from "@/components/tasks/KanbanBoard";
 import NewTaskModal from "@/components/tasks/NewTaskModal";
@@ -53,6 +54,8 @@ export default function TasksPage(): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<BoardView>("kanban");
   const [filter, setFilter] = useState<TaskFilterState>(EMPTY_TASK_FILTER);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const taskParam = searchParams.get("task");
 
   const filteredTasks = useMemo(() => filterTasks(tasks, filter), [tasks, filter]);
   const filterActive = isFilterActive(filter);
@@ -62,6 +65,13 @@ export default function TasksPage(): JSX.Element {
       void fetchTasks(spaceId);
     }
   }, [fetchTasks, spaceId]);
+
+  // Deep link from the command palette: /app/tasks?task=<id>.
+  useEffect(() => {
+    if (taskParam) {
+      setSelectedId(taskParam);
+    }
+  }, [taskParam]);
 
   // Live updates: another machine or an external editor changing tasks/ files.
   useEffect(() => {
@@ -218,6 +228,11 @@ export default function TasksPage(): JSX.Element {
           spaceId={spaceId}
           onClose={() => {
             setSelectedId(null);
+            if (taskParam) {
+              const next = new URLSearchParams(searchParams);
+              next.delete("task");
+              setSearchParams(next, { replace: true });
+            }
             void fetchTasks(spaceId);
           }}
         />

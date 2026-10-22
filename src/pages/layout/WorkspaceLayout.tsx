@@ -2,6 +2,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import Avatar from "@/components/Avatar";
+import CommandPalette from "@/components/search/CommandPalette";
 import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { SpacesService } from "@/services/spaces";
@@ -66,11 +67,13 @@ export default function WorkspaceLayout(): JSX.Element {
   const [memberDraft, setMemberDraft] = useState<string[]>([]);
   const [membersBusy, setMembersBusy] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const currentSpace = spaces.find((space) => space.id === currentSpaceId) ?? null;
   const canAdmin =
     can("users.manage") || can("roles.manage") || can("space.manage") || can("audit.view");
   const personalOwner = isOwnPersonalSpace(currentSpace, user?.id);
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
   useEffect(() => {
     void fetchSpaces();
@@ -88,6 +91,18 @@ export default function WorkspaceLayout(): JSX.Element {
     }
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
+  }, []);
+
+  // Ctrl+K on Windows/Linux, Cmd+K on macOS opens the command palette.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   async function createSpace(): Promise<void> {
@@ -313,6 +328,18 @@ export default function WorkspaceLayout(): JSX.Element {
               </div>
             ) : null}
           </div>
+          <button
+            type="button"
+            className={styles.searchButton}
+            onClick={() => setPaletteOpen(true)}
+            aria-label="Глобальный поиск"
+          >
+            <span className={styles.searchIcon} aria-hidden="true">
+              🔍
+            </span>
+            <span className={styles.searchLabel}>Поиск задач и заметок…</span>
+            <kbd className={styles.searchKbd}>{isMac ? "⌘ K" : "Ctrl K"}</kbd>
+          </button>
           <div className={styles.spacer} />
           <button className="btn-ghost" type="button" onClick={() => setChangeFolderOpen(true)}>
             Сменить папку
@@ -424,6 +451,8 @@ export default function WorkspaceLayout(): JSX.Element {
           </div>
         </div>
       ) : null}
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </div>
   );
 }
