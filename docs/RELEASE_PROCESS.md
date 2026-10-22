@@ -9,6 +9,17 @@ TaskFlow ships through two update channels:
 
 ## One-time setup
 
+### Repository visibility (critical)
+
+**The repository must be PUBLIC.** The in-app updater downloads
+`.../releases/latest/download/latest.json` anonymously; GitHub requires
+authentication for release assets of **private** repositories, so online updates
+would fail with 404/401.
+
+Make it public under **Settings → General → Danger Zone → Change repository
+visibility → Public**. (If the code must stay private, host the signed
+installers + `latest.json` on a public static host and change the endpoint.)
+
 ### Signing keys
 
 The updater verifies release signatures with the public key stored in
@@ -43,6 +54,9 @@ https://github.com/evangreen165/taskflow-desktop/releases/latest/download/latest
 This URL resolves to the `latest.json` asset of the newest non-prerelease
 GitHub Release. No server is required.
 
+Verify the owner/repository segment matches the real repo
+(`evangreen165/taskflow-desktop`); a typo makes every update check return 404.
+
 ---
 
 ## Cutting a release
@@ -74,6 +88,66 @@ GitHub Release. No server is required.
      `.sig` files and `latest.json`.
 
 No manual artifact upload is needed.
+
+---
+
+## Manual workflow trigger
+
+If pushing the tag did not start a build (for example the workflow was added
+after the tag was created, or Actions was disabled), run it manually:
+
+1. Open the repository on GitHub → **Actions**.
+2. Select **Release** in the left sidebar.
+3. Click **Run workflow**.
+4. Choose the branch (usually `main`) and enter the **existing** tag
+   (e.g. `v0.6.0`) in the **Tag to build and publish** field.
+5. Click **Run workflow**.
+
+The workflow creates/updates the GitHub Release for that tag and attaches the
+MSI, NSIS EXE, `.sig` files and `latest.json`.
+
+> Create and push the tag first (`git tag -a vX.Y.Z && git push origin --tags`).
+> The manual trigger builds the release for the tag you type, not for a branch.
+
+---
+
+## Manual release fallback (Actions unavailable)
+
+If GitHub Actions cannot run, publish the release by hand:
+
+1. Build locally on Windows:
+   ```bash
+   npm ci
+   npm run tauri build
+   ```
+   With `createUpdaterArtifacts: true`, Tauri writes the installers and `.sig`
+   files under `src-tauri/target/release/bundle/`:
+   - `msi/TaskFlow_<version>_x64_en-US.msi` (+ `.sig`)
+   - `nsis/TaskFlow_<version>_x64-setup.exe` (+ `.sig`)
+2. Create `latest.json` (the updater reads it from the **latest** release):
+   ```json
+   {
+     "version": "<version>",
+     "notes": "<release notes>",
+     "pub_date": "<YYYY-MM-DDTHH:MM:SSZ>",
+     "platforms": {
+       "windows-x86_64": {
+         "signature": "<contents of the .exe.sig file>",
+         "url": "https://github.com/evangreen165/taskflow-desktop/releases/download/v<version>/TaskFlow_<version>_x64-setup.exe"
+       }
+     }
+   }
+   ```
+   Use the NSIS `.exe` and its `.sig` for `windows-x86_64`.
+3. On GitHub → **Releases** → **Draft a new release**, select the existing tag,
+   and attach:
+   - the `.msi`;
+   - the NSIS `.exe`;
+   - both `.sig` files;
+   - `latest.json`.
+4. Publish the release (not a draft, not a prerelease). The URL
+   `.../releases/latest/download/latest.json` only resolves for the latest
+   published non-prerelease release.
 
 ---
 
@@ -129,10 +203,12 @@ The version comparison is `major.minor.patch`; `v` prefixes and
 
 ## Troubleshooting
 
-| Symptom                                       | Likely cause                                                                        |
-| --------------------------------------------- | ----------------------------------------------------------------------------------- |
-| "signature verification failed"               | Private key/password in CI does not match `plugins.updater.pubkey`                  |
-| Online check returns 404                      | `latest.json` not published, or the release is a draft/prerelease                   |
-| Offline update not detected                   | Wrong folder (`updates/` must be in the workspace root), or `version` is not higher |
-| "installer must be inside the updates folder" | `path` points outside `{workspace}/updates/`                                        |
-| Changes from another PC appear late           | SMB watcher dropped events; wait for the 30 s poll (or fix SMB change-notify)       |
+| Symptom                                       | Likely cause                                                                                                |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Actions workflow did not run                  | Tag not pushed, Actions disabled, or workflow added after the tag; use **Actions → Release → Run workflow** |
+| "signature verification failed"               | Private key/password in CI does not match `plugins.updater.pubkey`                                          |
+| Online check returns 404                      | Repo is private, `latest.json` is missing, or the release is a draft/prerelease                             |
+| `latest.json` signature mismatch              | `.sig` content does not belong to the uploaded installer / wrong signing key                                |
+| Offline update not detected                   | Wrong folder (`updates/` must be in the workspace root), or `version` is not higher                         |
+| "installer must be inside the updates folder" | `path` points outside `{workspace}/updates/`                                                                |
+| Changes from another PC appear late           | SMB watcher dropped events; wait for the 30 s poll (or fix SMB change-notify)                               |
