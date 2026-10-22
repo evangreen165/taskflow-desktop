@@ -208,6 +208,9 @@ export default function WorkspaceLayout(): JSX.Element {
           <SideNavLink to="/app/kb" disabled={forced}>
             Заметки
           </SideNavLink>
+          <SideNavLink to="/app/plugins" disabled={forced}>
+            🧩 Расширения
+          </SideNavLink>
           <div className={styles.navLabel}>Управление</div>
           {canAdmin ? (
             <SideNavLink to="/app/admin" disabled={forced}>
