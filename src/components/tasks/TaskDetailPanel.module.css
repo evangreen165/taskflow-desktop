@@ -461,6 +461,58 @@
   word-break: break-word;
 }
 
+.commentComposer {
+  position: relative;
+}
+
+.mentionMenu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 20;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.mentionItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mentionItem:hover,
+.mentionActive {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.mentionName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mentionLogin {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .commentBox {
   display: flex;
   flex-direction: column;

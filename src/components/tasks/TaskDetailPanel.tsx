@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
 
 import Avatar from "@/components/Avatar";
@@ -6,6 +6,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useTaskEditor } from "@/hooks/useTaskEditor";
 import { messageForCode } from "@/lib/errorMessages";
 import { KANBAN_COLUMNS, PRIORITY_LABELS, formatDateTime } from "@/lib/taskMeta";
+import { SpacesService, type SpaceMember } from "@/services/spaces";
 import {
   TasksService,
   type Comment,
@@ -37,7 +38,6 @@ export default function TaskDetailPanel({
   spaceId,
   onClose,
 }: TaskDetailPanelProps): JSX.Element {
-  const allUsers = useUserDirectory((s) => s.all);
   const directory = useUserDirectory((s) => s.users);
   const loadAll = useUserDirectory((s) => s.loadAll);
   const { can } = usePermissions();
@@ -70,6 +70,12 @@ export default function TaskDetailPanel({
   const [previewMode, setPreviewMode] = useState<PreviewMode>("edit");
   const [newItem, setNewItem] = useState("");
   const [commentText, setCommentText] = useState("");
+  const [spaceMembers, setSpaceMembers] = useState<SpaceMember[]>([]);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionStart, setMentionStart] = useState(0);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const commentRef = useRef<HTMLTextAreaElement | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   const [targetSpaceId, setTargetSpaceId] = useState("");
   const [moving, setMoving] = useState(false);
@@ -85,6 +91,37 @@ export default function TaskDetailPanel({
   useEffect(() => {
     recordRecent({ kind: "task", id: task.id, title: task.title, spaceId });
   }, [recordRecent, task.id, task.title, spaceId]);
+
+  // Assignees and @mentions are limited to the task's space members.
+  useEffect(() => {
+    let cancelled = false;
+    if (!spaceId) {
+      setSpaceMembers([]);
+      return;
+    }
+    void SpacesService.getMembers(spaceId).then((result) => {
+      if (!cancelled && result.ok) {
+        setSpaceMembers(result.value);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [spaceId]);
+
+  const mentionMatches = useMemo(() => {
+    if (!mentionOpen) {
+      return [];
+    }
+    const query = mentionQuery.toLowerCase();
+    return spaceMembers
+      .filter(
+        (user) =>
+          user.login.toLowerCase().includes(query) ||
+          user.displayName.toLowerCase().includes(query),
+      )
+      .slice(0, 6);
+  }, [mentionOpen, mentionQuery, spaceMembers]);
 
   async function handleClose(): Promise<void> {
     await flush();
@@ -126,12 +163,64 @@ export default function TaskDetailPanel({
     setNewItem("");
   }
 
+  function handleCommentChange(event: ChangeEvent<HTMLTextAreaElement>): void {
+    const value = event.target.value;
+    setCommentText(value);
+    const cursor = event.target.selectionStart ?? value.length;
+    const match = /(?:^|\s)@([a-zA-Z0-9._-]*)$/.exec(value.slice(0, cursor));
+    if (match) {
+      setMentionQuery(match[1] ?? "");
+      setMentionStart(cursor - (match[1]?.length ?? 0) - 1);
+      setMentionIndex(0);
+      setMentionOpen(true);
+    } else {
+      setMentionOpen(false);
+    }
+  }
+
+  function insertMention(user: SpaceMember): void {
+    const textarea = commentRef.current;
+    const cursor = textarea?.selectionStart ?? commentText.length;
+    const before = commentText.slice(0, mentionStart);
+    const after = commentText.slice(cursor);
+    const next = `${before}@${user.login} ${after}`;
+    setCommentText(next);
+    setMentionOpen(false);
+    const position = before.length + user.login.length + 2;
+    requestAnimationFrame(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(position, position);
+    });
+  }
+
+  function handleCommentKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (!mentionOpen || mentionMatches.length === 0) {
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setMentionIndex((index) => (index + 1) % mentionMatches.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setMentionIndex((index) => (index - 1 + mentionMatches.length) % mentionMatches.length);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const user = mentionMatches[mentionIndex];
+      if (user) {
+        insertMention(user);
+      }
+    } else if (event.key === "Escape") {
+      setMentionOpen(false);
+    }
+  }
+
   function handleSendComment(): void {
     if (!commentText.trim()) {
       return;
     }
     addComment(commentText);
     setCommentText("");
+    setMentionOpen(false);
   }
 
   return (
@@ -249,11 +338,11 @@ export default function TaskDetailPanel({
 
           <div className={styles.section}>
             <label>Исполнители</label>
-            {allUsers.length === 0 ? (
-              <div className={styles.muted}>Загрузка пользователей…</div>
+            {spaceMembers.length === 0 ? (
+              <div className={styles.muted}>В пространстве нет участников.</div>
             ) : (
               <div className={styles.assigneeList}>
-                {allUsers.map((user) => (
+                {spaceMembers.map((user) => (
                   <label key={user.id} className={styles.assigneeOption}>
                     <input
                       type="checkbox"
@@ -357,21 +446,53 @@ export default function TaskDetailPanel({
                 <CommentRow key={comment.id} comment={comment} directory={directory} />
               ))
             )}
-            <div className={styles.commentBox}>
-              <textarea
-                rows={2}
-                placeholder="Написать комментарий…"
-                value={commentText}
-                onChange={(event) => setCommentText(event.target.value)}
-              />
-              <button
-                className="btn-primary"
-                type="button"
-                disabled={!commentText.trim()}
-                onClick={handleSendComment}
-              >
-                Отправить
-              </button>
+            <div className={styles.commentComposer}>
+              {mentionOpen && mentionMatches.length > 0 ? (
+                <div className={styles.mentionMenu} role="listbox" aria-label="Упомянуть участника">
+                  {mentionMatches.map((user, index) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      role="option"
+                      aria-selected={index === mentionIndex}
+                      className={`${styles.mentionItem} ${
+                        index === mentionIndex ? styles.mentionActive : ""
+                      }`}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        insertMention(user);
+                      }}
+                    >
+                      <Avatar
+                        name={user.displayName}
+                        color={user.avatarColor}
+                        sha256={user.avatarSha256}
+                        size={20}
+                      />
+                      <span className={styles.mentionName}>{user.displayName}</span>
+                      <span className={styles.mentionLogin}>@{user.login}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <div className={styles.commentBox}>
+                <textarea
+                  ref={commentRef}
+                  rows={2}
+                  placeholder="Написать комментарий… (@ — упомянуть)"
+                  value={commentText}
+                  onChange={handleCommentChange}
+                  onKeyDown={handleCommentKeyDown}
+                />
+                <button
+                  className="btn-primary"
+                  type="button"
+                  disabled={!commentText.trim()}
+                  onClick={handleSendComment}
+                >
+                  Отправить
+                </button>
+              </div>
             </div>
           </div>
         </div>

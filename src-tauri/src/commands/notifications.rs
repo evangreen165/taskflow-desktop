@@ -138,6 +138,11 @@ mod tests {
     #[test]
     fn task_update_notifies_only_new_assignees() {
         let fx = fixture();
+        // Bob must be a space member to be assignable (Stage 7.2b validation).
+        let mut space = spaces::get(fx._dir.path(), SPACE).unwrap();
+        space.members.push(fx.bob.id.clone());
+        spaces::write_space(fx._dir.path(), &space).unwrap();
+
         let task = create_task(&fx, "Fix login", &[&fx.alice.id]);
 
         let patch: UpdateTaskPayload = serde_json::from_value(serde_json::json!({

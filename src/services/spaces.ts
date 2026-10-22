@@ -10,6 +10,15 @@ export interface Space {
   members: string[];
 }
 
+/** Minimal member projection returned by `spacesGetMembers`. */
+export interface SpaceMember {
+  id: string;
+  login: string;
+  displayName: string;
+  avatarColor: string;
+  avatarSha256: string | null;
+}
+
 export const SpacesService = {
   list(): Promise<Result<Space[]>> {
     return invokeCommand<Space[]>("spacesList");
@@ -17,6 +26,11 @@ export const SpacesService = {
 
   get(id: string): Promise<Result<Space>> {
     return invokeCommand<Space>("spacesGet", { id });
+  },
+
+  /** Active members of a space, for the assignee picker and @mentions. */
+  getMembers(id: string): Promise<Result<SpaceMember[]>> {
+    return invokeCommand<SpaceMember[]>("spacesGetMembers", { spaceId: id });
   },
 
   create(name: string, description: string): Promise<Result<Space>> {

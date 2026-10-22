@@ -2,7 +2,68 @@
 
 - **Status:** implemented, gates green
 - **Branch:** `stage7/notifications`
-- **Commit:** `stage7(2): in-app notifications`
+- **Commit:** `stage7(2): in-app notifications` + `stage7(2b): space isolation for assignees & mentions UX`
+
+## Stage 7.2b — Space isolation & mention UX fixes
+
+Two tester-reported bugs fixed on top of 7.2.
+
+### Bug 1 — Assignee picker showed users from every space
+
+**Cause:** `TaskDetailPanel` rendered the global user directory for assignees.
+
+**Backend**
+
+- New command `spacesGetMembers(spaceId)` → `SpaceMember { id, login,
+displayName, avatarColor, avatarSha256 }`. It is access-checked
+  (`spaces::require_access`) and returns only **active members** of that space.
+- `tasks_create` validates every assignee: a non-member yields
+  `INVALID_ASSIGNEE`.
+- `tasks_update` validates **newly added** assignees only (compared to the
+  previous version), so legacy tasks keep their existing assignees if space
+  membership changed later.
+
+**Frontend**
+
+- `SpacesService.getMembers(spaceId)` added.
+- `TaskDetailPanel` loads `spaceMembers` for the task's space and uses them for
+  the assignee checkboxes instead of the global directory. The global directory
+  is still used to resolve comment author names.
+
+### Bug 2 — `@login` mentions did not trigger notifications
+
+**Cause:** the UI offered no way to pick a login (users naturally typed display
+names), and the parser only recognised `@` at the start of a whitespace token.
+
+**Backend**
+
+- Mention scanning now finds `@` **anywhere** in a token, so `(@bob)`, `,@bob`
+  and `Hello,@bob` all resolve. Matching remains case-insensitive against the
+  user's `login`; trailing dots are stripped progressively.
+- Duplicate mentions in one update still produce a single notification.
+
+**Frontend**
+
+- Typing `@` in the comment box opens an autocomplete with the current space's
+  members (filter by login or display name).
+- Selecting a member inserts the exact `@login ` string, so the backend parser
+  always sees a valid login.
+- Keyboard: `↑`/`↓` move the highlight, `Enter` inserts, `Esc` closes; the
+  dropdown also works with the mouse.
+
+### Tests & gates (7.2b)
+
+- Added: `spaces_get_members` returns only space members + `FORBIDDEN` for
+  non-members; `tasks_create`/`tasks_update` reject non-member assignees;
+  mention parser handles `(@login)`.
+- `cargo test` — **148 passed**; `npm run test` — **112 passed**;
+  `npm run lint` clean; `npm run build` success.
+
+**Files (7.2b):** `src-tauri/src/commands/spaces.rs` (`SpaceMember`,
+`spacesGetMembers`), `src-tauri/src/commands/tasks.rs` (assignee validation),
+`src-tauri/src/notifications.rs` (mention scanner), `src-tauri/src/lib.rs`
+(handler), `src/services/spaces.ts`, `src/components/tasks/TaskDetailPanel.tsx`
+and its CSS module.
 
 ## Goal
 

@@ -274,6 +274,7 @@ pub fn run() {
             commands::notifications_mark_all_read,
             commands::spaces_list,
             commands::spaces_get,
+            commands::spaces_get_members,
             commands::spaces_create,
             commands::spaces_update,
             commands::spaces_delete,

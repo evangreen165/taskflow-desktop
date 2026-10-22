@@ -189,11 +189,14 @@ fn resolve_mention<'a>(users: &'a [UserInfo], raw: &str) -> Option<&'a UserInfo>
 
 fn collect_mentions(users: &[UserInfo], out: &mut BTreeSet<String>, text: &str) {
     for token in text.split_whitespace() {
-        let Some(raw) = token.strip_prefix('@') else {
-            continue;
-        };
-        if let Some(user) = resolve_mention(users, raw) {
-            out.insert(user.id.clone());
+        // Scan for `@` anywhere in the token so `(@bob)` and `,@bob` work too.
+        let mut cursor = token;
+        while let Some(at) = cursor.find('@') {
+            let candidate = &cursor[at + 1..];
+            if let Some(user) = resolve_mention(users, candidate) {
+                out.insert(user.id.clone());
+            }
+            cursor = candidate;
         }
     }
 }
@@ -369,7 +372,7 @@ mod tests {
             },
         ];
         let mut out = BTreeSet::new();
-        collect_mentions(&users, &mut out, "Hi @bob, ping @alice. @bob again");
+        collect_mentions(&users, &mut out, "Hi @bob, ping (@alice). @bob again");
         assert_eq!(
             out.into_iter().collect::<Vec<_>>(),
             vec!["id-alice".to_string(), "id-bob".to_string()]

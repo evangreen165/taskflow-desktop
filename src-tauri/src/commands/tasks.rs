@@ -7,6 +7,7 @@ use taskflow_macros::write_command;
 use crate::error::AppError;
 use crate::roles;
 use crate::session::Session;
+use crate::spaces::Space;
 use crate::tasks::{self, CreateTaskPayload, Task, TaskFilter, TaskStatus, UpdateTaskPayload};
 use crate::AppState;
 
@@ -31,6 +32,20 @@ fn ensure_visible(root: &Path, session: &Session, task: &Task) -> Result<(), App
             "this task is not visible to you",
         ))
     }
+}
+
+/// Assignees must belong to the task's space. Returns `INVALID_ASSIGNEE` for
+/// any id that is not a member (owner included).
+fn validate_assignees(space: &Space, assignees: &[String]) -> Result<(), AppError> {
+    for assignee in assignees {
+        if !crate::spaces::is_member(space, assignee) {
+            return Err(AppError::new(
+                "INVALID_ASSIGNEE",
+                format!("user '{assignee}' is not a member of this space"),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn matches_filter(task: &Task, filter: &TaskFilter) -> bool {
@@ -129,7 +144,8 @@ pub fn tasks_create_impl(
     state.require_writable()?;
     let session = state.require_perm("task.create")?;
     let root = state.root()?;
-    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space = crate::spaces::require_access(&root, &space_id, &session)?;
+    validate_assignees(&space, &payload.assignees)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
     let task = tasks::create(&space_dir, &session.user_id, payload)?;
     if let Err(err) =
@@ -159,10 +175,20 @@ pub fn tasks_update_impl(
     state.require_writable()?;
     let session = state.require_perm("task.edit")?;
     let root = state.root()?;
-    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space = crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
     let current = tasks::get(&space_dir, &id)?;
     ensure_visible(&root, &session, &current)?;
+    // Only newly added assignees must be space members, so legacy tasks keep
+    // their existing assignees even if the membership changed later.
+    if let Some(assignees) = &patch.assignees {
+        let added: Vec<String> = assignees
+            .iter()
+            .filter(|id| !current.assignees.iter().any(|existing| existing == *id))
+            .cloned()
+            .collect();
+        validate_assignees(&space, &added)?;
+    }
     let updated = tasks::update(&space_dir, &id, patch, expected_version)?;
     if let Err(err) = crate::notifications::on_task_updated(
         &root,
@@ -602,5 +628,67 @@ mod tests {
         .unwrap();
         assert_eq!(only_scheduled.len(), 1);
         assert_eq!(only_scheduled[0].id, scheduled.id);
+    }
+
+    #[test]
+    fn rejects_assignees_outside_the_space() {
+        let fx = fixture();
+        let outsider = users::create(
+            fx._dir.path(),
+            "outsider",
+            "password123",
+            "Outsider",
+            "executor",
+            None,
+        )
+        .unwrap();
+
+        // Creating a task with a non-member assignee fails.
+        assert_eq!(
+            tasks_create_impl(
+                &fx.state,
+                SPACE.to_string(),
+                create_payload(json!({
+                    "title": "Nope",
+                    "assignees": [outsider.id],
+                })),
+            )
+            .unwrap_err()
+            .code,
+            "INVALID_ASSIGNEE"
+        );
+
+        // Adding a non-member during an update fails too.
+        let task = create_task(&fx, "Valid", &[&fx.executor.id]);
+        let patch = update_payload(json!({
+            "assignees": [fx.executor.id, outsider.id],
+        }));
+        assert_eq!(
+            tasks_update_impl(
+                &fx.state,
+                SPACE.to_string(),
+                task.id.clone(),
+                patch,
+                task.version,
+            )
+            .unwrap_err()
+            .code,
+            "INVALID_ASSIGNEE"
+        );
+
+        // Keeping the existing assignee list (no new ids) still works.
+        let patch = update_payload(json!({
+            "assignees": [fx.executor.id],
+            "title": "Renamed",
+        }));
+        let updated = tasks_update_impl(
+            &fx.state,
+            SPACE.to_string(),
+            task.id,
+            patch,
+            task.version,
+        )
+        .unwrap();
+        assert_eq!(updated.title, "Renamed");
     }
 }
