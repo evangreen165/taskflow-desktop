@@ -55,30 +55,78 @@ scripts) for now.
 - `allow-same-origin` means the plugin shares the app's origin, so treat
   plugin HTML as trusted code (a future SDK stage may tighten this).
 
-## Talking to the core (planned bridge)
+## Talking to the core (postMessage bridge)
 
-The supported way for a plugin to reach TaskFlow data is a `postMessage`
-handshake with the host:
+Plugins reach TaskFlow data through a `postMessage` handshake with the host
+(PluginViewerPage). Only messages whose `event.source` is the plugin's own
+iframe are accepted.
 
-1. Plugin sends a request:
-   ```js
-   window.parent.postMessage(
-     { type: "taskflow:request", id: "req-1", method: "tasks.list", payload: {} },
-     "*",
-   );
-   ```
-2. The host (TaskFlow) invokes the corresponding backend command and replies:
-   ```js
-   window.addEventListener("message", (event) => {
-     if (event.data?.type !== "taskflow:response" || event.data.id !== "req-1") return;
-     console.log(event.data.ok, event.data.data);
-   });
-   ```
+### Request
 
-The `method` names and the response schema will be defined as the SDK matures;
-planned methods: `tasks.list`, `notes.list`, `spaces.list`, `users.directory`.
+```js
+window.parent.postMessage(
+  { type: "taskflow:request", id: "req-1", action: "getTasks", payload: {} },
+  "*",
+);
+```
 
-## Example plugin
+- `type`: always `"taskflow:request"`.
+- `id`: a unique request id (the plugin matches the response by it).
+- `action`: one of the supported actions below.
+- `payload`: optional action arguments.
+
+### Response
+
+The host replies into the iframe:
+
+```js
+{ type: "taskflow:response", id: "req-1", data: ..., error: null }
+```
+
+`data` holds the result, `error` is a message string (or `null`) on failure.
+
+### Supported actions
+
+| Action           | Payload                          | Returns                           |
+| ---------------- | -------------------------------- | --------------------------------- |
+| `getTasks`       | —                                | tasks of the current space        |
+| `getNotes`       | —                                | note list of the current space    |
+| `getNoteContent` | `{ noteId }` (or `{ id }`)       | the `Note` (meta + content)       |
+| `createNote`     | `{ title, category?, content? }` | the created `Note`                |
+| `showToast`      | `{ message }`                    | `null` (shows a toast in the app) |
+
+Only these actions exist: plugins cannot delete tasks, change roles, or touch
+any data outside the current user's permissions (the backend enforces RBAC on
+every call).
+
+### JavaScript helper
+
+```js
+function callPlugin(action, payload = {}) {
+  return new Promise((resolve, reject) => {
+    const id = Math.random().toString(36).slice(2);
+    const handler = (event) => {
+      if (event.data?.type === "taskflow:response" && event.data.id === id) {
+        window.removeEventListener("message", handler);
+        if (event.data.error) reject(new Error(event.data.error));
+        else resolve(event.data.data);
+      }
+    };
+    window.addEventListener("message", handler);
+    window.parent.postMessage({ type: "taskflow:request", id, action, payload }, "*");
+  });
+}
+
+async function getTasks() {
+  return callPlugin("getTasks");
+}
+
+async function getNoteContent(noteId) {
+  return callPlugin("getNoteContent", { noteId });
+}
+```
+
+### Example plugin
 
 ```html
 <!doctype html>
@@ -89,14 +137,40 @@ planned methods: `tasks.list`, `notes.list`, `spaces.list`, `users.directory`.
   </head>
   <body>
     <h1>Привет из плагина!</h1>
-    <p>Этот текст рендерится внутри песочницы.</p>
+    <button id="load">Показать мои задачи</button>
+    <pre id="out"></pre>
     <script>
-      // Показываем, что скрипты работают.
-      document.querySelector("h1").style.color = "#5b5bd6";
+      function callPlugin(action, payload = {}) {
+        return new Promise((resolve, reject) => {
+          const id = Math.random().toString(36).slice(2);
+          const handler = (event) => {
+            if (event.data?.type === "taskflow:response" && event.data.id === id) {
+              window.removeEventListener("message", handler);
+              if (event.data.error) reject(new Error(event.data.error));
+              else resolve(event.data.data);
+            }
+          };
+          window.addEventListener("message", handler);
+          window.parent.postMessage({ type: "taskflow:request", id, action, payload }, "*");
+        });
+      }
+
+      document.getElementById("load").addEventListener("click", async () => {
+        const tasks = await callPlugin("getTasks");
+        document.getElementById("out").textContent = JSON.stringify(tasks, null, 2);
+      });
     </script>
   </body>
 </html>
 ```
+
+### Ideas for real plugins
+
+- **Визуализация графа:** `getNotes`, строит связи по тегам, рисует граф на
+  Canvas/D3 внутри плагина.
+- **LLM-помощник:** `getTasks`, формирует промпт, отправляет запрос в
+  OpenRouter через `fetch` внутри iframe и показывает ответ.
+- **Аналитика:** кастомные отчёты на основе `getTasks`/`getNotes`.
 
 ## Installing a plugin
 
@@ -109,6 +183,10 @@ planned methods: `tasks.list`, `notes.list`, `spaces.list`, `users.directory`.
 
 - Only validated folder names are read; `..`/absolute paths are rejected.
 - The iframe sandbox isolates scripts from the main application.
-- `permissions` in the manifest is a **declaration**; enforcement (granting
-  read/write of tasks, notes, etc. through the bridge) is planned for a later
-  SDK stage.
+- The bridge accepts messages **only** from the plugin's own iframe
+  (`event.source` check) and only the whitelisted actions above; delete/role
+  actions are not exposed.
+- Backend RBAC still applies to every bridge call, so `getNoteContent` /
+  `createNote` respect the current user's permissions.
+- `permissions` in the manifest is a **declaration**; manifest-based gating is a
+  future SDK stage.
