@@ -3,22 +3,28 @@ import { useNavigate } from "react-router-dom";
 import GridLayout, { useContainerWidth, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
+import AnalyticsWidget from "@/components/dashboard/AnalyticsWidget";
 import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
+import Skeleton from "@/components/ui/Skeleton";
 import { usePermissions } from "@/hooks/usePermissions";
 import { categoryIcon, formatDate } from "@/lib/kbMeta";
 import { formatDueDate, PRIORITY_LABELS, priorityColor, statusLabel } from "@/lib/taskMeta";
 import { DashboardService, type DashboardSummary } from "@/services/dashboard";
 import type { NoteMeta } from "@/services/notes";
-import type { Task } from "@/services/tasks";
+import { TasksService, type Task } from "@/services/tasks";
+import type { UserSummary } from "@/services/users";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useDashboardStore, WIDGET_DEFS, type WidgetId } from "@/stores/useDashboardStore";
+import { useUserDirectory } from "@/stores/useUserDirectory";
 
 import styles from "./DashboardPage.module.css";
 
 export default function DashboardPage(): JSX.Element {
   const displayName = useAuthStore((s) => s.session?.user.displayName ?? "Пользователь");
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
+  const directory = useUserDirectory((s) => s.users);
+  const ensureUsers = useUserDirectory((s) => s.ensure);
   const { can } = usePermissions();
   const navigate = useNavigate();
   const config = useDashboardStore((s) => s.config);
@@ -27,6 +33,7 @@ export default function DashboardPage(): JSX.Element {
   const { containerRef, width: gridWidth, mounted } = useContainerWidth();
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [spaceTasks, setSpaceTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -50,6 +57,34 @@ export default function DashboardPage(): JSX.Element {
     const timer = setInterval(() => void load(true), 30_000);
     return () => clearInterval(timer);
   }, [load]);
+
+  // Analytics is scoped to the current space and shares the 30 s fallback poll.
+  useEffect(() => {
+    if (!spaceId) {
+      setSpaceTasks([]);
+      return;
+    }
+    let cancelled = false;
+    const fetchSpaceTasks = async () => {
+      const result = await TasksService.list(spaceId, {});
+      if (!cancelled && result.ok) {
+        setSpaceTasks(result.value);
+      }
+    };
+    void fetchSpaceTasks();
+    const timer = setInterval(() => void fetchSpaceTasks(), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [spaceId]);
+
+  useEffect(() => {
+    const ids = Array.from(new Set(spaceTasks.flatMap((task) => task.assignees)));
+    if (ids.length > 0) {
+      void ensureUsers(ids);
+    }
+  }, [spaceTasks, ensureUsers]);
 
   const selectedTask: Task | null =
     selectedTaskId !== null && summary
@@ -91,7 +126,18 @@ export default function DashboardPage(): JSX.Element {
         </button>
       </div>
 
-      {loading ? <div className={styles.muted}>Загрузка…</div> : null}
+      {loading ? (
+        <div className={styles.skeletonGrid}>
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className={styles.skeletonWidget}>
+              <Skeleton height={14} width="45%" />
+              <Skeleton height={10} width="85%" />
+              <Skeleton height={10} width="65%" />
+              <Skeleton height={10} width="75%" />
+            </div>
+          ))}
+        </div>
+      ) : null}
       <div ref={containerRef as React.RefObject<HTMLDivElement>} className={styles.gridHost}>
         {summary && mounted ? (
           <GridLayout
@@ -113,6 +159,8 @@ export default function DashboardPage(): JSX.Element {
                     <WidgetBody
                       id={def.id}
                       summary={summary}
+                      spaceTasks={spaceTasks}
+                      directory={directory}
                       canViewNotes={canViewNotes}
                       onOpenTask={setSelectedTaskId}
                       onOpenNote={(id) => navigate(`/app/kb/${id}`)}
@@ -171,12 +219,16 @@ export default function DashboardPage(): JSX.Element {
 function WidgetBody({
   id,
   summary,
+  spaceTasks,
+  directory,
   canViewNotes,
   onOpenTask,
   onOpenNote,
 }: {
   id: WidgetId;
   summary: DashboardSummary;
+  spaceTasks: Task[];
+  directory: Record<string, UserSummary>;
   canViewNotes: boolean;
   onOpenTask: (id: string) => void;
   onOpenNote: (id: string) => void;
@@ -217,6 +269,8 @@ function WidgetBody({
         return <div className={styles.muted}>Нет доступа.</div>;
       }
       return <ArticleList articles={summary.recentArticles} onOpen={onOpenNote} />;
+    case "analytics":
+      return <AnalyticsWidget tasks={spaceTasks} users={directory} />;
   }
 }
 

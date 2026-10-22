@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import KbCard from "@/components/kb/KbCard";
 import NewNoteModal from "@/components/kb/NewNoteModal";
+import Skeleton from "@/components/ui/Skeleton";
 import { useIsPersonalSpaceOwner } from "@/hooks/useIsPersonalSpaceOwner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EMPTY_KB_FILTER, filterNoteItems, type KbFilter } from "@/lib/kbMeta";
@@ -207,9 +208,18 @@ export default function KbPage(): JSX.Element {
           ) : null}
         </div>
 
-        {loading ? <div className={styles.loading}>Загрузка…</div> : null}
-
-        {!loading && visible.length === 0 ? (
+        {loading ? (
+          <div className={styles.grid}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className={styles.skeletonCard}>
+                <Skeleton height={14} width="70%" />
+                <Skeleton height={10} width="45%" />
+                <Skeleton height={10} width="90%" />
+                <Skeleton height={10} width="60%" />
+              </div>
+            ))}
+          </div>
+        ) : visible.length === 0 ? (
           <div className={styles.emptyState}>
             {notes.length === 0 && !filterActive
               ? "В этом пространстве пока нет заметок."
