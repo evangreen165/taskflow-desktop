@@ -17,6 +17,7 @@ pub fn attachment_add_impl(
 }
 
 #[tauri::command(rename = "attachmentAdd")]
+#[tracing::instrument(skip(state))]
 pub async fn attachment_add(
     state: State<'_, AppState>,
     source_path: String,
@@ -42,6 +43,7 @@ pub fn attachment_get_base64_impl(
 }
 
 #[tauri::command(rename = "attachmentGetBase64")]
+#[tracing::instrument(skip(state))]
 pub async fn attachment_get_base64(
     state: State<'_, AppState>,
     sha256: String,
@@ -60,6 +62,7 @@ pub fn attachment_remove_impl(state: &AppState, sha256: String) -> Result<(), Ap
 }
 
 #[tauri::command(rename = "attachmentRemove")]
+#[tracing::instrument(skip(state))]
 pub async fn attachment_remove(
     state: State<'_, AppState>,
     sha256: String,

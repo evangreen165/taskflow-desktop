@@ -30,12 +30,14 @@ interface TaskState {
   ) => Promise<AppError | null>;
 }
 
+/** Guards the 30 s background poll against overlapping SMB requests. */
+let silentFetchInFlight = false;
+
 export const useTaskStore = create<TaskState>((set, get) => ({
   tasks: [],
   loading: false,
   error: null,
   lastWriteAt: 0,
-
   fetchTasks: async (spaceId) => {
     set({ loading: true, error: null });
     const result = await TasksService.list(spaceId, {});
@@ -51,9 +53,17 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
 
   fetchTasksSilently: async (spaceId) => {
-    const result = await TasksService.list(spaceId, {});
-    if (result.ok) {
-      set({ tasks: result.value });
+    if (silentFetchInFlight) {
+      return;
+    }
+    silentFetchInFlight = true;
+    try {
+      const result = await TasksService.list(spaceId, {});
+      if (result.ok) {
+        set({ tasks: result.value });
+      }
+    } finally {
+      silentFetchInFlight = false;
     }
   },
 

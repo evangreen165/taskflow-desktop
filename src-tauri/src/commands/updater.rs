@@ -70,6 +70,7 @@ pub fn check_offline_update_impl(
 }
 
 #[tauri::command(rename = "checkOfflineUpdate")]
+#[tracing::instrument(skip(state, app))]
 pub async fn check_offline_update(
     state: State<'_, AppState>,
     app: tauri::AppHandle,

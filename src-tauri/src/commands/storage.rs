@@ -48,6 +48,7 @@ pub fn read_json_impl(state: &AppState, path: String) -> Result<Value, AppError>
 }
 
 #[tauri::command(rename = "readJson")]
+#[tracing::instrument(skip(state))]
 pub async fn read_json(state: State<'_, AppState>, path: String) -> Result<Value, AppError> {
     require_authenticated_read(&state, &path)?;
     let root = state.root()?;
@@ -58,6 +59,7 @@ pub async fn read_json(state: State<'_, AppState>, path: String) -> Result<Value
 }
 
 #[tauri::command(rename = "readText")]
+#[tracing::instrument(skip(state))]
 pub async fn read_text(state: State<'_, AppState>, path: String) -> Result<String, AppError> {
     require_authenticated_read(&state, &path)?;
     let root = state.root()?;
@@ -76,6 +78,7 @@ pub fn exists_impl(state: &AppState, path: String) -> Result<bool, AppError> {
 }
 
 #[tauri::command(rename = "exists")]
+#[tracing::instrument(skip(state))]
 pub async fn exists(state: State<'_, AppState>, path: String) -> Result<bool, AppError> {
     require_authenticated_read(&state, &path)?;
     let root = state.root()?;
@@ -99,6 +102,7 @@ pub fn list_dir_impl(
 }
 
 #[tauri::command(rename = "listDir")]
+#[tracing::instrument(skip(state))]
 pub async fn list_dir(
     state: State<'_, AppState>,
     path: String,
@@ -121,6 +125,7 @@ pub fn hash_file_impl(state: &AppState, path: String) -> Result<FileHash, AppErr
 }
 
 #[tauri::command(rename = "hashFile")]
+#[tracing::instrument(skip(state))]
 pub async fn hash_file(state: State<'_, AppState>, path: String) -> Result<FileHash, AppError> {
     require_authenticated_read(&state, &path)?;
     let root = state.root()?;

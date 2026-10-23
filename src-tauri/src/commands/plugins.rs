@@ -7,6 +7,7 @@ use crate::AppState;
 /// Lists installed plugins (their manifests) from `{workspace}/plugins/`.
 /// Runs on a blocking thread so scanning an SMB folder never freezes the UI.
 #[tauri::command(rename = "pluginsList")]
+#[tracing::instrument(skip(state))]
 pub async fn plugins_list(state: State<'_, AppState>) -> Result<Vec<PluginManifest>, AppError> {
     state.require_auth()?;
     let root = state.root()?;
@@ -17,6 +18,7 @@ pub async fn plugins_list(state: State<'_, AppState>) -> Result<Vec<PluginManife
 
 /// Reads a plugin's entry HTML (for a sandboxed iframe via `srcdoc`).
 #[tauri::command(rename = "pluginGetContent")]
+#[tracing::instrument(skip(state))]
 pub async fn plugin_get_content(
     state: State<'_, AppState>,
     plugin_id: String,

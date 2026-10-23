@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import GridLayout, { useContainerWidth, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -37,17 +37,28 @@ export default function DashboardPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Guards the 30 s polls against overlapping SMB requests.
+  const summaryFetchRef = useRef(false);
+  const spaceTasksFetchRef = useRef(false);
 
   const load = useCallback(async (silent = false) => {
+    if (summaryFetchRef.current) {
+      return;
+    }
+    summaryFetchRef.current = true;
     if (!silent) {
       setLoading(true);
     }
-    const result = await DashboardService.getSummary(null);
-    if (result.ok) {
-      setSummary(result.value);
-    }
-    if (!silent) {
-      setLoading(false);
+    try {
+      const result = await DashboardService.getSummary(null);
+      if (result.ok) {
+        setSummary(result.value);
+      }
+    } finally {
+      if (!silent) {
+        setLoading(false);
+      }
+      summaryFetchRef.current = false;
     }
   }, []);
 
@@ -66,9 +77,17 @@ export default function DashboardPage(): JSX.Element {
     }
     let cancelled = false;
     const fetchSpaceTasks = async () => {
-      const result = await TasksService.list(spaceId, {});
-      if (!cancelled && result.ok) {
-        setSpaceTasks(result.value);
+      if (spaceTasksFetchRef.current) {
+        return;
+      }
+      spaceTasksFetchRef.current = true;
+      try {
+        const result = await TasksService.list(spaceId, {});
+        if (!cancelled && result.ok) {
+          setSpaceTasks(result.value);
+        }
+      } finally {
+        spaceTasksFetchRef.current = false;
       }
     };
     void fetchSpaceTasks();

@@ -107,6 +107,7 @@ async fn response_text(response: reqwest::Response, url: &str) -> Result<String,
 /// Proxies an LLM chat request on behalf of a plugin, bypassing browser CORS.
 /// Returns the raw provider JSON text.
 #[tauri::command(rename = "llmProxyRequest")]
+#[tracing::instrument(skip(state, body, api_key), fields(url = %url))]
 pub async fn llm_proxy_request(
     state: State<'_, AppState>,
     url: String,
@@ -121,7 +122,8 @@ pub async fn llm_proxy_request(
         return Err(AppError::new("INVALID_INPUT", "body must not be empty"));
     }
 
-    let client = build_client(120)?;
+    // Local LLMs can take minutes to generate; allow up to 5 minutes.
+    let client = build_client(300)?;
     let response = send_with_ipv4_retry(&client, &url, |client, target| {
         let mut request = client
             .post(target)
@@ -145,6 +147,7 @@ pub async fn llm_proxy_request(
 /// `http://127.0.0.1:11434/api/tags`) so plugins can load model lists without
 /// CORS.
 #[tauri::command(rename = "llmProxyGet")]
+#[tracing::instrument(skip(state), fields(url = %url))]
 pub async fn llm_proxy_get(
     state: State<'_, AppState>,
     url: String,

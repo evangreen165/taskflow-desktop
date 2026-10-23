@@ -13,17 +13,28 @@ interface NotificationState {
   markAllRead: () => Promise<void>;
 }
 
+/** Guards the 30 s poll against overlapping SMB requests. */
+let notificationFetchInFlight = false;
+
 export const useNotificationStore = create<NotificationState>((set) => ({
   items: [],
   loading: false,
 
   fetch: async () => {
+    if (notificationFetchInFlight) {
+      return;
+    }
+    notificationFetchInFlight = true;
     set((state) => ({ loading: state.items.length === 0 }));
-    const result = await NotificationsService.list();
-    if (result.ok) {
-      set({ items: result.value, loading: false });
-    } else {
-      set({ loading: false });
+    try {
+      const result = await NotificationsService.list();
+      if (result.ok) {
+        set({ items: result.value, loading: false });
+      } else {
+        set({ loading: false });
+      }
+    } finally {
+      notificationFetchInFlight = false;
     }
   },
 
