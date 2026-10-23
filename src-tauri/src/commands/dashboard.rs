@@ -184,7 +184,7 @@ fn dashboard_summary_from(
     })
 }
 
-/// Thin wrapper kept for tests.
+#[cfg(test)]
 pub fn dashboard_summary_impl(
     state: &AppState,
     space_id: Option<String>,

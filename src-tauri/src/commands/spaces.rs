@@ -17,6 +17,7 @@ fn has_perm(root: &std::path::Path, session: &Session, perm: &str) -> Result<boo
         .any(|p| p == perm))
 }
 
+#[cfg(test)]
 pub fn spaces_list_impl(state: &AppState) -> Result<Vec<Space>, AppError> {
     let session = state.require_auth()?;
     let root = state.root()?;
@@ -50,6 +51,7 @@ pub async fn spaces_list(state: State<'_, AppState>) -> Result<Vec<Space>, AppEr
     })
 }
 
+#[cfg(test)]
 pub fn spaces_get_impl(state: &AppState, id: String) -> Result<Space, AppError> {
     let session = state.require_auth()?;
     let root = state.root()?;
@@ -90,6 +92,7 @@ pub struct SpaceMember {
 
 /// Active members of a space. Used by the assignee picker so tasks cannot be
 /// assigned to users from other spaces.
+#[cfg(test)]
 pub fn spaces_get_members_impl(
     state: &AppState,
     space_id: String,

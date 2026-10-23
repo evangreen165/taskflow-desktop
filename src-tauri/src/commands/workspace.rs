@@ -35,6 +35,7 @@ fn init_workspace_blocking(
 }
 
 /// Testable body of `initWorkspace`.
+#[cfg(test)]
 pub fn init_workspace_impl(
     state: &AppState,
     root: PathBuf,
@@ -136,6 +137,7 @@ fn finalize_activation(
 }
 
 /// Testable body of `activateWorkspace`.
+#[cfg(test)]
 pub fn activate_workspace_impl(
     state: &AppState,
     root: PathBuf,

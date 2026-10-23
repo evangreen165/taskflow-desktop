@@ -136,6 +136,7 @@ fn list_notes(
     Ok(items)
 }
 
+#[cfg(test)]
 pub fn notes_list_impl(
     state: &AppState,
     space_id: String,
@@ -207,6 +208,7 @@ fn resolve_note(
     ))
 }
 
+#[cfg(test)]
 pub fn notes_get_impl(
     state: &AppState,
     space_id: String,
@@ -441,6 +443,7 @@ pub fn notes_share(
     notes_share_impl(&state, note_id, space_id, target_space_ids)
 }
 
+#[cfg(test)]
 pub fn notes_list_categories_impl(
     state: &AppState,
     space_id: String,

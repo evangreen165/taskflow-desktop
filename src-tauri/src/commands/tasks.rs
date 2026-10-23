@@ -84,6 +84,7 @@ fn matches_filter(task: &Task, filter: &TaskFilter) -> bool {
     true
 }
 
+#[cfg(test)]
 pub fn tasks_list_impl(
     state: &AppState,
     space_id: String,
@@ -129,6 +130,7 @@ pub async fn tasks_list(
     Ok(tasks)
 }
 
+#[cfg(test)]
 pub fn tasks_get_impl(
     state: &AppState,
     space_id: String,

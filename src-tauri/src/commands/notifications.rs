@@ -4,6 +4,7 @@ use crate::error::AppError;
 use crate::notifications::{self, Notification};
 use crate::AppState;
 
+#[cfg(test)]
 pub fn notifications_list_impl(state: &AppState) -> Result<Vec<Notification>, AppError> {
     let session = state.require_auth()?;
     let root = state.root()?;
