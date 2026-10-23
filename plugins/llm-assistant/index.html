@@ -410,6 +410,9 @@
         <label>
           API URL
           <input id="apiUrl" type="text" value="https://openrouter.ai/api/v1/chat/completions" />
+          <span class="hint" id="ollamaHint">
+            Убедитесь, что Ollama запущена. При ошибке используйте 127.0.0.1 вместо localhost.
+          </span>
         </label>
         <label>
           API Key
@@ -447,8 +450,8 @@
 
       const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
       const OPENROUTER_MODELS = "https://openrouter.ai/api/v1/models";
-      const OLLAMA_URL = "http://localhost:11434/v1/chat/completions";
-      const OLLAMA_TAGS = "http://localhost:11434/api/tags";
+      const OLLAMA_URL = "http://127.0.0.1:11434/v1/chat/completions";
+      const OLLAMA_TAGS = "http://127.0.0.1:11434/api/tags";
       const FREE_MODELS = [
         "meta-llama/llama-3-8b-instruct:free",
         "meta-llama/llama-3.1-8b-instruct:free",
@@ -753,6 +756,7 @@
         const isLocal = settings.provider === "local";
         $("apiUrl").value = isLocal ? OLLAMA_URL : OPENROUTER_URL;
         $("freeOnlyRow").style.display = isLocal ? "none" : "";
+        $("ollamaHint").style.display = isLocal ? "" : "none";
       }
 
       function renderModelToggle() {
