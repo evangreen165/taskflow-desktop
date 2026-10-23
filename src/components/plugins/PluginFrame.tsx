@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { LlmService } from "@/services/llm";
 import { NotesService } from "@/services/notes";
-import { PluginsService } from "@/services/plugins";
 import { TasksService, type TaskPriority } from "@/services/tasks";
 import { usePluginStore } from "@/stores/usePluginStore";
 import { useSpaceStore } from "@/stores/useSpaceStore";
@@ -22,42 +21,6 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const pushToast = useToastStore((s) => s.push);
-
-  const [html, setHtml] = useState<string | null>(null);
-  const [frameUrl, setFrameUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setHtml(null);
-    setError(null);
-    void PluginsService.getContent(pluginId).then((result) => {
-      if (cancelled) {
-        return;
-      }
-      if (result.ok) {
-        setHtml(result.value);
-      } else {
-        setError(result.error.message);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [pluginId]);
-
-  // A Blob URL document works more reliably under the app CSP than `srcdoc`
-  // (and still inherits the app origin with `allow-same-origin`).
-  useEffect(() => {
-    if (html === null) {
-      setFrameUrl(null);
-      return;
-    }
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    setFrameUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [html]);
 
   /**
    * Whitelisted plugin actions. Read-only plus note creation and the LLM proxy;
@@ -216,6 +179,15 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
       if (!iframe || event.source !== iframe.contentWindow) {
         return;
       }
+      const pluginOrigin =
+        event.origin.startsWith("plugin://") ||
+        event.origin.startsWith("http://plugin.localhost") ||
+        event.origin.startsWith("https://plugin.localhost") ||
+        event.origin === "null" ||
+        event.origin === "";
+      if (!pluginOrigin) {
+        return;
+      }
       const data = event.data as Record<string, unknown> | null;
       if (!data || data.type !== PLUGIN_REQUEST) {
         return;
@@ -256,27 +228,13 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
     return () => window.removeEventListener("message", handleMessage);
   }, [handleMessage]);
 
-  if (error) {
-    return (
-      <div className={styles.root}>
-        <div className={styles.status}>{error}</div>
-      </div>
-    );
-  }
-  if (frameUrl === null) {
-    return (
-      <div className={styles.root}>
-        <div className={styles.status}>Загрузка…</div>
-      </div>
-    );
-  }
   return (
     <div className={styles.root}>
       <iframe
         ref={iframeRef}
         className={styles.frame}
         sandbox="allow-scripts allow-same-origin"
-        src={frameUrl}
+        src={`plugin://${encodeURIComponent(pluginId)}/index.html`}
         title={`Плагин ${pluginId}`}
       />
     </div>

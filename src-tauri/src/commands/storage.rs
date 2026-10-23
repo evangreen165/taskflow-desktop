@@ -285,11 +285,14 @@ pub fn is_locked(state: State<'_, AppState>, key: String) -> Result<LockStatus, 
 /// Starts the workspace file watcher (idempotent). Change batches arrive on
 /// the frontend as `workspace://fs-event`. `path` optionally narrows the watch
 /// to a subfolder; when omitted the whole workspace root is watched.
+/// The notify-based filesystem watcher is disabled: on SMB drives it can hang
+/// the network stack and burn CPU/IO. The frontend relies on 30 s polling for
+/// updates instead. The command is kept as a no-op for API compatibility.
 #[tauri::command(rename = "watch")]
 pub fn watch(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    path: Option<String>,
+    _state: State<'_, AppState>,
+    _app: AppHandle,
+    _path: Option<String>,
 ) -> Result<(), AppError> {
-    state.ensure_watcher(&app, path.as_deref())
+    Ok(())
 }

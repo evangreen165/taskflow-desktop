@@ -91,6 +91,7 @@ pub fn join_depth_limited(root: &Path, parts: &[&str]) -> Result<PathBuf, AppErr
     Ok(joined)
 }
 
+#[cfg(test)]
 pub fn rel_path_between(root: &Path, path: &Path) -> Option<String> {
     let rel = path.strip_prefix(root).ok()?;
     let mut out: Vec<&str> = Vec::new();

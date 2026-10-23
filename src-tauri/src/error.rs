@@ -72,12 +72,6 @@ impl From<argon2::password_hash::Error> for AppError {
     }
 }
 
-impl From<notify::Error> for AppError {
-    fn from(err: notify::Error) -> Self {
-        AppError::new("WATCH", err.to_string())
-    }
-}
-
 impl From<String> for AppError {
     fn from(message: String) -> Self {
         AppError::new("INTERNAL", message)

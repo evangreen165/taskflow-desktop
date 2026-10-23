@@ -2,6 +2,18 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.8.4] - 2026-10-23
+
+### Fixed
+
+- Plugin white screen in release builds: plugins are now served from a native Tauri custom protocol (`plugin://<id>/index.html`) instead of `srcdoc`/Blob URLs, giving the iframe a real origin for scripts, styles and `localStorage`
+- SMB freezes: removed the `notify` file watcher (it can hang on network drives); the UI relies on the existing 30 s polling
+- Cleaned up all dead-code warnings by moving test-only `*_impl` helpers behind `#[cfg(test)]`
+
+### Changed
+
+- CSP allows `plugin:` frames/assets; the postMessage bridge also validates the plugin origin
+
 ## [0.8.3] - 2026-10-23
 
 ### Fixed

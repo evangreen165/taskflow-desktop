@@ -12,15 +12,14 @@ mod notes;
 mod notifications;
 mod path;
 mod permissions;
+mod plugin_protocol;
 mod plugins;
 mod roles;
 mod session;
 mod spaces;
 mod tasks;
 mod users;
-mod watcher;
 mod workspace;
-
 pub use error::AppError;
 pub use session::{Session, SessionView};
 pub use users::UserInfo;
@@ -35,7 +34,6 @@ use tauri::Manager;
 pub struct StateData {
     workspace: Option<(PathBuf, WorkspaceInfo)>,
     session: Option<Session>,
-    watcher: Option<watcher::WorkspaceWatcher>,
     machine_id: String,
 }
 
@@ -52,7 +50,6 @@ impl AppState {
             inner: Mutex::new(StateData {
                 workspace: None,
                 session: None,
-                watcher: None,
                 machine_id,
             }),
             audit_root: Arc::new(RwLock::new(None)),
@@ -76,8 +73,7 @@ impl AppState {
         {
             let mut guard = self.inner.lock();
             guard.workspace = Some((root.clone(), info));
-            // A workspace switch invalidates the previous watcher and session.
-            guard.watcher = None;
+            // A workspace switch invalidates the previous session.
             guard.session = None;
         }
         *self.audit_root.write() = Some(root);
@@ -175,30 +171,6 @@ impl AppState {
         Ok(session)
     }
 
-    pub fn ensure_watcher(
-        &self,
-        app: &tauri::AppHandle,
-        sub_path: Option<&str>,
-    ) -> Result<(), AppError> {
-        let mut guard = self.inner.lock();
-        if guard.watcher.is_some() {
-            return Ok(());
-        }
-        let root = guard
-            .workspace
-            .as_ref()
-            .map(|(root, _)| root.clone())
-            .ok_or_else(|| AppError::new("NO_WORKSPACE", "no workspace is activated"))?;
-        let target = match sub_path {
-            Some(path) if !path.is_empty() && path != "." => {
-                crate::path::resolve_rel(&root, path)?
-            }
-            _ => root,
-        };
-        let started = watcher::start(&target, app.clone())?;
-        guard.watcher = Some(started);
-        Ok(())
-    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -208,6 +180,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .register_uri_scheme_protocol("plugin", |ctx, request| {
+            let state = ctx.app_handle().state::<AppState>();
+            plugin_protocol::handle(&state, &request)
+        })
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_data_dir)?;
