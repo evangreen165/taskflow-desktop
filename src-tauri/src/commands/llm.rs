@@ -46,7 +46,9 @@ pub async fn llm_proxy_request(
         .header("Content-Type", "application/json")
         .body(body);
     request = add_provider_headers(request);
-    if !api_key.is_empty() {
+    // Ollama (local) ignores/does not expect an Authorization header.
+    let is_local = url.contains("localhost") || url.contains("127.0.0.1");
+    if !is_local && !api_key.is_empty() {
         request = request.header("Authorization", format!("Bearer {api_key}"));
     }
 

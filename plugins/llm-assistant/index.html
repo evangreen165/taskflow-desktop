@@ -235,7 +235,7 @@
         display: none !important;
       }
       .modalCard {
-        width: min(440px, 94vw);
+        width: min(460px, 94vw);
         max-height: 90vh;
         overflow-y: auto;
         display: flex;
@@ -276,8 +276,74 @@
         font-size: 13px;
         color: var(--text);
       }
+      .modelPicker {
+        position: relative;
+      }
+      .modelToggle {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg);
+        color: var(--text);
+        padding: 8px 10px;
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .modelToggle::after {
+        content: "▾";
+        float: right;
+        color: var(--muted);
+      }
+      .modelPanel {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        z-index: 20;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+      }
+      .modelPanel input {
+        width: 100%;
+        border: none;
+        border-bottom: 1px solid var(--border);
+        border-radius: 0;
+        padding: 8px 10px;
+        font-size: 13px;
+        outline: none;
+      }
+      .modelList {
+        max-height: 220px;
+        overflow-y: auto;
+      }
+      .modelItem {
+        display: block;
+        width: 100%;
+        border: none;
+        background: transparent;
+        color: var(--text);
+        padding: 7px 10px;
+        font-size: 12.5px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .modelItem:hover,
+      .modelItem.active {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .modelEmpty {
+        padding: 14px 10px;
+        color: var(--muted);
+        font-size: 12.5px;
+      }
       .modelActions {
         display: flex;
+        align-items: center;
         gap: 8px;
       }
       .actions {
@@ -335,18 +401,31 @@
       <div class="modalCard">
         <h2>Настройки API</h2>
         <label>
+          Провайдер
+          <select id="provider">
+            <option value="cloud">Cloud (OpenRouter)</option>
+            <option value="local">Local (Ollama)</option>
+          </select>
+        </label>
+        <label>
           API URL
           <input id="apiUrl" type="text" value="https://openrouter.ai/api/v1/chat/completions" />
         </label>
         <label>
           API Key
-          <input id="apiKey" type="password" placeholder="sk-..." />
+          <input id="apiKey" type="password" placeholder="sk-... (пусто для Ollama)" />
         </label>
         <label>
           Модель
-          <select id="model"></select>
+          <div class="modelPicker">
+            <button id="modelToggle" class="modelToggle" type="button">Выберите модель</button>
+            <div id="modelPanel" class="modelPanel hidden">
+              <input id="modelSearch" type="text" placeholder="Поиск модели…" />
+              <div id="modelList" class="modelList"></div>
+            </div>
+          </div>
         </label>
-        <label class="checkRow">
+        <label class="checkRow" id="freeOnlyRow">
           <input id="freeOnly" type="checkbox" checked />
           Только бесплатные
         </label>
@@ -367,7 +446,9 @@
       const chatListEl = $("chatList");
 
       const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-      const MODELS_URL = "https://openrouter.ai/api/v1/models";
+      const OPENROUTER_MODELS = "https://openrouter.ai/api/v1/models";
+      const OLLAMA_URL = "http://localhost:11434/v1/chat/completions";
+      const OLLAMA_TAGS = "http://localhost:11434/api/tags";
       const FREE_MODELS = [
         "meta-llama/llama-3-8b-instruct:free",
         "meta-llama/llama-3.1-8b-instruct:free",
@@ -377,6 +458,7 @@
         "nousresearch/hermes-3-llama-3.1-8b:free",
       ];
       const DEFAULT_SETTINGS = {
+        provider: "cloud",
         url: OPENROUTER_URL,
         apiKey: "",
         model: FREE_MODELS[0],
@@ -389,6 +471,7 @@
       };
       let allModels = [];
       let busy = false;
+      let modelQuery = "";
 
       // ---- chat history -------------------------------------------------
       let chats = [];
@@ -640,6 +723,7 @@
         setTyping(true);
         try {
           const chat = currentChat();
+          const url = settings.url || (settings.provider === "local" ? OLLAMA_URL : OPENROUTER_URL);
           const body = JSON.stringify({
             model: settings.model,
             messages: [
@@ -648,8 +732,8 @@
             ],
           });
           const raw = await callPlugin("llmChat", {
-            url: settings.url || OPENROUTER_URL,
-            apiKey: settings.apiKey,
+            url,
+            apiKey: settings.provider === "local" ? "" : settings.apiKey,
             body,
           });
           const json = JSON.parse(raw);
@@ -664,38 +748,95 @@
         }
       }
 
-      // ---- settings -----------------------------------------------------
-      function renderModelOptions() {
-        const select = $("model");
-        const freeOnly = $("freeOnly").checked;
-        const list = freeOnly ? allModels.filter((m) => m.id && m.id.includes(":free")) : allModels;
-        const fallback = freeOnly
-          ? FREE_MODELS
-          : [...FREE_MODELS, ...(allModels.length ? allModels.map((m) => m.id) : [])];
-        const ids = list.length ? list.map((m) => m.id) : fallback;
-        select.textContent = "";
-        for (const id of ids) {
-          const option = document.createElement("option");
-          option.value = id;
-          option.textContent = id;
-          if (id === settings.model) option.selected = true;
-          select.appendChild(option);
+      // ---- provider & models -------------------------------------------
+      function applyProviderSettings() {
+        const isLocal = settings.provider === "local";
+        $("apiUrl").value = isLocal ? OLLAMA_URL : OPENROUTER_URL;
+        $("freeOnlyRow").style.display = isLocal ? "none" : "";
+      }
+
+      function renderModelToggle() {
+        $("modelToggle").textContent = settings.model || "Выберите модель";
+      }
+
+      function modelFiltered() {
+        const query = modelQuery.toLowerCase();
+        let list = allModels.filter((id) => id.toLowerCase().includes(query));
+        if (settings.provider === "cloud" && $("freeOnly").checked) {
+          list = list.filter((id) => id.includes(":free"));
         }
-        if (!ids.includes(settings.model) && ids.length) {
-          settings.model = ids[0];
+        if (!list.length && allModels.length) {
+          list = [];
         }
+        if (!list.length && settings.provider === "cloud") {
+          list = FREE_MODELS.filter((id) => id.includes(query));
+        }
+        return list.slice(0, 200);
+      }
+
+      function renderModelList() {
+        const listEl = $("modelList");
+        const list = modelFiltered();
+        listEl.textContent = "";
+        if (!list.length) {
+          const hint = document.createElement("div");
+          hint.className = "modelEmpty";
+          hint.textContent = allModels.length
+            ? "Ничего не найдено"
+            : "Сначала загрузите список моделей";
+          listEl.appendChild(hint);
+          return;
+        }
+        for (const id of list) {
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className = "modelItem" + (id === settings.model ? " active" : "");
+          row.textContent = id;
+          row.addEventListener("click", () => {
+            settings.model = id;
+            renderModelToggle();
+            closeModelPanel();
+          });
+          listEl.appendChild(row);
+        }
+      }
+
+      function openModelPanel() {
+        modelQuery = "";
+        $("modelSearch").value = "";
+        renderModelList();
+        $("modelPanel").classList.remove("hidden");
+        $("modelSearch").focus();
+      }
+
+      function closeModelPanel() {
+        $("modelPanel").classList.add("hidden");
       }
 
       async function loadModels() {
         const btn = $("loadModels");
         btn.disabled = true;
         $("modelsHint").textContent = "Загрузка…";
+        const isLocal = settings.provider === "local";
         try {
-          const raw = await callPlugin("llmGet", { url: MODELS_URL });
+          const raw = await callPlugin("llmGet", {
+            url: isLocal ? OLLAMA_TAGS : OPENROUTER_MODELS,
+          });
           const json = JSON.parse(raw);
-          allModels = (json?.data || []).filter((m) => typeof m?.id === "string");
-          renderModelOptions();
-          $("modelsHint").textContent = "Загружено " + allModels.length + " моделей.";
+          if (isLocal) {
+            allModels = (json?.models || []).map((m) => m.name).filter(Boolean);
+          } else {
+            allModels = (json?.data || []).map((m) => m.id).filter(Boolean);
+          }
+          if (!allModels.includes(settings.model) && allModels.length) {
+            settings.model = allModels[0];
+          }
+          renderModelToggle();
+          if (isLocal && !allModels.length) {
+            $("modelsHint").textContent = "Пустой список — запустите Ollama и pull модель.";
+          } else {
+            $("modelsHint").textContent = "Загружено " + allModels.length + " моделей.";
+          }
         } catch (err) {
           $("modelsHint").textContent = "Не удалось загрузить: " + err.message;
         } finally {
@@ -704,17 +845,19 @@
       }
 
       function openSettings() {
-        $("apiUrl").value = settings.url || OPENROUTER_URL;
-        $("apiKey").value = settings.apiKey;
+        $("provider").value = settings.provider || "cloud";
+        applyProviderSettings();
+        $("apiKey").value = settings.provider === "local" ? "" : settings.apiKey;
         $("freeOnly").checked = settings.freeOnly;
-        renderModelOptions();
+        renderModelToggle();
         $("settingsModal").classList.remove("hidden");
       }
 
       function saveSettings() {
-        settings.url = ($("apiUrl").value.trim() || OPENROUTER_URL).trim();
-        settings.apiKey = $("apiKey").value.trim();
-        settings.model = $("model").value || FREE_MODELS[0];
+        settings.provider = $("provider").value;
+        settings.url =
+          $("apiUrl").value.trim() || (settings.provider === "local" ? OLLAMA_URL : OPENROUTER_URL);
+        settings.apiKey = settings.provider === "local" ? "" : $("apiKey").value.trim();
         settings.freeOnly = $("freeOnly").checked;
         localStorage.setItem("taskflow_llm_settings", JSON.stringify(settings));
         $("settingsModal").classList.add("hidden");
@@ -726,7 +869,31 @@
       );
       $("saveSettings").addEventListener("click", saveSettings);
       $("loadModels").addEventListener("click", () => void loadModels());
-      $("freeOnly").addEventListener("change", renderModelOptions);
+      $("provider").addEventListener("change", () => {
+        settings.provider = $("provider").value;
+        allModels = [];
+        applyProviderSettings();
+        renderModelToggle();
+        $("modelsHint").textContent = "";
+      });
+      $("freeOnly").addEventListener("change", renderModelList);
+      $("modelSearch").addEventListener("input", () => {
+        modelQuery = $("modelSearch").value;
+        renderModelList();
+      });
+      $("modelToggle").addEventListener("click", (event) => {
+        event.stopPropagation();
+        if ($("modelPanel").classList.contains("hidden")) {
+          openModelPanel();
+        } else {
+          closeModelPanel();
+        }
+      });
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest(".modelPicker")) {
+          closeModelPanel();
+        }
+      });
 
       $("newChatBtn").addEventListener("click", newChat);
       $("send").addEventListener("click", () => void send());
