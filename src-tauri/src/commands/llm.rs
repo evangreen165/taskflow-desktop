@@ -46,22 +46,31 @@ pub async fn llm_proxy_request(
         .header("Content-Type", "application/json")
         .body(body);
     request = add_provider_headers(request);
-    // Ollama (local) ignores/does not expect an Authorization header.
+    // Ollama (local) ignores/does not expect an Authorization header; also skip
+    // empty or "ollama" placeholder keys.
     let is_local = url.contains("localhost") || url.contains("127.0.0.1");
-    if !is_local && !api_key.is_empty() {
+    let has_key = !api_key.is_empty() && !api_key.eq_ignore_ascii_case("ollama");
+    if !is_local && has_key {
         request = request.header("Authorization", format!("Bearer {api_key}"));
     }
 
-    let response = request
-        .send()
-        .await
-        .map_err(|e| AppError::new("NETWORK", e.to_string()))?;
+    let response = match request.send().await {
+        Ok(response) => response,
+        Err(err) => {
+            tracing::error!(url = %url, error = %err, "llm proxy request failed");
+            return Err(AppError::new("NETWORK", err.to_string()));
+        }
+    };
     let status = response.status();
-    let text = response
-        .text()
-        .await
-        .map_err(|e| AppError::new("NETWORK", e.to_string()))?;
+    let text = match response.text().await {
+        Ok(text) => text,
+        Err(err) => {
+            tracing::error!(url = %url, status = %status.as_u16(), error = %err, "llm proxy read body failed");
+            return Err(AppError::new("NETWORK", err.to_string()));
+        }
+    };
     if !status.is_success() {
+        tracing::error!(url = %url, status = %status.as_u16(), body = %text, "llm provider returned an error");
         return Err(AppError::new(
             "LLM_ERROR",
             format!("LLM provider returned {status}: {text}"),
@@ -84,16 +93,23 @@ pub async fn llm_proxy_get(
 
     let client = build_client(60)?;
     let request = add_provider_headers(client.get(&url));
-    let response = request
-        .send()
-        .await
-        .map_err(|e| AppError::new("NETWORK", e.to_string()))?;
+    let response = match request.send().await {
+        Ok(response) => response,
+        Err(err) => {
+            tracing::error!(url = %url, error = %err, "llm proxy GET failed");
+            return Err(AppError::new("NETWORK", err.to_string()));
+        }
+    };
     let status = response.status();
-    let text = response
-        .text()
-        .await
-        .map_err(|e| AppError::new("NETWORK", e.to_string()))?;
+    let text = match response.text().await {
+        Ok(text) => text,
+        Err(err) => {
+            tracing::error!(url = %url, status = %status.as_u16(), error = %err, "llm proxy GET read failed");
+            return Err(AppError::new("NETWORK", err.to_string()));
+        }
+    };
     if !status.is_success() {
+        tracing::error!(url = %url, status = %status.as_u16(), body = %text, "llm proxy GET returned an error");
         return Err(AppError::new(
             "LLM_ERROR",
             format!("provider returned {status}: {text}"),

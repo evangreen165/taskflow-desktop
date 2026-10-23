@@ -478,24 +478,19 @@ pub fn notes_delete_category(
     notes_delete_category_impl(&state, space_id, name)
 }
 
-/// Imports a local file as a note. `.md` files become the note body; `.pdf`
-/// files are stored as attachments and referenced from the body.
-pub fn notes_import_impl(
-    state: &AppState,
-    space_id: String,
-    source_path: String,
+/// The actual file work of an import (read/copy + `notes::create`), extracted
+/// so the async command can run it off the runtime with `spawn_blocking`.
+fn import_from_disk(
+    space_dir: &Path,
+    root: &Path,
+    user_id: &str,
+    source_path: &str,
 ) -> Result<Note, AppError> {
-    state.require_writable()?;
-    let session = require_space_perm(state, &space_id, "article.create")?;
-    let root = state.root()?;
-    crate::spaces::require_access(&root, &space_id, &session)?;
-    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
-
-    let path = Path::new(&source_path);
+    let path = Path::new(source_path);
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| source_path.clone());
+        .unwrap_or_else(|| source_path.to_string());
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -525,24 +520,46 @@ pub fn notes_import_impl(
     match ext.as_str() {
         "md" | "markdown" => {
             let text = fsops::read_text(path)?;
-            notes::create(&space_dir, &session.user_id, &title, "Импорт", &text)
+            notes::create(space_dir, user_id, &title, "Импорт", &text)
         }
         "pdf" => {
-            let (info, _) = attachments::add(&root, &source_path, &name)?;
+            let (info, _) = attachments::add(root, source_path, &name)?;
             let content = format!("[Открыть PDF](attachment://{})", info.sha256);
-            notes::create(&space_dir, &session.user_id, &title, "Импорт", &content)
+            notes::create(space_dir, user_id, &title, "Импорт", &content)
         }
         _ => unreachable!(),
     }
 }
 
+/// Imports a local file as a note. `.md` files become the note body; `.pdf`
+/// files are stored as attachments and referenced from the body.
+pub fn notes_import_impl(
+    state: &AppState,
+    space_id: String,
+    source_path: String,
+) -> Result<Note, AppError> {
+    state.require_writable()?;
+    let session = require_space_perm(state, &space_id, "article.create")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    import_from_disk(&space_dir, &root, &session.user_id, &source_path)
+}
+
 #[write_command(rename = "notesImport")]
-pub fn notes_import(
+pub async fn notes_import(
     state: State<'_, AppState>,
     space_id: String,
     source_path: String,
 ) -> Result<Note, AppError> {
-    notes_import_impl(&state, space_id, source_path)
+    let session = require_space_perm(&state, &space_id, "article.create")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    let user_id = session.user_id.clone();
+    tokio::task::spawn_blocking(move || import_from_disk(&space_dir, &root, &user_id, &source_path))
+        .await
+        .map_err(|e| AppError::new("IO", format!("import task failed: {e}")))?
 }
 
 #[cfg(test)]
