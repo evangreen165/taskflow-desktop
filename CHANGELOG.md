@@ -2,6 +2,17 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.8.2] - 2026-10-23
+
+### Fixed
+
+- The bundled AI Assistant plugin is now installed/updated automatically in `{workspace}/plugins/` on workspace activation, so app updates replace stale plugin files (the previous hotfix did not update the workspace copy)
+- Plugin iframe now loads via a Blob URL instead of `srcdoc`, and the CSP allows inline scripts/styles inside it — buttons and the theme toggle work in the compiled app
+
+### Changed
+
+- `llm-assistant` moved to `src-tauri/resources/plugins/` and shipped as a bundle resource
+
 ## [0.8.1] - 2026-10-23
 
 ### Fixed

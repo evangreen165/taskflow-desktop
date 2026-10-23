@@ -24,6 +24,7 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
   const pushToast = useToastStore((s) => s.push);
 
   const [html, setHtml] = useState<string | null>(null);
+  const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,6 +45,19 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
       cancelled = true;
     };
   }, [pluginId]);
+
+  // A Blob URL document works more reliably under the app CSP than `srcdoc`
+  // (and still inherits the app origin with `allow-same-origin`).
+  useEffect(() => {
+    if (html === null) {
+      setFrameUrl(null);
+      return;
+    }
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    setFrameUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [html]);
 
   /**
    * Whitelisted plugin actions. Read-only plus note creation and the LLM proxy;
@@ -249,7 +263,7 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
       </div>
     );
   }
-  if (html === null) {
+  if (frameUrl === null) {
     return (
       <div className={styles.root}>
         <div className={styles.status}>Загрузка…</div>
@@ -262,7 +276,7 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
         ref={iframeRef}
         className={styles.frame}
         sandbox="allow-scripts allow-same-origin"
-        srcDoc={html}
+        src={frameUrl}
         title={`Плагин ${pluginId}`}
       />
     </div>

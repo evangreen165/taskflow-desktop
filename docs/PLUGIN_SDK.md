@@ -204,6 +204,10 @@ async function getNoteContent(noteId) {
 3. Reopen the **Расширения** page (or navigate to `/app/plugins`) — the plugin
    appears automatically; no rebuild or restart is needed.
 
+> The bundled **AI Ассистент** plugin (`llm-assistant`) ships with the app and is
+> installed/updated automatically in `{workspace}/plugins/` when a workspace is
+> activated, so app updates refresh it without manual copying.
+
 ## Security notes
 
 - Only validated folder names are read; `..`/absolute paths are rejected.

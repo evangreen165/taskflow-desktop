@@ -112,6 +112,104 @@ pub fn read_content(root: &Path, plugin_id: &str) -> Result<String, AppError> {
     fsops::read_text(&file)
 }
 
+/// Finds the bundled plugins directory (production resource dir, or the source
+/// `resources/plugins` folder in dev).
+fn bundled_plugins_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+    use tauri::Manager;
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(resource) = app.path().resource_dir() {
+        candidates.push(resource.join("plugins"));
+        candidates.push(resource.join("resources").join("plugins"));
+    }
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("plugins"),
+    );
+    candidates.push(PathBuf::from("resources").join("plugins"));
+    candidates
+        .into_iter()
+        .find(|dir| dir.join("llm-assistant").is_dir())
+}
+
+/// Installs/updates the bundled default plugins into `{workspace}/plugins`.
+/// Runs on workspace activation so an app update also refreshes the plugin
+/// files that live in the user's workspace.
+pub fn install_default_plugins(
+    workspace_root: &Path,
+    app: &tauri::AppHandle,
+) -> Result<(), AppError> {
+    let Some(bundled) = bundled_plugins_dir(app) else {
+        return Ok(());
+    };
+    install_default_plugins_from(workspace_root, &bundled)
+}
+
+/// Testable variant: `bundled_plugins` contains plugin folders
+/// (e.g. `.../plugins/llm-assistant`).
+pub fn install_default_plugins_from(
+    workspace_root: &Path,
+    bundled_plugins: &Path,
+) -> Result<(), AppError> {
+    let source = bundled_plugins.join("llm-assistant");
+    if !source.is_dir() {
+        return Ok(());
+    }
+    let bundled: PluginManifest = fsops::read_json(&source.join("manifest.json"))?;
+    let target = workspace_root.join("plugins").join("llm-assistant");
+    let installed_version = fsops::read_json::<PluginManifest>(&target.join("manifest.json"))
+        .ok()
+        .map(|manifest| manifest.version);
+    let should_install = installed_version
+        .as_deref()
+        .map(|installed| version_is_newer(&bundled.version, installed))
+        .unwrap_or(true);
+    if !should_install {
+        return Ok(());
+    }
+    copy_dir_overwrite(&source, &target)?;
+    Ok(())
+}
+
+fn version_parts(version: &str) -> Option<(u64, u64, u64)> {
+    let core = version
+        .trim()
+        .trim_start_matches('v')
+        .split(['-', '+'])
+        .next()?;
+    let mut parts = core.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next().unwrap_or("0").parse().ok()?;
+    let patch = parts.next().unwrap_or("0").parse().ok()?;
+    Some((major, minor, patch))
+}
+
+fn version_is_newer(candidate: &str, current: &str) -> bool {
+    match (version_parts(candidate), version_parts(current)) {
+        (Some(candidate), Some(current)) => candidate > current,
+        _ => false,
+    }
+}
+
+fn copy_dir_overwrite(source: &Path, target: &Path) -> Result<(), AppError> {
+    std::fs::create_dir_all(target).map_err(|e| AppError::io("create plugin dir", e))?;
+    for entry in std::fs::read_dir(source).map_err(|e| AppError::io("read plugin dir", e))? {
+        let entry = entry.map_err(|e| AppError::io("read plugin entry", e))?;
+        let destination = target.join(entry.file_name());
+        let file_type = entry
+            .file_type()
+            .map_err(|e| AppError::io("plugin file type", e))?;
+        if file_type.is_dir() {
+            copy_dir_overwrite(&entry.path(), &destination)?;
+        } else {
+            std::fs::copy(entry.path(), &destination)
+                .map_err(|e| AppError::io("copy plugin file", e))?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,5 +311,59 @@ mod tests {
             read_content(dir.path(), "b").unwrap_err().code,
             "NOT_FOUND"
         );
+    }
+
+    fn write_bundled_plugin(dir: &Path, version: &str, body: &str) {
+        let plugin = dir.join("llm-assistant");
+        std::fs::create_dir_all(&plugin).unwrap();
+        fsops::write_json_atomic(
+            &plugin.join("manifest.json"),
+            &serde_json::json!({
+                "id": "llm-assistant",
+                "name": "AI Ассистент",
+                "version": version,
+            }),
+        )
+        .unwrap();
+        std::fs::write(plugin.join("index.html"), body).unwrap();
+    }
+
+    #[test]
+    fn installs_bundled_plugin_when_missing_or_newer() {
+        let bundled = tempdir().unwrap();
+        write_bundled_plugin(bundled.path(), "1.1.0", "<h1>v1.1</h1>");
+        let workspace = tempdir().unwrap();
+        let target = workspace.path().join("plugins").join("llm-assistant");
+
+        // Missing → installed.
+        install_default_plugins_from(workspace.path(), bundled.path()).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(target.join("index.html")).unwrap(),
+            "<h1>v1.1</h1>"
+        );
+
+        // Older installed version → overwritten.
+        write_bundled_plugin(&workspace.path().join("plugins"), "1.0.0", "<h1>old</h1>");
+        install_default_plugins_from(workspace.path(), bundled.path()).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(target.join("index.html")).unwrap(),
+            "<h1>v1.1</h1>"
+        );
+
+        // Newer installed version → untouched.
+        write_bundled_plugin(&workspace.path().join("plugins"), "2.0.0", "<h1>newer</h1>");
+        install_default_plugins_from(workspace.path(), bundled.path()).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(target.join("index.html")).unwrap(),
+            "<h1>newer</h1>"
+        );
+    }
+
+    #[test]
+    fn version_comparison() {
+        assert!(version_is_newer("1.1.0", "1.0.0"));
+        assert!(!version_is_newer("1.0.0", "1.0.0"));
+        assert!(!version_is_newer("0.9.0", "1.0.0"));
+        assert!(!version_is_newer("bad", "1.0.0"));
     }
 }

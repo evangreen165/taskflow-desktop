@@ -49,10 +49,16 @@ pub fn init_workspace_impl(
 #[tauri::command(rename = "initWorkspace")]
 pub fn init_workspace(
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
     path: String,
     name: String,
 ) -> Result<WorkspaceInfo, AppError> {
-    init_workspace_impl(&state, PathBuf::from(&path), &name)
+    let root = PathBuf::from(&path);
+    let info = init_workspace_impl(&state, root.clone(), &name)?;
+    if let Err(err) = crate::plugins::install_default_plugins(&root, &app) {
+        tracing::warn!(error = %err.message, "failed to install default plugins");
+    }
+    Ok(info)
 }
 
 /// Testable body of `activateWorkspace`. Runs the v1 → v2 migration when
@@ -98,9 +104,17 @@ pub fn activate_workspace_impl(
 #[tauri::command(rename = "activateWorkspace")]
 pub fn activate_workspace(
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
     path: String,
 ) -> Result<WorkspaceInfo, AppError> {
-    activate_workspace_impl(&state, PathBuf::from(&path))
+    let root = PathBuf::from(&path);
+    let info = activate_workspace_impl(&state, root.clone())?;
+    // App updates ship a newer bundled plugin; refresh the copy in the
+    // user's workspace so old/broken files are replaced.
+    if let Err(err) = crate::plugins::install_default_plugins(&root, &app) {
+        tracing::warn!(error = %err.message, "failed to install default plugins");
+    }
+    Ok(info)
 }
 
 /// Inspects a candidate folder without activating it (used by onboarding).
