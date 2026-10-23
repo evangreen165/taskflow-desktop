@@ -531,8 +531,9 @@ fn import_from_disk(
     }
 }
 
-/// Imports a local file as a note. `.md` files become the note body; `.pdf`
-/// files are stored as attachments and referenced from the body.
+/// Imports a local file as a note (test-only helper; the shipped command is
+/// `notes_import` and runs the file work with `spawn_blocking`).
+#[cfg(test)]
 pub fn notes_import_impl(
     state: &AppState,
     space_id: String,

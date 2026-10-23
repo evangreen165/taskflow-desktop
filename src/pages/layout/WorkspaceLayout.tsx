@@ -1,4 +1,4 @@
-п»їimport { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import Avatar from "@/components/Avatar";
@@ -13,6 +13,7 @@ import { UsersService, type UserSummary } from "@/services/users";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNotificationStore } from "@/stores/useNotificationStore";
+import { usePluginStore } from "@/stores/usePluginStore";
 import { isOwnPersonalSpace, isPersonalSpace, useSpaceStore } from "@/stores/useSpaceStore";
 
 import styles from "./WorkspaceLayout.module.css";
@@ -28,7 +29,7 @@ function SideNavLink({
 }): JSX.Element {
   if (disabled) {
     return (
-      <span className={`${styles.navItem} ${styles.navDisabled}`} title="РЎРЅР°С‡Р°Р»Р° СЃРјРµРЅРёС‚Рµ РїР°СЂРѕР»СЊ">
+      <span className={`${styles.navItem} ${styles.navDisabled}`} title="Сначала смените пароль">
         {children}
       </span>
     );
@@ -73,7 +74,9 @@ export default function WorkspaceLayout(): JSX.Element {
   const [membersError, setMembersError] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [plugins, setPlugins] = useState<PluginManifest[]>([]);
-  const [openPluginId, setOpenPluginId] = useState<string | null>(null);
+  const [activePluginId, setActivePluginId] = useState<string | null>(null);
+  const [pluginPanelOpen, setPluginPanelOpen] = useState(false);
+  const pluginBusy = usePluginStore((s) => s.busy);
 
   const currentSpace = spaces.find((space) => space.id === currentSpaceId) ?? null;
   const canAdmin =
@@ -84,8 +87,8 @@ export default function WorkspaceLayout(): JSX.Element {
   const injectedTopbar = plugins.filter((plugin) => plugin.ui?.inject === "topbar");
   const injectedFloating = plugins.filter((plugin) => plugin.ui?.inject === "floating");
   const openPluginName =
-    openPluginId !== null
-      ? (plugins.find((plugin) => plugin.id === openPluginId)?.name ?? openPluginId)
+    activePluginId !== null
+      ? (plugins.find((plugin) => plugin.id === activePluginId)?.name ?? activePluginId)
       : null;
   const fetchNotifications = useNotificationStore((s) => s.fetch);
 
@@ -159,6 +162,12 @@ export default function WorkspaceLayout(): JSX.Element {
     setNewSpaceDesc("");
   }
 
+  /** Opens a plugin in the modal; the iframe stays mounted when minimized. */
+  function openPlugin(id: string): void {
+    setActivePluginId(id);
+    setPluginPanelOpen(true);
+  }
+
   async function openMembers(): Promise<void> {
     if (!currentSpace) {
       return;
@@ -219,39 +228,42 @@ export default function WorkspaceLayout(): JSX.Element {
         </div>
 
         <nav className={styles.nav}>
-          <div className={styles.navLabel}>Р Р°Р±РѕС‚Р°</div>
+          <div className={styles.navLabel}>Работа</div>
           <SideNavLink to="/app/dashboard" disabled={forced}>
-            рџЏ  Р“Р»Р°РІРЅР°СЏ
+            ?? Главная
           </SideNavLink>
           <SideNavLink to="/app/tasks" disabled={forced}>
-            Р—Р°РґР°С‡Рё
+            Задачи
           </SideNavLink>
           <SideNavLink to="/app/calendar" disabled={forced}>
-            РљР°Р»РµРЅРґР°СЂСЊ
+            Календарь
           </SideNavLink>
           <SideNavLink to="/app/kb" disabled={forced}>
-            Р—Р°РјРµС‚РєРё
+            Заметки
           </SideNavLink>
           <SideNavLink to="/app/plugins" disabled={forced}>
-            рџ§© Р Р°СЃС€РёСЂРµРЅРёСЏ
+            ?? Расширения
           </SideNavLink>
-          <div className={styles.navLabel}>РЈРїСЂР°РІР»РµРЅРёРµ</div>
+          <div className={styles.navLabel}>Управление</div>
           {canAdmin ? (
             <SideNavLink to="/app/admin" disabled={forced}>
-              РђРґРјРёРЅРёСЃС‚СЂРёСЂРѕРІР°РЅРёРµ
+              Администрирование
             </SideNavLink>
           ) : null}
           {injectedSidebar.length > 0 ? (
             <>
-              <div className={styles.navLabel}>РџР»Р°РіРёРЅС‹</div>
+              <div className={styles.navLabel}>Плагины</div>
               {injectedSidebar.map((plugin) => (
                 <button
                   key={plugin.id}
                   type="button"
                   className={styles.pluginNavButton}
-                  onClick={() => setOpenPluginId(plugin.id)}
+                  onClick={() => openPlugin(plugin.id)}
                 >
-                  <span aria-hidden="true">рџ§©</span> {plugin.name}
+                  <span aria-hidden="true">??</span> {plugin.name}
+                  {pluginBusy[plugin.id] ? (
+                    <span className={styles.pluginBusyDot} aria-label="???? ?????????…" />
+                  ) : null}
                 </button>
               ))}
             </>
@@ -270,7 +282,7 @@ export default function WorkspaceLayout(): JSX.Element {
                     navigate("/app/profile");
                   }}
                 >
-                  РњРѕР№ РїСЂРѕС„РёР»СЊ
+                  Мой профиль
                 </button>
                 <button
                   type="button"
@@ -280,7 +292,7 @@ export default function WorkspaceLayout(): JSX.Element {
                     navigate("/app/settings");
                   }}
                 >
-                  РќР°СЃС‚СЂРѕР№РєРё РїСЂРёР»РѕР¶РµРЅРёСЏ
+                  Настройки приложения
                 </button>
                 <button
                   type="button"
@@ -291,7 +303,7 @@ export default function WorkspaceLayout(): JSX.Element {
                     void handleLogout();
                   }}
                 >
-                  Р’С‹Р№С‚Рё
+                  Выйти
                 </button>
               </div>
             ) : null}
@@ -303,16 +315,16 @@ export default function WorkspaceLayout(): JSX.Element {
               onClick={() => setMenuOpen((open) => !open)}
             >
               <Avatar
-                name={user?.displayName ?? "вЂ”"}
+                name={user?.displayName ?? "—"}
                 color={user?.avatarColor ?? "#5b5bd6"}
                 sha256={user?.avatarSha256}
                 size={32}
               />
               <div className={styles.userText}>
-                <div className={styles.userName}>{user?.displayName ?? "вЂ”"}</div>
-                <div className={styles.userRole}>{role?.name ?? "вЂ”"}</div>
+                <div className={styles.userName}>{user?.displayName ?? "—"}</div>
+                <div className={styles.userRole}>{role?.name ?? "—"}</div>
               </div>
-              <span className={styles.chevron}>{menuOpen ? "в–ґ" : "в–ѕ"}</span>
+              <span className={styles.chevron}>{menuOpen ? "?" : "?"}</span>
             </button>
           </div>
         </div>
@@ -329,10 +341,10 @@ export default function WorkspaceLayout(): JSX.Element {
               onClick={() => setSpaceMenuOpen((open) => !open)}
             >
               <span className={styles.spaceIcon}>
-                {isPersonalSpace(currentSpaceId) ? "рџ”’" : "рџ“Ѓ"}
+                {isPersonalSpace(currentSpaceId) ? "??" : "??"}
               </span>
-              <span className={styles.spaceName}>{currentSpace?.name ?? "РџСЂРѕСЃС‚СЂР°РЅСЃС‚РІРѕ"}</span>
-              <span className={styles.chevron}>{spaceMenuOpen ? "в–ґ" : "в–ѕ"}</span>
+              <span className={styles.spaceName}>{currentSpace?.name ?? "Пространство"}</span>
+              <span className={styles.chevron}>{spaceMenuOpen ? "?" : "?"}</span>
             </button>
             {spaceMenuOpen ? (
               <div className={styles.spaceMenu} role="menu">
@@ -349,7 +361,7 @@ export default function WorkspaceLayout(): JSX.Element {
                       setSpaceMenuOpen(false);
                     }}
                   >
-                    <span>{isPersonalSpace(space.id) ? "рџ”’" : "рџ“Ѓ"}</span>
+                    <span>{isPersonalSpace(space.id) ? "??" : "??"}</span>
                     {space.name}
                   </button>
                 ))}
@@ -365,7 +377,7 @@ export default function WorkspaceLayout(): JSX.Element {
                       setCreateOpen(true);
                     }}
                   >
-                    + РЎРѕР·РґР°С‚СЊ РїСЂРѕСЃС‚СЂР°РЅСЃС‚РІРѕ
+                    + Создать пространство
                   </button>
                 ) : null}
                 {personalOwner ? (
@@ -374,7 +386,7 @@ export default function WorkspaceLayout(): JSX.Element {
                     className={styles.spaceMembers}
                     onClick={() => void openMembers()}
                   >
-                    рџ‘Ґ РЈС‡Р°СЃС‚РЅРёРєРё
+                    ?? Участники
                   </button>
                 ) : null}
               </div>
@@ -384,13 +396,13 @@ export default function WorkspaceLayout(): JSX.Element {
             type="button"
             className={styles.searchButton}
             onClick={() => setPaletteOpen(true)}
-            aria-label="Р“Р»РѕР±Р°Р»СЊРЅС‹Р№ РїРѕРёСЃРє"
+            aria-label="Глобальный поиск"
           >
             <span className={styles.searchIcon} aria-hidden="true">
-              рџ”Ќ
+              ??
             </span>
-            <span className={styles.searchLabel}>РџРѕРёСЃРє Р·Р°РґР°С‡ Рё Р·Р°РјРµС‚РѕРєвЂ¦</span>
-            <kbd className={styles.searchKbd}>{isMac ? "вЊ K" : "Ctrl K"}</kbd>
+            <span className={styles.searchLabel}>Поиск задач и заметок…</span>
+            <kbd className={styles.searchKbd}>{isMac ? "? K" : "Ctrl K"}</kbd>
           </button>
           <NotificationBell />
           {injectedTopbar.map((plugin) => (
@@ -398,15 +410,15 @@ export default function WorkspaceLayout(): JSX.Element {
               key={plugin.id}
               type="button"
               className={styles.pluginTopbarButton}
-              onClick={() => setOpenPluginId(plugin.id)}
+              onClick={() => openPlugin(plugin.id)}
               title={plugin.name}
             >
-              рџ§© {plugin.name}
+              ?? {plugin.name}
             </button>
           ))}
           <div className={styles.spacer} />
           <button className="btn-ghost" type="button" onClick={() => setChangeFolderOpen(true)}>
-            РЎРјРµРЅРёС‚СЊ РїР°РїРєСѓ
+            Сменить папку
           </button>
         </header>
         <div className={styles.content}>
@@ -424,9 +436,9 @@ export default function WorkspaceLayout(): JSX.Element {
             aria-modal="true"
             onClick={(event) => event.stopPropagation()}
           >
-            <h3>РЈС‡Р°СЃС‚РЅРёРєРё В«{currentSpace.name}В»</h3>
+            <h3>Участники «{currentSpace.name}»</h3>
             <p className={styles.membersHint}>
-              Р”РѕР±Р°РІСЊС‚Рµ РєРѕР»Р»РµРі, С‡С‚РѕР±С‹ РѕС‚РєСЂС‹С‚СЊ РёРј РґРѕСЃС‚СѓРї Рє СЌС‚РѕРјСѓ Р»РёС‡РЅРѕРјСѓ РїСЂРѕСЃС‚СЂР°РЅСЃС‚РІСѓ.
+              Добавьте коллег, чтобы открыть им доступ к этому личному пространству.
             </p>
             {membersError ? (
               <div className="alert" style={{ marginBottom: 14 }}>
@@ -444,14 +456,14 @@ export default function WorkspaceLayout(): JSX.Element {
                   />
                   <span>{member.displayName}</span>
                   {member.id === currentSpace.ownerId ? (
-                    <span className={styles.ownerBadge}>РІР»Р°РґРµР»РµС†</span>
+                    <span className={styles.ownerBadge}>владелец</span>
                   ) : null}
                 </label>
               ))}
             </div>
             <div className={styles.modalActions}>
               <button className="btn-ghost" type="button" onClick={() => setMembersOpen(false)}>
-                РћС‚РјРµРЅР°
+                Отмена
               </button>
               <button
                 className="btn-primary"
@@ -459,7 +471,7 @@ export default function WorkspaceLayout(): JSX.Element {
                 disabled={membersBusy}
                 onClick={() => void saveMembers()}
               >
-                {membersBusy ? "РЎРѕС…СЂР°РЅРµРЅРёРµвЂ¦" : "РЎРѕС…СЂР°РЅРёС‚СЊ"}
+                {membersBusy ? "Сохранение…" : "Сохранить"}
               </button>
             </div>
           </div>
@@ -474,14 +486,14 @@ export default function WorkspaceLayout(): JSX.Element {
             aria-modal="true"
             onClick={(event) => event.stopPropagation()}
           >
-            <h3>РќРѕРІРѕРµ РїСЂРѕСЃС‚СЂР°РЅСЃС‚РІРѕ</h3>
+            <h3>Новое пространство</h3>
             {createError ? (
               <div className="alert" style={{ marginBottom: 14 }}>
                 {createError}
               </div>
             ) : null}
             <div className="field">
-              <label htmlFor="sp-name">РќР°Р·РІР°РЅРёРµ</label>
+              <label htmlFor="sp-name">Название</label>
               <input
                 id="sp-name"
                 type="text"
@@ -491,7 +503,7 @@ export default function WorkspaceLayout(): JSX.Element {
               />
             </div>
             <div className="field">
-              <label htmlFor="sp-desc">РћРїРёСЃР°РЅРёРµ</label>
+              <label htmlFor="sp-desc">Описание</label>
               <input
                 id="sp-desc"
                 type="text"
@@ -501,7 +513,7 @@ export default function WorkspaceLayout(): JSX.Element {
             </div>
             <div className={styles.modalActions}>
               <button className="btn-ghost" type="button" onClick={() => setCreateOpen(false)}>
-                РћС‚РјРµРЅР°
+                Отмена
               </button>
               <button
                 className="btn-primary"
@@ -509,7 +521,7 @@ export default function WorkspaceLayout(): JSX.Element {
                 disabled={creating}
                 onClick={() => void createSpace()}
               >
-                {creating ? "РЎРѕР·РґР°РЅРёРµвЂ¦" : "РЎРѕР·РґР°С‚СЊ"}
+                {creating ? "Создание…" : "Создать"}
               </button>
             </div>
           </div>
@@ -521,18 +533,26 @@ export default function WorkspaceLayout(): JSX.Element {
           key={plugin.id}
           type="button"
           className={styles.pluginFab}
-          onClick={() => setOpenPluginId(plugin.id)}
+          onClick={() => openPlugin(plugin.id)}
           title={plugin.name}
-          aria-label={`РћС‚РєСЂС‹С‚СЊ РїР»Р°РіРёРЅ ${plugin.name}`}
+          aria-label={`??????? ?????? ${plugin.name}`}
         >
-          рџ§©
+          ??
+          {pluginBusy[plugin.id] ? (
+            <span className={styles.pluginFabSpinner} aria-label="???? ?????????…" />
+          ) : null}
         </button>
       ))}
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 
-      {openPluginId !== null ? (
-        <div className={styles.pluginModalBackdrop} onClick={() => setOpenPluginId(null)}>
+      {activePluginId !== null ? (
+        <div
+          className={`${styles.pluginModalBackdrop} ${
+            pluginPanelOpen ? "" : styles.pluginModalHidden
+          }`}
+          onClick={() => setPluginPanelOpen(false)}
+        >
           <div
             className={styles.pluginModalCard}
             role="dialog"
@@ -540,12 +560,12 @@ export default function WorkspaceLayout(): JSX.Element {
             onClick={(event) => event.stopPropagation()}
           >
             <div className={styles.pluginModalHeader}>
-              <span className={styles.pluginModalTitle}>рџ§© {openPluginName}</span>
-              <button className="btn-ghost" type="button" onClick={() => setOpenPluginId(null)}>
-                Р—Р°РєСЂС‹С‚СЊ
+              <span className={styles.pluginModalTitle}>?? {openPluginName}</span>
+              <button className="btn-ghost" type="button" onClick={() => setPluginPanelOpen(false)}>
+                ????????
               </button>
             </div>
-            <PluginFrame pluginId={openPluginId} />
+            <PluginFrame pluginId={activePluginId} />
           </div>
         </div>
       ) : null}

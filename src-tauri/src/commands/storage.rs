@@ -39,6 +39,7 @@ fn require_authenticated_read(state: &AppState, path: &str) -> Result<(), AppErr
 // Reads (require an authenticated session; sensitive prefixes are blocked)
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
 pub fn read_json_impl(state: &AppState, path: String) -> Result<Value, AppError> {
     require_authenticated_read(state, &path)?;
     let root = state.root()?;
@@ -56,13 +57,6 @@ pub async fn read_json(state: State<'_, AppState>, path: String) -> Result<Value
         .map_err(|e| AppError::new("IO", format!("read task failed: {e}")))?
 }
 
-pub fn read_text_impl(state: &AppState, path: String) -> Result<String, AppError> {
-    require_authenticated_read(state, &path)?;
-    let root = state.root()?;
-    let full = crate::path::resolve_rel(&root, &path)?;
-    fsops::read_text(&full)
-}
-
 #[tauri::command(rename = "readText")]
 pub async fn read_text(state: State<'_, AppState>, path: String) -> Result<String, AppError> {
     require_authenticated_read(&state, &path)?;
@@ -73,6 +67,7 @@ pub async fn read_text(state: State<'_, AppState>, path: String) -> Result<Strin
         .map_err(|e| AppError::new("IO", format!("read task failed: {e}")))?
 }
 
+#[cfg(test)]
 pub fn exists_impl(state: &AppState, path: String) -> Result<bool, AppError> {
     require_authenticated_read(state, &path)?;
     let root = state.root()?;
@@ -92,6 +87,7 @@ pub async fn exists(state: State<'_, AppState>, path: String) -> Result<bool, Ap
     )
 }
 
+#[cfg(test)]
 pub fn list_dir_impl(
     state: &AppState,
     path: String,
@@ -116,6 +112,7 @@ pub async fn list_dir(
         .map_err(|e| AppError::new("IO", format!("list task failed: {e}")))?
 }
 
+#[cfg(test)]
 pub fn hash_file_impl(state: &AppState, path: String) -> Result<FileHash, AppError> {
     require_authenticated_read(state, &path)?;
     let root = state.root()?;
@@ -137,6 +134,7 @@ pub async fn hash_file(state: State<'_, AppState>, path: String) -> Result<FileH
 // Writes (gated by require_writable via #[write_command])
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
 pub fn write_json_atomic_impl(
     state: &AppState,
     path: String,
@@ -163,6 +161,7 @@ pub async fn write_json_atomic(
         .map_err(|e| AppError::new("IO", format!("write task failed: {e}")))?
 }
 
+#[cfg(test)]
 pub fn write_text_atomic_impl(
     state: &AppState,
     path: String,
@@ -190,6 +189,7 @@ pub async fn write_text_atomic(
 }
 
 /// Creates an empty file exclusively (O_CREAT|O_EXCL semantics).
+#[cfg(test)]
 pub fn create_exclusive_impl(state: &AppState, path: String) -> Result<(), AppError> {
     state.require_writable()?;
     check_forbidden_path(&path)?;
@@ -208,6 +208,7 @@ pub async fn create_exclusive(state: State<'_, AppState>, path: String) -> Resul
         .map_err(|e| AppError::new("IO", format!("create task failed: {e}")))?
 }
 
+#[cfg(test)]
 pub fn remove_path_impl(state: &AppState, path: String) -> Result<(), AppError> {
     state.require_writable()?;
     check_forbidden_path(&path)?;

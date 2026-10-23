@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use tauri::State;
 
 use crate::error::AppError;
@@ -18,9 +20,29 @@ fn add_provider_headers(request: reqwest::RequestBuilder) -> reqwest::RequestBui
 
 fn build_client(timeout_secs: u64) -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
+        // VPN / corporate proxies must never intercept localhost (Ollama) or
+        // add latency to LLM calls.
+        .no_proxy()
         .timeout(std::time::Duration::from_secs(timeout_secs))
         .build()
         .map_err(|e| AppError::new("NETWORK", e.to_string()))
+}
+
+/// Detailed log of a reqwest failure: connection vs timeout, the error text
+/// and the root cause chain (helps diagnose IPv6/proxy issues).
+fn log_reqwest_error(err: &reqwest::Error, url: &str) {
+    let source = err
+        .source()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "-".to_string());
+    tracing::error!(
+        url = %url,
+        is_connect = err.is_connect(),
+        is_timeout = err.is_timeout(),
+        source = %source,
+        error = %err,
+        "llm proxy request failed"
+    );
 }
 
 /// On Windows, `localhost` often resolves to IPv6 (`::1`) while Ollama listens
@@ -51,11 +73,11 @@ async fn send_with_ipv4_retry(
                     target = fallback;
                     continue;
                 }
-                tracing::error!(url = %url, error = %err, "llm proxy request failed");
+                log_reqwest_error(&err, &url);
                 return Err(AppError::new("LLM_ERROR", err.to_string()));
             }
             Err(err) => {
-                tracing::error!(url = %target, error = %err, "llm proxy request failed (IPv4 retry)");
+                log_reqwest_error(&err, &target);
                 return Err(AppError::new("LLM_ERROR", err.to_string()));
             }
         }

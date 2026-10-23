@@ -4,6 +4,7 @@ use crate::attachments::{self, AttachmentResult};
 use crate::error::AppError;
 use crate::AppState;
 
+#[cfg(test)]
 pub fn attachment_add_impl(
     state: &AppState,
     source_path: String,
@@ -31,6 +32,7 @@ pub async fn attachment_add(
     .map_err(|e| AppError::new("IO", format!("attachment task failed: {e}")))?
 }
 
+#[cfg(test)]
 pub fn attachment_get_base64_impl(
     state: &AppState,
     sha256: String,
@@ -51,6 +53,7 @@ pub async fn attachment_get_base64(
         .map_err(|e| AppError::new("IO", format!("attachment task failed: {e}")))?
 }
 
+#[cfg(test)]
 pub fn attachment_remove_impl(state: &AppState, sha256: String) -> Result<(), AppError> {
     state.require_auth()?;
     attachments::remove(&state.root()?, &sha256)

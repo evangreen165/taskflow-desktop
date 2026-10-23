@@ -519,3 +519,35 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Minimized: the modal is hidden with CSS, so the plugin iframe stays mounted
+   and any in-flight LLM request keeps running. */
+.pluginModalHidden {
+  display: none;
+}
+
+.pluginBusyDot {
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--amber);
+}
+
+.pluginFabSpinner {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: pluginSpin 0.8s linear infinite;
+}
+
+@keyframes pluginSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

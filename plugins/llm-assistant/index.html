@@ -724,6 +724,7 @@
         addMessage("user", text);
         busy = true;
         setTyping(true);
+        callPlugin("setBusy", { busy: true }).catch(() => {});
         try {
           const chat = currentChat();
           const url = settings.url || (settings.provider === "local" ? OLLAMA_URL : OPENROUTER_URL);
@@ -748,6 +749,7 @@
         } finally {
           setTyping(false);
           busy = false;
+          callPlugin("setBusy", { busy: false }).catch(() => {});
         }
       }
 

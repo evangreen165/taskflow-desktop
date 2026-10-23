@@ -4,6 +4,7 @@ import { LlmService } from "@/services/llm";
 import { NotesService } from "@/services/notes";
 import { PluginsService } from "@/services/plugins";
 import { TasksService } from "@/services/tasks";
+import { usePluginStore } from "@/stores/usePluginStore";
 import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useThemeStore } from "@/stores/useThemeStore";
 import { useToastStore } from "@/stores/useToastStore";
@@ -108,6 +109,10 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
           }
           return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         }
+        case "setBusy": {
+          usePluginStore.getState().setBusy(pluginId, payload.busy === true);
+          return null;
+        }
         case "llmGet": {
           const url = payload.url;
           if (typeof url !== "string" || !url) {
@@ -139,7 +144,7 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
           throw new Error(`Неизвестное действие плагина: ${action}`);
       }
     },
-    [spaceId, pushToast],
+    [spaceId, pushToast, pluginId],
   );
 
   /**
