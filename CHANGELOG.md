@@ -2,6 +2,27 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.8.0] - 2026-10-23
+
+### Added
+
+- Plugin Architecture: drop-in plugins in `{workspace}/plugins/` with `manifest.json` and a sandboxed iframe (`srcdoc`), listed on the «Расширения» page
+- Bidirectional `postMessage` bridge: plugins can read tasks/notes and create notes, tasks, and KB categories (whitelisted actions, backend RBAC enforced)
+- Plugin UI injection (`ui.inject`: sidebar / topbar / floating) with a modal that stays mounted while minimized
+- LLM Assistant plugin (`plugins/llm-assistant`): chat history, Markdown, theme support, OpenRouter and local Ollama providers, model search, and `create_notes` / `create_tasks` / `create_category` actions
+- Async Rust backend: network/file commands run off the async runtime (`spawn_blocking`), fixing UI freezes during heavy SMB/network load
+- In-flight guards for 30 s polling and `#[tracing::instrument]` on heavy commands
+
+### Fixed
+
+- Encoding regression in the workspace layout (restored UTF-8)
+- Ollama connectivity: IPv4 `127.0.0.1`, proxy bypass (`no_proxy`), 300 s timeout, detailed reqwest error logging
+- LLM modal no longer unmounts/cancels generation on outside click (minimizes with a busy indicator)
+
+### Security
+
+- Plugin iframe sandbox (`allow-scripts allow-same-origin`), action whitelist, and `INVALID_ASSIGNEE` space-membership validation
+
 ## [0.7.0] - 2026-10-22
 
 ### Added
