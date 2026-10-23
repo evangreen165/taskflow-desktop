@@ -3,14 +3,17 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import Avatar from "@/components/Avatar";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import PluginFrame from "@/components/plugins/PluginFrame";
 import CommandPalette from "@/components/search/CommandPalette";
 import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
 import { usePermissions } from "@/hooks/usePermissions";
+import { PluginsService, type PluginManifest } from "@/services/plugins";
 import { SpacesService } from "@/services/spaces";
 import { UsersService, type UserSummary } from "@/services/users";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNotificationStore } from "@/stores/useNotificationStore";
+import { usePluginStore } from "@/stores/usePluginStore";
 import { isOwnPersonalSpace, isPersonalSpace, useSpaceStore } from "@/stores/useSpaceStore";
 
 import styles from "./WorkspaceLayout.module.css";
@@ -70,12 +73,23 @@ export default function WorkspaceLayout(): JSX.Element {
   const [membersBusy, setMembersBusy] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [plugins, setPlugins] = useState<PluginManifest[]>([]);
+  const [activePluginId, setActivePluginId] = useState<string | null>(null);
+  const [pluginPanelOpen, setPluginPanelOpen] = useState(false);
+  const pluginBusy = usePluginStore((s) => s.busy);
 
   const currentSpace = spaces.find((space) => space.id === currentSpaceId) ?? null;
   const canAdmin =
     can("users.manage") || can("roles.manage") || can("space.manage") || can("audit.view");
   const personalOwner = isOwnPersonalSpace(currentSpace, user?.id);
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const injectedSidebar = plugins.filter((plugin) => plugin.ui?.inject === "sidebar");
+  const injectedTopbar = plugins.filter((plugin) => plugin.ui?.inject === "topbar");
+  const injectedFloating = plugins.filter((plugin) => plugin.ui?.inject === "floating");
+  const openPluginName =
+    activePluginId !== null
+      ? (plugins.find((plugin) => plugin.id === activePluginId)?.name ?? activePluginId)
+      : null;
   const fetchNotifications = useNotificationStore((s) => s.fetch);
 
   useEffect(() => {
@@ -115,6 +129,19 @@ export default function WorkspaceLayout(): JSX.Element {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // Load plugins once so injected sidebar/topbar/floating buttons render.
+  useEffect(() => {
+    let cancelled = false;
+    void PluginsService.list().then((result) => {
+      if (!cancelled && result.ok) {
+        setPlugins(result.value);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function createSpace(): Promise<void> {
     const name = newSpaceName.trim();
     if (!name) {
@@ -133,6 +160,12 @@ export default function WorkspaceLayout(): JSX.Element {
     setCreateOpen(false);
     setNewSpaceName("");
     setNewSpaceDesc("");
+  }
+
+  /** Opens a plugin in the modal; the iframe stays mounted when minimized. */
+  function openPlugin(id: string): void {
+    setActivePluginId(id);
+    setPluginPanelOpen(true);
   }
 
   async function openMembers(): Promise<void> {
@@ -208,11 +241,32 @@ export default function WorkspaceLayout(): JSX.Element {
           <SideNavLink to="/app/kb" disabled={forced}>
             Заметки
           </SideNavLink>
+          <SideNavLink to="/app/plugins" disabled={forced}>
+            🧩 Расширения
+          </SideNavLink>
           <div className={styles.navLabel}>Управление</div>
           {canAdmin ? (
             <SideNavLink to="/app/admin" disabled={forced}>
               Администрирование
             </SideNavLink>
+          ) : null}
+          {injectedSidebar.length > 0 ? (
+            <>
+              <div className={styles.navLabel}>Плагины</div>
+              {injectedSidebar.map((plugin) => (
+                <button
+                  key={plugin.id}
+                  type="button"
+                  className={styles.pluginNavButton}
+                  onClick={() => openPlugin(plugin.id)}
+                >
+                  <span aria-hidden="true">🧩</span> {plugin.name}
+                  {pluginBusy[plugin.id] ? (
+                    <span className={styles.pluginBusyDot} aria-label="Идёт генерация…" />
+                  ) : null}
+                </button>
+              ))}
+            </>
           ) : null}
         </nav>
 
@@ -351,6 +405,17 @@ export default function WorkspaceLayout(): JSX.Element {
             <kbd className={styles.searchKbd}>{isMac ? "⌘ K" : "Ctrl K"}</kbd>
           </button>
           <NotificationBell />
+          {injectedTopbar.map((plugin) => (
+            <button
+              key={plugin.id}
+              type="button"
+              className={styles.pluginTopbarButton}
+              onClick={() => openPlugin(plugin.id)}
+              title={plugin.name}
+            >
+              🧩 {plugin.name}
+            </button>
+          ))}
           <div className={styles.spacer} />
           <button className="btn-ghost" type="button" onClick={() => setChangeFolderOpen(true)}>
             Сменить папку
@@ -463,7 +528,47 @@ export default function WorkspaceLayout(): JSX.Element {
         </div>
       ) : null}
 
+      {injectedFloating.map((plugin) => (
+        <button
+          key={plugin.id}
+          type="button"
+          className={styles.pluginFab}
+          onClick={() => openPlugin(plugin.id)}
+          title={plugin.name}
+          aria-label={`Открыть плагин ${plugin.name}`}
+        >
+          🧩
+          {pluginBusy[plugin.id] ? (
+            <span className={styles.pluginFabSpinner} aria-label="Идёт генерация…" />
+          ) : null}
+        </button>
+      ))}
+
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+
+      {activePluginId !== null ? (
+        <div
+          className={`${styles.pluginModalBackdrop} ${
+            pluginPanelOpen ? "" : styles.pluginModalHidden
+          }`}
+          onClick={() => setPluginPanelOpen(false)}
+        >
+          <div
+            className={styles.pluginModalCard}
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.pluginModalHeader}>
+              <span className={styles.pluginModalTitle}>🧩 {openPluginName}</span>
+              <button className="btn-ghost" type="button" onClick={() => setPluginPanelOpen(false)}>
+                Свернуть
+              </button>
+            </div>
+            <PluginFrame pluginId={activePluginId} />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

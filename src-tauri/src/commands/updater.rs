@@ -70,14 +70,19 @@ pub fn check_offline_update_impl(
 }
 
 #[tauri::command(rename = "checkOfflineUpdate")]
-pub fn check_offline_update(
+#[tracing::instrument(skip(state, app))]
+pub async fn check_offline_update(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<Option<OfflineUpdate>, AppError> {
     state.require_auth()?;
     let root = state.root()?;
     let current = app.package_info().version.to_string();
-    check_offline_update_impl(&root, &current)
+    // Reading the manifest from an SMB share can block; run it off the async
+    // runtime so the UI stays responsive.
+    tokio::task::spawn_blocking(move || check_offline_update_impl(&root, &current))
+        .await
+        .map_err(|e| AppError::new("IO", format!("update check task failed: {e}")))?
 }
 
 /// Resolves and validates an offline installer. Only files inside the

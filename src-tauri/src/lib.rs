@@ -12,6 +12,7 @@ mod notes;
 mod notifications;
 mod path;
 mod permissions;
+mod plugins;
 mod roles;
 mod session;
 mod spaces;
@@ -272,6 +273,10 @@ pub fn run() {
             commands::global_search,
             commands::check_offline_update,
             commands::install_offline_update,
+            commands::plugins_list,
+            commands::plugin_get_content,
+            commands::llm_proxy_request,
+            commands::llm_proxy_get,
             commands::notifications_list,
             commands::notifications_mark_read,
             commands::notifications_mark_all_read,

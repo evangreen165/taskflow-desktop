@@ -4,6 +4,7 @@ use crate::attachments::{self, AttachmentResult};
 use crate::error::AppError;
 use crate::AppState;
 
+#[cfg(test)]
 pub fn attachment_add_impl(
     state: &AppState,
     source_path: String,
@@ -16,14 +17,23 @@ pub fn attachment_add_impl(
 }
 
 #[tauri::command(rename = "attachmentAdd")]
-pub fn attachment_add(
+#[tracing::instrument(skip(state))]
+pub async fn attachment_add(
     state: State<'_, AppState>,
     source_path: String,
     name: String,
 ) -> Result<AttachmentResult, AppError> {
-    attachment_add_impl(&state, source_path, name)
+    state.require_auth()?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || {
+        attachments::add(&root, &source_path, &name)
+            .map(|(info, created)| AttachmentResult { info, created })
+    })
+    .await
+    .map_err(|e| AppError::new("IO", format!("attachment task failed: {e}")))?
 }
 
+#[cfg(test)]
 pub fn attachment_get_base64_impl(
     state: &AppState,
     sha256: String,
@@ -33,21 +43,35 @@ pub fn attachment_get_base64_impl(
 }
 
 #[tauri::command(rename = "attachmentGetBase64")]
-pub fn attachment_get_base64(
+#[tracing::instrument(skip(state))]
+pub async fn attachment_get_base64(
     state: State<'_, AppState>,
     sha256: String,
 ) -> Result<String, AppError> {
-    attachment_get_base64_impl(&state, sha256)
+    state.require_auth()?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || attachments::get_base64(&root, &sha256))
+        .await
+        .map_err(|e| AppError::new("IO", format!("attachment task failed: {e}")))?
 }
 
+#[cfg(test)]
 pub fn attachment_remove_impl(state: &AppState, sha256: String) -> Result<(), AppError> {
     state.require_auth()?;
     attachments::remove(&state.root()?, &sha256)
 }
 
 #[tauri::command(rename = "attachmentRemove")]
-pub fn attachment_remove(state: State<'_, AppState>, sha256: String) -> Result<(), AppError> {
-    attachment_remove_impl(&state, sha256)
+#[tracing::instrument(skip(state))]
+pub async fn attachment_remove(
+    state: State<'_, AppState>,
+    sha256: String,
+) -> Result<(), AppError> {
+    state.require_auth()?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || attachments::remove(&root, &sha256))
+        .await
+        .map_err(|e| AppError::new("IO", format!("attachment task failed: {e}")))?
 }
 
 pub fn attachment_open_impl(

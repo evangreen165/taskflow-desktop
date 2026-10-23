@@ -1,0 +1,6 @@
+{
+  "id": "llm-assistant",
+  "name": "AI Ассистент",
+  "version": "1.0.0",
+  "ui": { "inject": "floating" }
+}
