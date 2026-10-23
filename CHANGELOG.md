@@ -2,6 +2,18 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.8.1] - 2026-10-23
+
+### Fixed
+
+- Plugin CSP in production builds: inline plugin scripts/styles and the `srcdoc` iframe are now allowed (`script-src 'unsafe-inline'`), restoring the LLM Assistant buttons and theme toggle
+- Release-build responsiveness: watcher debounce raised to 700 ms so SMB event bursts no longer trigger refetch storms; 30 s polls skip when a request is still in flight
+- LLM bridge diagnostics: request timeouts and failures are logged to the console
+
+### Changed
+
+- CSP `connect-src` allows local Ollama (`127.0.0.1` / `localhost:11434`) and OpenRouter/OpenAI endpoints
+
 ## [0.8.0] - 2026-10-23
 
 ### Added

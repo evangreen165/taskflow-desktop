@@ -13,7 +13,9 @@ use crate::error::AppError;
 /// Frontend event name for filesystem changes in the workspace.
 pub const FS_EVENT: &str = "workspace://fs-event";
 
-const DEBOUNCE: Duration = Duration::from_millis(150);
+/// SMB saves can emit dozens of events per second; batch them for a while
+/// before notifying the frontend so it does not refetch in a tight loop.
+const DEBOUNCE: Duration = Duration::from_millis(700);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

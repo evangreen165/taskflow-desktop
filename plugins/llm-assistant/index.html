@@ -542,9 +542,18 @@
       function callPlugin(action, payload = {}) {
         return new Promise((resolve, reject) => {
           const id = Math.random().toString(36).slice(2);
-          const handler = (event) => {
+          // LLM calls can take minutes; everything else should answer quickly.
+          const timeoutMs = action === "llmChat" ? 330000 : 30000;
+          let handler = null;
+          const timer = setTimeout(() => {
+            if (handler) window.removeEventListener("message", handler);
+            console.error("[llm-assistant] bridge timeout", action);
+            reject(new Error("Таймаут ответа приложения"));
+          }, timeoutMs);
+          handler = (event) => {
             if (event.data?.type === "taskflow:response" && event.data.id === id) {
               window.removeEventListener("message", handler);
+              clearTimeout(timer);
               if (event.data.error) reject(new Error(event.data.error));
               else resolve(event.data.data);
             }
@@ -809,6 +818,7 @@
           if (!content) throw new Error("Пустой ответ от модели");
           await handleReply(content);
         } catch (err) {
+          console.error("[llm-assistant] request failed", err);
           addMessage("assistant", "Ошибка: " + err.message);
         } finally {
           setTyping(false);
