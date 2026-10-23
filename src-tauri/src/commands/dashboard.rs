@@ -1,4 +1,6 @@
-﻿use serde::Serialize;
+﻿use std::path::PathBuf;
+
+use serde::Serialize;
 use tauri::State;
 
 use crate::error::AppError;
@@ -42,13 +44,12 @@ fn is_visible(session: &Session, view_all: bool, task: &Task) -> bool {
         || task.author_id == session.user_id
 }
 
-pub fn dashboard_summary_impl(
-    state: &AppState,
+fn dashboard_summary_from(
+    root: PathBuf,
+    session: Session,
+    permissions: Vec<String>,
     space_id: Option<String>,
 ) -> Result<DashboardSummary, AppError> {
-    let session = state.require_auth()?;
-    let root = state.root()?;
-    let permissions = roles::permissions_for(&root, &session.role_id)?;
     let view_all = permissions.iter().any(|p| p == "task.view_all");
     let can_view_articles = permissions.iter().any(|p| p == "article.view");
 
@@ -183,12 +184,31 @@ pub fn dashboard_summary_impl(
     })
 }
 
+/// Thin wrapper kept for tests.
+pub fn dashboard_summary_impl(
+    state: &AppState,
+    space_id: Option<String>,
+) -> Result<DashboardSummary, AppError> {
+    let session = state.require_auth()?;
+    let root = state.root()?;
+    let permissions = roles::permissions_for(&root, &session.role_id)?;
+    dashboard_summary_from(root, session, permissions, space_id)
+}
+
 #[tauri::command(rename = "dashboardSummary")]
-pub fn dashboard_summary(
+#[tracing::instrument(skip(state))]
+pub async fn dashboard_summary(
     state: State<'_, AppState>,
     space_id: Option<String>,
 ) -> Result<DashboardSummary, AppError> {
-    dashboard_summary_impl(&state, space_id)
+    let session = state.require_auth()?;
+    let root = state.root()?;
+    let permissions = roles::permissions_for(&root, &session.role_id)?;
+    tokio::task::spawn_blocking(move || {
+        dashboard_summary_from(root, session, permissions, space_id)
+    })
+    .await
+    .map_err(|e| AppError::new("IO", format!("dashboard task failed: {e}")))?
 }
 
 #[cfg(test)]

@@ -105,12 +105,28 @@ pub fn tasks_list_impl(
 }
 
 #[tauri::command(rename = "tasksList")]
-pub fn tasks_list(
+#[tracing::instrument(skip(state))]
+pub async fn tasks_list(
     state: State<'_, AppState>,
     space_id: String,
     filter: TaskFilter,
 ) -> Result<Vec<Task>, AppError> {
-    tasks_list_impl(&state, space_id, filter)
+    let session = state.require_perm("task.view")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    let view_all = has_perm(&root, &session, "task.view_all")?;
+    let user_id = session.user_id.clone();
+    let mut tasks = tokio::task::spawn_blocking(move || tasks::list(&space_dir))
+        .await
+        .map_err(|e| AppError::new("IO", format!("tasks list task failed: {e}")))??;
+    tasks.retain(|task| {
+        matches_filter(task, &filter)
+            && (view_all
+                || task.author_id == user_id
+                || task.assignees.iter().any(|a| a == &user_id))
+    });
+    Ok(tasks)
 }
 
 pub fn tasks_get_impl(
@@ -128,12 +144,22 @@ pub fn tasks_get_impl(
 }
 
 #[tauri::command(rename = "tasksGet")]
-pub fn tasks_get(
+#[tracing::instrument(skip(state))]
+pub async fn tasks_get(
     state: State<'_, AppState>,
     space_id: String,
     id: String,
 ) -> Result<Task, AppError> {
-    tasks_get_impl(&state, space_id, id)
+    let session = state.require_perm("task.view")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    let task_id = id.clone();
+    let task = tokio::task::spawn_blocking(move || tasks::get(&space_dir, &task_id))
+        .await
+        .map_err(|e| AppError::new("IO", format!("task get task failed: {e}")))??;
+    ensure_visible(&root, &session, &task)?;
+    Ok(task)
 }
 
 pub fn tasks_create_impl(

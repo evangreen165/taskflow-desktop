@@ -2,6 +2,17 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.8.3] - 2026-10-23
+
+### Fixed
+
+- Plugin iframe in release builds: CSP now allows `blob:` frames (`frame-src 'self' blob: data:`); plugins are rendered from a Blob URL instead of `srcdoc`
+- SMB responsiveness: task/note/dashboard/spaces/notification reads and workspace activation (migration, backfill, bundled-plugin install) now run on blocking threads; the watcher debounce is 1000 ms
+
+### Changed
+
+- 30 s polling skips ticks while a previous request is still in flight
+
 ## [0.8.2] - 2026-10-23
 
 ### Fixed

@@ -78,23 +78,19 @@ fn meta_matches(
     true
 }
 
-pub fn notes_list_impl(
-    state: &AppState,
-    space_id: String,
-    category: Option<String>,
-    tag: Option<String>,
-    query: Option<String>,
+/// Heavy part of the note listing (metas + previews + shared notes).
+fn list_notes(
+    root: &Path,
+    space_id: &str,
+    category: &Option<String>,
+    tag: &Option<String>,
+    query: &Option<String>,
     status: Option<NoteStatus>,
 ) -> Result<Vec<NoteListItem>, AppError> {
-    let session = require_space_perm(state, &space_id, "article.view")?;
-    let root = state.root()?;
-    crate::spaces::require_access(&root, &space_id, &session)?;
-    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
-    let query = query.map(|q| q.trim().to_lowercase());
-
+    let space_dir = crate::spaces::space_dir(root, space_id)?;
     let mut items = Vec::new();
     for meta in notes::list_meta(&space_dir)? {
-        if !meta_matches(&meta, &space_dir, &category, &tag, &query, status) {
+        if !meta_matches(&meta, &space_dir, category, tag, query, status) {
             continue;
         }
         let preview = notes::read_content(&space_dir, &meta.id)
@@ -108,21 +104,21 @@ pub fn notes_list_impl(
     }
 
     // Notes from other spaces explicitly shared with this space.
-    for space in crate::spaces::list(&root)? {
+    for space in crate::spaces::list(root)? {
         if space.id == space_id {
             continue;
         }
-        let Ok(other_dir) = crate::spaces::space_dir(&root, &space.id) else {
+        let Ok(other_dir) = crate::spaces::space_dir(root, &space.id) else {
             continue;
         };
         let Ok(metas) = notes::list_meta(&other_dir) else {
             continue;
         };
         for meta in metas {
-            if !meta.shared_with_spaces.iter().any(|s| s == &space_id) {
+            if !meta.shared_with_spaces.iter().any(|s| s == space_id) {
                 continue;
             }
-            if !meta_matches(&meta, &other_dir, &category, &tag, &query, status) {
+            if !meta_matches(&meta, &other_dir, category, tag, query, status) {
                 continue;
             }
             let preview = notes::read_content(&other_dir, &meta.id)
@@ -140,8 +136,24 @@ pub fn notes_list_impl(
     Ok(items)
 }
 
+pub fn notes_list_impl(
+    state: &AppState,
+    space_id: String,
+    category: Option<String>,
+    tag: Option<String>,
+    query: Option<String>,
+    status: Option<NoteStatus>,
+) -> Result<Vec<NoteListItem>, AppError> {
+    let session = require_space_perm(state, &space_id, "article.view")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let query = query.map(|q| q.trim().to_lowercase());
+    list_notes(&root, &space_id, &category, &tag, &query, status)
+}
+
 #[tauri::command(rename = "notesList")]
-pub fn notes_list(
+#[tracing::instrument(skip(state))]
+pub async fn notes_list(
     state: State<'_, AppState>,
     space_id: String,
     category: Option<String>,
@@ -149,7 +161,15 @@ pub fn notes_list(
     query: Option<String>,
     status: Option<NoteStatus>,
 ) -> Result<Vec<NoteListItem>, AppError> {
-    notes_list_impl(&state, space_id, category, tag, query, status)
+    let session = require_space_perm(&state, &space_id, "article.view")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let query = query.map(|q| q.trim().to_lowercase());
+    tokio::task::spawn_blocking(move || {
+        list_notes(&root, &space_id, &category, &tag, &query, status)
+    })
+    .await
+    .map_err(|e| AppError::new("IO", format!("notes list task failed: {e}")))?
 }
 
 /// Resolves a note in `space_id`, falling back to a note shared into it.
@@ -200,12 +220,18 @@ pub fn notes_get_impl(
 }
 
 #[tauri::command(rename = "notesGet")]
-pub fn notes_get(
+#[tracing::instrument(skip(state))]
+pub async fn notes_get(
     state: State<'_, AppState>,
     space_id: String,
     id: String,
 ) -> Result<Note, AppError> {
-    notes_get_impl(&state, space_id, id)
+    let session = require_space_perm(&state, &space_id, "article.view")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    tokio::task::spawn_blocking(move || resolve_note(&root, &space_id, &id).map(|(_, note)| note))
+        .await
+        .map_err(|e| AppError::new("IO", format!("note get task failed: {e}")))?
 }
 
 pub fn notes_get_history_impl(
@@ -427,11 +453,18 @@ pub fn notes_list_categories_impl(
 }
 
 #[tauri::command(rename = "notesListCategories")]
-pub fn notes_list_categories(
+#[tracing::instrument(skip(state))]
+pub async fn notes_list_categories(
     state: State<'_, AppState>,
     space_id: String,
 ) -> Result<Vec<String>, AppError> {
-    notes_list_categories_impl(&state, space_id)
+    let session = state.require_auth()?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    tokio::task::spawn_blocking(move || notes::list_categories(&space_dir))
+        .await
+        .map_err(|e| AppError::new("IO", format!("categories task failed: {e}")))?
 }
 
 pub fn notes_create_category_impl(

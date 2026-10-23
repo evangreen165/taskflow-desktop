@@ -11,8 +11,15 @@ pub fn notifications_list_impl(state: &AppState) -> Result<Vec<Notification>, Ap
 }
 
 #[tauri::command(rename = "notificationsList")]
-pub fn notifications_list(state: State<'_, AppState>) -> Result<Vec<Notification>, AppError> {
-    notifications_list_impl(&state)
+#[tracing::instrument(skip(state))]
+pub async fn notifications_list(
+    state: State<'_, AppState>,
+) -> Result<Vec<Notification>, AppError> {
+    let session = state.require_auth()?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || notifications::list(&root, &session.user_id))
+        .await
+        .map_err(|e| AppError::new("IO", format!("notifications list task failed: {e}")))?
 }
 
 pub fn notifications_mark_read_impl(state: &AppState, id: String) -> Result<(), AppError> {

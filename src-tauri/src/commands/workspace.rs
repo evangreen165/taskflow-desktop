@@ -23,15 +23,24 @@ pub struct FolderInspection {
     pub has_users: bool,
 }
 
-/// Testable body of `initWorkspace`. A fresh workspace is already schema v2, so
-/// migration is a no-op here (kept for the ordered flow).
+/// Blocking file work of `initWorkspace` (runs off the async runtime).
+fn init_workspace_blocking(
+    root: &std::path::Path,
+    name: &str,
+    machine_id: &str,
+) -> Result<WorkspaceInfo, AppError> {
+    let info = workspace::init(root, name)?;
+    let _migrated = crate::migrate::run(root, machine_id)?;
+    Ok(info)
+}
+
+/// Testable body of `initWorkspace`.
 pub fn init_workspace_impl(
     state: &AppState,
     root: PathBuf,
     name: &str,
 ) -> Result<WorkspaceInfo, AppError> {
-    let info = workspace::init(&root, name)?;
-    let _migrated = crate::migrate::run(&root, &state.machine_id())?;
+    let info = init_workspace_blocking(&root, name, &state.machine_id())?;
     state.set_workspace(root, info.clone());
     audit::emit(
         &ActorId::System("init"),
@@ -47,32 +56,58 @@ pub fn init_workspace_impl(
 /// workspace root chosen by the user; it is the only place absolute paths are
 /// accepted and it is never stored inside data files.
 #[tauri::command(rename = "initWorkspace")]
-pub fn init_workspace(
+pub async fn init_workspace(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
     path: String,
     name: String,
 ) -> Result<WorkspaceInfo, AppError> {
     let root = PathBuf::from(&path);
-    let info = init_workspace_impl(&state, root.clone(), &name)?;
-    if let Err(err) = crate::plugins::install_default_plugins(&root, &app) {
-        tracing::warn!(error = %err.message, "failed to install default plugins");
-    }
+    let machine_id = state.machine_id();
+    let root_for_task = root.clone();
+    let name_for_task = name.clone();
+    let app_for_task = app.clone();
+    let info = tokio::task::spawn_blocking(move || {
+        let info = init_workspace_blocking(&root_for_task, &name_for_task, &machine_id)?;
+        crate::plugins::install_default_plugins(&root_for_task, &app_for_task)?;
+        Ok::<_, AppError>(info)
+    })
+    .await
+    .map_err(|e| AppError::new("IO", format!("init workspace task failed: {e}")))??;
+    state.set_workspace(root, info.clone());
+    audit::emit(
+        &ActorId::System("init"),
+        "workspace.create",
+        "workspace",
+        &info.workspace_id,
+        serde_json::json!({ "name": info.name }),
+    );
     Ok(info)
 }
 
-/// Testable body of `activateWorkspace`. Runs the v1 → v2 migration when
-/// needed; a migrated workspace with an active session clears the session and
-/// reports `SESSION_INVALIDATED` (the UI sends the user to `/login`).
-pub fn activate_workspace_impl(
+/// Blocking file work of `activateWorkspace` (migration, backfill, plugins).
+fn activate_workspace_blocking(
+    root: &std::path::Path,
+    machine_id: &str,
+    app: Option<&tauri::AppHandle>,
+) -> Result<(WorkspaceInfo, bool), AppError> {
+    let info = workspace::validate(root)?;
+    let migrated = crate::migrate::run(root, machine_id)?;
+    crate::backfill::run(root)?;
+    if let Some(app) = app {
+        crate::plugins::install_default_plugins(root, app)?;
+    }
+    Ok((info, migrated))
+}
+
+/// Shared tail of activation: state update, audit, session invalidation.
+fn finalize_activation(
     state: &AppState,
     root: PathBuf,
+    info: WorkspaceInfo,
+    migrated: bool,
+    had_session: bool,
 ) -> Result<WorkspaceInfo, AppError> {
-    let info = workspace::validate(&root)?;
-    let had_session = state.require_auth().is_ok();
-    let machine_id = state.machine_id();
-    let migrated = crate::migrate::run(&root, &machine_id)?;
-    crate::backfill::run(&root)?;
     state.set_workspace(root, info.clone());
     if migrated {
         audit::emit(
@@ -100,21 +135,35 @@ pub fn activate_workspace_impl(
     Ok(info)
 }
 
+/// Testable body of `activateWorkspace`.
+pub fn activate_workspace_impl(
+    state: &AppState,
+    root: PathBuf,
+) -> Result<WorkspaceInfo, AppError> {
+    let had_session = state.require_auth().is_ok();
+    let machine_id = state.machine_id();
+    let (info, migrated) = activate_workspace_blocking(&root, &machine_id, None)?;
+    finalize_activation(state, root, info, migrated, had_session)
+}
+
 /// Validates and activates an existing workspace.
 #[tauri::command(rename = "activateWorkspace")]
-pub fn activate_workspace(
+pub async fn activate_workspace(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
     path: String,
 ) -> Result<WorkspaceInfo, AppError> {
     let root = PathBuf::from(&path);
-    let info = activate_workspace_impl(&state, root.clone())?;
-    // App updates ship a newer bundled plugin; refresh the copy in the
-    // user's workspace so old/broken files are replaced.
-    if let Err(err) = crate::plugins::install_default_plugins(&root, &app) {
-        tracing::warn!(error = %err.message, "failed to install default plugins");
-    }
-    Ok(info)
+    let had_session = state.require_auth().is_ok();
+    let machine_id = state.machine_id();
+    let root_for_task = root.clone();
+    let app_for_task = app.clone();
+    let (info, migrated) = tokio::task::spawn_blocking(move || {
+        activate_workspace_blocking(&root_for_task, &machine_id, Some(&app_for_task))
+    })
+    .await
+    .map_err(|e| AppError::new("IO", format!("activate workspace task failed: {e}")))??;
+    finalize_activation(&state, root, info, migrated, had_session)
 }
 
 /// Inspects a candidate folder without activating it (used by onboarding).

@@ -32,8 +32,22 @@ pub fn spaces_list_impl(state: &AppState) -> Result<Vec<Space>, AppError> {
 }
 
 #[tauri::command(rename = "spacesList")]
-pub fn spaces_list(state: State<'_, AppState>) -> Result<Vec<Space>, AppError> {
-    spaces_list_impl(&state)
+#[tracing::instrument(skip(state))]
+pub async fn spaces_list(state: State<'_, AppState>) -> Result<Vec<Space>, AppError> {
+    let session = state.require_auth()?;
+    let root = state.root()?;
+    let global = spaces::is_admin(&session) || has_perm(&root, &session, "space.manage")?;
+    let user_id = session.user_id.clone();
+    let all = tokio::task::spawn_blocking(move || spaces::list(&root))
+        .await
+        .map_err(|e| AppError::new("IO", format!("spaces list task failed: {e}")))??;
+    Ok(if global {
+        all
+    } else {
+        all.into_iter()
+            .filter(|space| spaces::is_member(space, &user_id))
+            .collect()
+    })
 }
 
 pub fn spaces_get_impl(state: &AppState, id: String) -> Result<Space, AppError> {
@@ -47,8 +61,20 @@ pub fn spaces_get_impl(state: &AppState, id: String) -> Result<Space, AppError> 
 }
 
 #[tauri::command(rename = "spacesGet")]
-pub fn spaces_get(state: State<'_, AppState>, id: String) -> Result<Space, AppError> {
-    spaces_get_impl(&state, id)
+#[tracing::instrument(skip(state))]
+pub async fn spaces_get(state: State<'_, AppState>, id: String) -> Result<Space, AppError> {
+    let session = state.require_auth()?;
+    let root = state.root()?;
+    let manage = has_perm(&root, &session, "space.manage")?;
+    tokio::task::spawn_blocking(move || {
+        if manage {
+            spaces::get(&root, &id)
+        } else {
+            spaces::require_access(&root, &id, &session)
+        }
+    })
+    .await
+    .map_err(|e| AppError::new("IO", format!("space get task failed: {e}")))?
 }
 
 /// Minimal projection of a space member for the assignee picker and @mentions.
@@ -85,11 +111,29 @@ pub fn spaces_get_members_impl(
 }
 
 #[tauri::command(rename = "spacesGetMembers")]
-pub fn spaces_get_members(
+#[tracing::instrument(skip(state))]
+pub async fn spaces_get_members(
     state: State<'_, AppState>,
     space_id: String,
 ) -> Result<Vec<SpaceMember>, AppError> {
-    spaces_get_members_impl(&state, space_id)
+    let session = state.require_auth()?;
+    let root = state.root()?;
+    let space = spaces::require_access(&root, &space_id, &session)?;
+    tokio::task::spawn_blocking(move || {
+        Ok(users::list(&root)?
+            .into_iter()
+            .filter(|user| user.is_active && spaces::is_member(&space, &user.id))
+            .map(|user| SpaceMember {
+                id: user.id,
+                login: user.login,
+                display_name: user.display_name,
+                avatar_color: user.avatar_color,
+                avatar_sha256: user.avatar_sha256,
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| AppError::new("IO", format!("space members task failed: {e}")))?
 }
 
 pub fn spaces_create_impl(
