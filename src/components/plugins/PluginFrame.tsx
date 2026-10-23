@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { LlmService } from "@/services/llm";
 import { NotesService } from "@/services/notes";
 import { PluginsService } from "@/services/plugins";
-import { TasksService } from "@/services/tasks";
+import { TasksService, type TaskPriority } from "@/services/tasks";
 import { usePluginStore } from "@/stores/usePluginStore";
 import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useThemeStore } from "@/stores/useThemeStore";
@@ -89,6 +89,51 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
           const category = typeof payload.category === "string" ? payload.category : "";
           const content = typeof payload.content === "string" ? payload.content : "";
           const result = await NotesService.create(spaceId, { title, category, content });
+          if (!result.ok) {
+            throw new Error(result.error.message);
+          }
+          return result.value;
+        }
+        case "createTask": {
+          const title = payload.title;
+          if (typeof title !== "string" || !title.trim()) {
+            throw new Error("Параметр title обязателен");
+          }
+          const priority: TaskPriority =
+            payload.priority === "low" ||
+            payload.priority === "medium" ||
+            payload.priority === "high" ||
+            payload.priority === "critical"
+              ? payload.priority
+              : "medium";
+          const description = typeof payload.description === "string" ? payload.description : "";
+          const dueDate =
+            typeof payload.dueDate === "string" && payload.dueDate.trim() ? payload.dueDate : null;
+          const assignees = Array.isArray(payload.assignees)
+            ? payload.assignees.filter((value): value is string => typeof value === "string")
+            : [];
+          const tags = Array.isArray(payload.tags)
+            ? payload.tags.filter((value): value is string => typeof value === "string")
+            : [];
+          const result = await TasksService.create(spaceId, {
+            title: title.trim(),
+            description,
+            priority,
+            dueDate,
+            assignees,
+            tags,
+          });
+          if (!result.ok) {
+            throw new Error(result.error.message);
+          }
+          return result.value;
+        }
+        case "createCategory": {
+          const name = payload.name;
+          if (typeof name !== "string" || !name.trim()) {
+            throw new Error("Параметр name обязателен");
+          }
+          const result = await NotesService.createCategory(spaceId, name.trim());
           if (!result.ok) {
             throw new Error(result.error.message);
           }

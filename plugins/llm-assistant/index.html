@@ -651,10 +651,13 @@
       const SYSTEM_PROMPT =
         "Ты — «AI Ассистент», встроенный в десктоп-приложение TaskFlow (трекер задач и база знаний). " +
         "Ты полезный, краткий и точный помощник. Отвечай на русском языке, используй Markdown для структуры. " +
-        "Если пользователь просит создать заметки, верни ТОЛЬКО JSON-блок без пояснений и без markdown-кода: " +
-        '{"action":"create_notes","notes":[{"title":"Название","content":"Содержание","tags":["тег"]}]}';
+        "У тебя есть три специальных JSON-ответа. Возвращай ТОЛЬКО JSON-блок без пояснений и без markdown-кода, когда пользователь просит выполнить действие:\n" +
+        '1) Заметки: {"action":"create_notes","notes":[{"title":"Название","content":"Содержание","tags":["тег"]}]}\n' +
+        '2) Задачи: {"action":"create_tasks","tasks":[{"title":"Название","description":"Описание","priority":"high"}]} (priority: low|medium|high|critical)\n' +
+        '3) Категория заметок: {"action":"create_category","name":"Название категории"}\n' +
+        "Для обычных вопросов отвечай текстом в Markdown.";
 
-      function plural(n) {
+      function pluralNotes(n) {
         const mod10 = n % 10;
         const mod100 = n % 100;
         if (mod10 === 1 && mod100 !== 11) return "заметку";
@@ -662,7 +665,15 @@
         return "заметок";
       }
 
-      function extractCreateNotes(content) {
+      function pluralTasks(n) {
+        const mod10 = n % 10;
+        const mod100 = n % 100;
+        if (mod10 === 1 && mod100 !== 11) return "задачу";
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "задачи";
+        return "задач";
+      }
+
+      function extractAction(content) {
         const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/);
         const candidates = fenced ? [fenced[1]] : [];
         const start = content.indexOf("{");
@@ -671,9 +682,7 @@
         for (const candidate of candidates) {
           try {
             const parsed = JSON.parse(candidate.trim());
-            if (parsed && parsed.action === "create_notes" && Array.isArray(parsed.notes)) {
-              return parsed;
-            }
+            if (parsed && typeof parsed.action === "string") return parsed;
           } catch {
             // try the next candidate
           }
@@ -682,37 +691,92 @@
       }
 
       async function handleReply(content) {
-        const plan = extractCreateNotes(content);
+        const plan = extractAction(content);
         if (!plan) {
           addMessage("assistant", content);
           return;
         }
-        let created = 0;
-        for (const note of plan.notes || []) {
-          try {
-            await callPlugin("createNote", {
-              title: String(note.title || "Заметка"),
-              content: String(note.content || ""),
-              category: "",
-            });
-            created += 1;
-          } catch (err) {
-            addMessage(
-              "assistant",
-              "Не удалось создать заметку: **" + (note.title || "?") + "** — " + err.message,
-            );
+
+        if (plan.action === "create_notes" && Array.isArray(plan.notes)) {
+          let created = 0;
+          for (const note of plan.notes) {
+            try {
+              await callPlugin("createNote", {
+                title: String(note.title || "Заметка"),
+                content: String(note.content || ""),
+                category: "",
+              });
+              created += 1;
+            } catch (err) {
+              addMessage(
+                "assistant",
+                "Не удалось создать заметку: **" + (note.title || "?") + "** — " + err.message,
+              );
+            }
           }
+          const message =
+            created > 0
+              ? "Готово! Создано **" +
+                created +
+                " " +
+                pluralNotes(created) +
+                "** в текущем пространстве. 🎉"
+              : "Не удалось создать заметки.";
+          addMessage("assistant", message);
+          await callPlugin("showToast", {
+            message: "Создано " + created + " " + pluralNotes(created),
+          });
+          return;
         }
-        const message =
-          created > 0
-            ? "Готово! Создано **" +
-              created +
-              " " +
-              plural(created) +
-              "** в текущем пространстве. 🎉"
-            : "Не удалось создать заметки.";
-        addMessage("assistant", message);
-        await callPlugin("showToast", { message: "Создано " + created + " " + plural(created) });
+
+        if (plan.action === "create_tasks" && Array.isArray(plan.tasks)) {
+          let created = 0;
+          for (const task of plan.tasks) {
+            try {
+              await callPlugin("createTask", {
+                title: String(task.title || "Задача"),
+                description: String(task.description || ""),
+                priority: task.priority || "medium",
+                dueDate: task.dueDate || null,
+                assignees: Array.isArray(task.assignees) ? task.assignees : [],
+                tags: Array.isArray(task.tags) ? task.tags : [],
+              });
+              created += 1;
+            } catch (err) {
+              addMessage(
+                "assistant",
+                "Не удалось создать задачу: **" + (task.title || "?") + "** — " + err.message,
+              );
+            }
+          }
+          const message =
+            created > 0
+              ? "Готово! Создано **" +
+                created +
+                " " +
+                pluralTasks(created) +
+                "** в текущем пространстве. ✅"
+              : "Не удалось создать задачи.";
+          addMessage("assistant", message);
+          await callPlugin("showToast", {
+            message: "Создано " + created + " " + pluralTasks(created),
+          });
+          return;
+        }
+
+        if (plan.action === "create_category" && typeof plan.name === "string") {
+          try {
+            await callPlugin("createCategory", { name: plan.name });
+            addMessage("assistant", "Категория **" + plan.name + "** создана. 🗂️");
+            await callPlugin("showToast", { message: "Категория «" + plan.name + "» создана" });
+          } catch (err) {
+            addMessage("assistant", "Не удалось создать категорию: " + err.message);
+          }
+          return;
+        }
+
+        // Unknown/unsupported action: render the model text as-is.
+        addMessage("assistant", content);
       }
 
       async function send() {
