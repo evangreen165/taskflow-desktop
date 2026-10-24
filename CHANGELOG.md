@@ -2,6 +2,15 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.8.9] - 2026-10-24
+
+### Changed
+
+- Patch release 0.8.9: rebuild of the 0.8.8 line (unsandboxed plugin iframe +
+  disabled CSP) published under a fresh tag so the release pipeline ships the
+  final fix. (Requested as `0.8.8.1`, but Tauri requires strict semver, so the
+  patch version is `0.8.9`.)
+
 ## [0.8.8] - 2026-10-24
 
 ### Fixed
