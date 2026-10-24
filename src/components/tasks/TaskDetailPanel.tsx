@@ -248,7 +248,10 @@ export default function TaskDetailPanel({
 
   return (
     <>
-      <div className={styles.backdrop} onClick={() => void handleClose()} />
+      {/* The dimmed backdrop never closes the panel by itself: only the explicit
+          ✕ button does, so selecting text or moving the mouse to the right
+          cannot accidentally dismiss it. */}
+      <div className={styles.backdrop} />
       <aside className={styles.panel}>
         <header className={styles.head}>
           {viewMode === "edit" ? (

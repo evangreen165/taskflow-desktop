@@ -236,17 +236,21 @@ mod tests {
     }
 
     #[test]
-    fn rejects_bad_extensions_and_requires_auth() {
+    fn accepts_any_extension_and_requires_auth() {
         let fx = fixture();
-        let bad = fx.source_dir.path().join("virus.exe");
-        std::fs::write(&bad, b"MZ").unwrap();
-        let err = attachment_add_impl(
+        // Executables/archives are allowed now — the store is content-addressed
+        // and files are only ever opened by the OS on an explicit click.
+        let exe = fx.source_dir.path().join("tool.exe");
+        std::fs::write(&exe, b"MZ").unwrap();
+        let result = attachment_add_impl(
             &fx.state,
-            bad.to_string_lossy().into_owned(),
-            "virus.exe".to_string(),
+            exe.to_string_lossy().into_owned(),
+            "tool.exe".to_string(),
         )
-        .unwrap_err();
-        assert_eq!(err.code, "INVALID_INPUT");
+        .unwrap();
+        assert!(result.created);
+        assert_eq!(result.info.ext, "exe");
+        assert_eq!(result.info.mime, "application/octet-stream");
 
         let state = AppState::new("m".into());
         state.set_workspace(

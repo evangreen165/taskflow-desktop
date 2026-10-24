@@ -551,7 +551,6 @@ export default function WorkspaceLayout(): JSX.Element {
           className={`${styles.pluginModalBackdrop} ${
             pluginPanelOpen ? "" : styles.pluginModalHidden
           }`}
-          onClick={() => setPluginPanelOpen(false)}
         >
           <div
             className={styles.pluginModalCard}

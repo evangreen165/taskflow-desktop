@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useState } from "react";
 
 import { NotesService, type Note } from "@/services/notes";
 
@@ -19,8 +19,23 @@ export default function NewNoteModal({
 }: NewNoteModalProps): JSX.Element {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
+  const [allCategories, setAllCategories] = useState<string[]>(categories);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Load the space's actual category list from the backend (categories.json),
+  // not just the categories of the notes that happen to be loaded.
+  useEffect(() => {
+    let cancelled = false;
+    void NotesService.listCategories(spaceId).then((result) => {
+      if (!cancelled && result.ok) {
+        setAllCategories(result.value);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [spaceId]);
 
   async function submit(): Promise<void> {
     if (!title.trim() || !category.trim()) {
@@ -81,7 +96,7 @@ export default function NewNoteModal({
             onChange={(event) => setCategory(event.target.value)}
           />
           <datalist id="nn-categories">
-            {categories.map((cat) => (
+            {allCategories.map((cat) => (
               <option key={cat} value={cat} />
             ))}
           </datalist>

@@ -2,6 +2,27 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.8.7] - 2026-10-24
+
+### Fixed
+
+- F5/reload no longer kicks the user to the login screen: the app restores the
+  still-alive Rust session via `authRefreshSession` before redirecting to
+  `/login`
+- «Новая статья» category dropdown now loads the real category list from the
+  backend (`notesListCategories`) instead of only the categories of loaded notes
+- Attachments support any file type: the markdown editor's «Прикрепить файл»
+  picks any file (no image-only filter), the Rust `attachmentAdd` accepts any
+  extension, and the renderer shows an inline image for images or a clickable
+  `📄 filename` link (opens with the OS app) for documents/archives/executables
+- Panels no longer close accidentally: the task panel backdrop and the plugin
+  modal backdrop no longer dismiss on click — only the explicit ✕ / «Свернуть»
+  buttons close them
+
+### Changed
+
+- Version bumped to `0.8.7`
+
 ## [0.8.6] - 2026-10-24
 
 ### Fixed

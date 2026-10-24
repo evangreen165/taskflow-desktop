@@ -85,8 +85,12 @@ export function AttachmentLink({
   }
 
   return (
-    <a href={href} onClick={(event) => void handleClick(event)}>
-      {busy ? "Открытие…" : children}
+    <a
+      href={href}
+      title={busy ? undefined : "Открыть файл"}
+      onClick={(event) => void handleClick(event)}
+    >
+      {busy ? "Открытие…" : <>📄 {children}</>}
     </a>
   );
 }

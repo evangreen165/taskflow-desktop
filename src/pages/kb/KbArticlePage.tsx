@@ -425,21 +425,13 @@ function ArticleEditor({
     });
   }
 
-  /** Opens the native file picker, stores the file, and inserts its link. */
-  async function attachFile(kind: "image" | "file"): Promise<void> {
-    const options =
-      kind === "image"
-        ? {
-            multiple: false,
-            filters: [
-              {
-                name: "Изображения",
-                extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"],
-              },
-            ],
-          }
-        : { multiple: false };
-    const selected = await open(options);
+  /**
+   * Opens the native file picker (any file type), stores the file, and inserts
+   * an image (`![name]`) or a clickable link (`[name]`) depending on the
+   * detected MIME type.
+   */
+  async function attachFile(): Promise<void> {
+    const selected = await open({ multiple: false });
     if (typeof selected !== "string") {
       return;
     }
@@ -448,9 +440,11 @@ function ArticleEditor({
     if (!result.ok) {
       return;
     }
-    const { sha256 } = result.value.info;
+    const { sha256, mime } = result.value.info;
     insertMarkdown(
-      kind === "image" ? `![${name}](attachment://${sha256})` : `[${name}](attachment://${sha256})`,
+      mime.startsWith("image/")
+        ? `![${name}](attachment://${sha256})`
+        : `[${name}](attachment://${sha256})`,
     );
   }
 
@@ -550,15 +544,8 @@ function ArticleEditor({
         {mode === "edit" ? (
           <>
             <div className={styles.attachBar}>
-              <button type="button" onClick={() => void attachFile("file")} title="Прикрепить файл">
+              <button type="button" onClick={() => void attachFile()} title="Прикрепить любой файл">
                 📎 Прикрепить файл
-              </button>
-              <button
-                type="button"
-                onClick={() => void attachFile("image")}
-                title="Вставить картинку"
-              >
-                🖼️ Вставить картинку
               </button>
             </div>
             <textarea

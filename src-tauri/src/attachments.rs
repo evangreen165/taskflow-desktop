@@ -8,33 +8,6 @@ use crate::fsops;
 
 const MAX_ATTACHMENT_SIZE: u64 = 50 * 1024 * 1024;
 
-const ALLOWED_EXTENSIONS: &[&str] = &[
-    "png",
-    "jpg",
-    "jpeg",
-    "gif",
-    "webp",
-    "svg",
-    "bmp",
-    "pdf",
-    "txt",
-    "md",
-    "csv",
-    "json",
-    "doc",
-    "docx",
-    "xls",
-    "xlsx",
-    "ppt",
-    "pptx",
-    "zip",
-    "rar",
-    "7z",
-    "mp3",
-    "mp4",
-    "wav",
-];
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AttachmentInfo {
@@ -95,12 +68,6 @@ fn attachment_path(root: &Path, sha256: &str, ext: &str) -> Result<PathBuf, AppE
     if sha256.len() != 64 || !sha256.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(AppError::new("INVALID_INPUT", "invalid sha256"));
     }
-    if !ALLOWED_EXTENSIONS.contains(&ext) {
-        return Err(AppError::new(
-            "INVALID_INPUT",
-            format!("extension '.{ext}' is not allowed"),
-        ));
-    }
     Ok(root.join("attachments").join(format!("{sha256}.{ext}")))
 }
 
@@ -126,6 +93,7 @@ pub fn resolve(root: &Path, sha256: &str) -> Result<PathBuf, AppError> {
 
 /// Copies `source_path` into `attachments/{sha256}.{ext}`, deduplicating by
 /// content hash. The source is the only place an absolute path is accepted.
+/// Any file extension is accepted; only the size limit applies.
 pub fn add(root: &Path, source_path: &str, name: &str) -> Result<(AttachmentInfo, bool), AppError> {
     let base_name = Path::new(name)
         .file_name()
@@ -134,12 +102,6 @@ pub fn add(root: &Path, source_path: &str, name: &str) -> Result<(AttachmentInfo
     let raw_ext = ext_of(&base_name)
         .ok_or_else(|| AppError::new("INVALID_INPUT", "file must have an extension"))?;
     let ext = raw_ext.to_lowercase();
-    if !ALLOWED_EXTENSIONS.contains(&ext.as_str()) {
-        return Err(AppError::new(
-            "INVALID_INPUT",
-            format!("extension '.{ext}' is not allowed"),
-        ));
-    }
 
     let source = Path::new(source_path);
     let meta = std::fs::metadata(source).map_err(|e| AppError::io("attachment source", e))?;
