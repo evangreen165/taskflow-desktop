@@ -2,6 +2,23 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.8.8] - 2026-10-24
+
+### Fixed
+
+- AI-assistant plugin buttons stop working in production builds: the plugin
+  iframe now loads from a `blob:` URL instead of `srcdoc` (srcdoc iframes in
+  WebView2 production can get a `null` origin that silently breaks the
+  postMessage bridge), and the bridge accepts any message whose
+  `event.source` is the plugin frame — blob origins are unpredictable
+  (`blob:http://tauri.localhost/…`), so strict origin checks were removed
+- The bundled plugin already binds every button with `addEventListener`
+  (no inline `onclick=` handlers), so it needed no HTML changes
+
+### Changed
+
+- Version bumped to `0.8.8`
+
 ## [0.8.7] - 2026-10-24
 
 ### Fixed

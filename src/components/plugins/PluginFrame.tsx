@@ -15,18 +15,19 @@ const PLUGIN_REQUEST = "taskflow:request";
 const PLUGIN_RESPONSE = "taskflow:response";
 
 /**
- * Loads a plugin's entry HTML and renders it inside a sandboxed `srcdoc`
+ * Loads a plugin's entry HTML and renders it inside a sandboxed `blob:` URL
  * iframe, hosting the postMessage bridge between the plugin and TaskFlow.
  *
- * The `plugin://` custom protocol is unreliable inside a sandboxed WebView2
- * iframe (scripts/styles get blocked), so the plugin page is injected as
- * `srcdoc` and the bridge relies on `event.source === contentWindow`.
+ * `srcDoc` iframes in WebView2 production often end up with a `null` origin,
+ * which silently breaks the postMessage bridge; a `blob:` URL keeps a real,
+ * stable origin (`blob:<app origin>/…`) and reliably runs inline scripts.
  */
 export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const pushToast = useToastStore((s) => s.push);
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
+  const [iframeUrl, setIframeUrl] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,6 +48,19 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
       cancelled = true;
     };
   }, [pluginId]);
+
+  // Keep the plugin document alive in a Blob URL instead of `srcdoc`, and
+  // revoke it when the content changes so the webview never pins stale data.
+  useEffect(() => {
+    if (!htmlContent) {
+      setIframeUrl("");
+      return;
+    }
+    const blob = new Blob([htmlContent], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    setIframeUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [htmlContent]);
 
   /**
    * Whitelisted plugin actions. Read-only plus note creation and the LLM proxy;
@@ -201,22 +215,12 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
    */
   const handleMessage = useCallback(
     (event: MessageEvent) => {
+      // A `blob:` iframe can report unpredictable origins in WebView2
+      // production (e.g. `blob:http://tauri.localhost/…`), so origin checks
+      // are intentionally skipped: `event.source` matching the plugin frame's
+      // contentWindow already proves the message came from the plugin.
       const iframe = iframeRef.current;
       if (!iframe || event.source !== iframe.contentWindow) {
-        return;
-      }
-      // `srcdoc` with `allow-same-origin` makes the plugin share the app
-      // origin; a null/empty origin covers stricter sandbox configurations.
-      // The `event.source` check above is the authoritative one.
-      const appOrigin = window.location.origin;
-      const pluginOrigin =
-        event.origin === appOrigin ||
-        event.origin.startsWith("plugin://") ||
-        event.origin.startsWith("http://plugin.localhost") ||
-        event.origin.startsWith("https://plugin.localhost") ||
-        event.origin === "null" ||
-        event.origin === "";
-      if (!pluginOrigin) {
         return;
       }
       const data = event.data as Record<string, unknown> | null;
@@ -263,7 +267,7 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
     return <div className={styles.status}>Ошибка загрузки плагина: {loadError}</div>;
   }
 
-  if (htmlContent === null) {
+  if (!iframeUrl) {
     return <div className={styles.status}>Загрузка плагина…</div>;
   }
 
@@ -272,8 +276,8 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
       <iframe
         ref={iframeRef}
         className={styles.frame}
-        sandbox="allow-scripts allow-same-origin allow-forms"
-        srcDoc={htmlContent}
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        src={iframeUrl}
         title={`Плагин ${pluginId}`}
       />
     </div>
