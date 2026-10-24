@@ -53,6 +53,7 @@ export interface UseTaskEditorResult {
   setAssignees: (value: string[]) => void;
   toggleChecklistItem: (id: string) => void;
   addChecklistItem: (text: string) => void;
+  updateChecklistItem: (id: string, text: string) => void;
   removeChecklistItem: (id: string) => void;
   addComment: (text: string) => void;
   flush: () => Promise<void>;
@@ -266,6 +267,22 @@ export function useTaskEditor(task: Task, spaceId: string): UseTaskEditorResult 
     applyDraft({ ...draftRef.current, checklist: [...draftRef.current.checklist, item] }, true);
   }
 
+  function updateChecklistItem(id: string, text: string): void {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return;
+    }
+    applyDraft(
+      {
+        ...draftRef.current,
+        checklist: draftRef.current.checklist.map((item) =>
+          item.id === id ? { ...item, text: trimmed } : item,
+        ),
+      },
+      true,
+    );
+  }
+
   function removeChecklistItem(id: string): void {
     applyDraft(
       {
@@ -337,6 +354,7 @@ export function useTaskEditor(task: Task, spaceId: string): UseTaskEditorResult 
     setAssignees,
     toggleChecklistItem,
     addChecklistItem,
+    updateChecklistItem,
     removeChecklistItem,
     addComment,
     flush,

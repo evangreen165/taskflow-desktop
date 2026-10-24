@@ -2,6 +2,22 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.8.6] - 2026-10-24
+
+### Fixed
+
+- Plugin white screen (definitive): the `plugin://` custom protocol is unreliable inside a sandboxed WebView2 iframe, so plugins are rendered again from their entry HTML via `srcdoc` with `allow-scripts allow-same-origin allow-forms`; the CSP is permissive for iframes (`script-src * 'unsafe-inline'`, `style-src * 'unsafe-inline'`, `frame-src 'self' data: blob:`) and the postMessage bridge accepts the app origin (srcdoc inherits it) plus null/plugin origins
+- Analytics charts animate again: `isAnimationActive` is explicit on the Pie and Bar recharts components
+
+### Added
+
+- Task deletion: «Удалить задачу» button in the task panel header (visible with `task.delete`), a confirmation dialog, and a task-list refresh after deletion
+- Checklist items can now be edited inline (saved on blur/Enter via `tasksUpdate`) and deleted with the ✕ button
+
+### Changed
+
+- Version bumped to `0.8.6`
+
 ## [0.8.5] - 2026-10-24
 
 ### Fixed

@@ -124,6 +124,7 @@ export default function AnalyticsWidget({
                 outerRadius={58}
                 paddingAngle={2}
                 stroke="none"
+                isAnimationActive={true}
               >
                 {statusData.map((entry) => (
                   <Cell key={entry.status} fill={entry.color} />
@@ -159,6 +160,7 @@ export default function AnalyticsWidget({
                 name="Активные задачи"
                 fill="var(--accent)"
                 radius={[4, 4, 0, 0]}
+                isAnimationActive={true}
               />
             </BarChart>
           </ResponsiveContainer>

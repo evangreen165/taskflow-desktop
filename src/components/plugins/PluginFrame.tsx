@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { LlmService } from "@/services/llm";
 import { NotesService } from "@/services/notes";
+import { PluginsService } from "@/services/plugins";
 import { TasksService, type TaskPriority } from "@/services/tasks";
 import { usePluginStore } from "@/stores/usePluginStore";
 import { useSpaceStore } from "@/stores/useSpaceStore";
@@ -14,13 +15,38 @@ const PLUGIN_REQUEST = "taskflow:request";
 const PLUGIN_RESPONSE = "taskflow:response";
 
 /**
- * Loads a plugin's entry HTML into a sandboxed iframe and hosts the postMessage
- * bridge between the plugin and the TaskFlow core.
+ * Loads a plugin's entry HTML and renders it inside a sandboxed `srcdoc`
+ * iframe, hosting the postMessage bridge between the plugin and TaskFlow.
+ *
+ * The `plugin://` custom protocol is unreliable inside a sandboxed WebView2
+ * iframe (scripts/styles get blocked), so the plugin page is injected as
+ * `srcdoc` and the bridge relies on `event.source === contentWindow`.
  */
 export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const pushToast = useToastStore((s) => s.push);
+  const [htmlContent, setHtmlContent] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHtmlContent(null);
+    setLoadError(null);
+    void PluginsService.getContent(pluginId).then((result) => {
+      if (cancelled) {
+        return;
+      }
+      if (result.ok) {
+        setHtmlContent(result.value);
+      } else {
+        setLoadError(result.error.message);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pluginId]);
 
   /**
    * Whitelisted plugin actions. Read-only plus note creation and the LLM proxy;
@@ -179,7 +205,12 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
       if (!iframe || event.source !== iframe.contentWindow) {
         return;
       }
+      // `srcdoc` with `allow-same-origin` makes the plugin share the app
+      // origin; a null/empty origin covers stricter sandbox configurations.
+      // The `event.source` check above is the authoritative one.
+      const appOrigin = window.location.origin;
       const pluginOrigin =
+        event.origin === appOrigin ||
         event.origin.startsWith("plugin://") ||
         event.origin.startsWith("http://plugin.localhost") ||
         event.origin.startsWith("https://plugin.localhost") ||
@@ -228,13 +259,21 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
     return () => window.removeEventListener("message", handleMessage);
   }, [handleMessage]);
 
+  if (loadError) {
+    return <div className={styles.status}>Ошибка загрузки плагина: {loadError}</div>;
+  }
+
+  if (htmlContent === null) {
+    return <div className={styles.status}>Загрузка плагина…</div>;
+  }
+
   return (
     <div className={styles.root}>
       <iframe
         ref={iframeRef}
         className={styles.frame}
-        sandbox="allow-scripts allow-same-origin"
-        src={`plugin://localhost/${encodeURIComponent(pluginId)}/index.html`}
+        sandbox="allow-scripts allow-same-origin allow-forms"
+        srcDoc={htmlContent}
         title={`Плагин ${pluginId}`}
       />
     </div>

@@ -9,6 +9,7 @@ import { KANBAN_COLUMNS, PRIORITY_LABELS, formatDateTime } from "@/lib/taskMeta"
 import { SpacesService, type SpaceMember } from "@/services/spaces";
 import {
   TasksService,
+  type ChecklistItem,
   type Comment,
   type Task,
   type TaskPriority,
@@ -56,6 +57,7 @@ export default function TaskDetailPanel({
     setAssignees,
     toggleChecklistItem,
     addChecklistItem,
+    updateChecklistItem,
     removeChecklistItem,
     addComment,
     flush,
@@ -79,6 +81,8 @@ export default function TaskDetailPanel({
   const [moveOpen, setMoveOpen] = useState(false);
   const [targetSpaceId, setTargetSpaceId] = useState("");
   const [moving, setMoving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const spaces = useSpaceStore((s) => s.spaces);
   const pushToast = useToastStore((s) => s.push);
   const recordRecent = useRecentStore((s) => s.record);
@@ -147,6 +151,25 @@ export default function TaskDetailPanel({
     const target = spaces.find((space) => space.id === targetSpaceId);
     pushToast(`Задача перемещена в «${target?.name ?? "пространство"}»`, "success");
     setMoveOpen(false);
+    onClose();
+  }
+
+  async function handleDelete(): Promise<void> {
+    if (!spaceId) {
+      return;
+    }
+    // Clear any pending debounced title/description save before removing the task.
+    await flush();
+    setDeleting(true);
+    const result = await TasksService.delete(spaceId, task.id);
+    setDeleting(false);
+    if (!result.ok) {
+      pushToast(messageForCode(result.error.code, result.error.message), "error");
+      setDeleteOpen(false);
+      return;
+    }
+    setDeleteOpen(false);
+    pushToast("Задача удалена", "success");
     onClose();
   }
 
@@ -241,6 +264,16 @@ export default function TaskDetailPanel({
           )}
           <div className={styles.headRight}>
             {saving ? <span className={styles.saving}>Сохранение…</span> : null}
+            {can("task.delete") ? (
+              <button
+                className={styles.dangerBtn}
+                type="button"
+                title="Удалить задачу"
+                onClick={() => setDeleteOpen(true)}
+              >
+                Удалить задачу
+              </button>
+            ) : null}
             {can("task.edit") ? (
               viewMode === "edit" ? (
                 <button className="btn-ghost" type="button" onClick={() => void handleDone()}>
@@ -412,7 +445,7 @@ export default function TaskDetailPanel({
                   checked={item.done}
                   onChange={() => toggleChecklistItem(item.id)}
                 />
-                <span className={item.done ? styles.strike : undefined}>{item.text}</span>
+                <ChecklistItemInput item={item} onUpdate={updateChecklistItem} />
                 <button
                   className={styles.iconBtn}
                   type="button"
@@ -536,6 +569,36 @@ export default function TaskDetailPanel({
           </div>
         ) : null}
 
+        {deleteOpen ? (
+          <div className={styles.modalBackdrop}>
+            <div className={styles.conflictCard}>
+              <h3>Удалить задачу</h3>
+              <p>
+                Задача «{draft.title || "Без названия"}» будет удалена без возможности
+                восстановления.
+              </p>
+              <div className={styles.actions}>
+                <button
+                  className="btn-ghost"
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => setDeleteOpen(false)}
+                >
+                  Отмена
+                </button>
+                <button
+                  className={styles.dangerSolid}
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => void handleDelete()}
+                >
+                  {deleting ? "Удаление…" : "Удалить"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {conflictTask ? (
           <div className={styles.modalBackdrop}>
             <div className={styles.conflictCard}>
@@ -583,5 +646,57 @@ function CommentRow({
         <div className={styles.commentText}>{comment.text}</div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Inline text editor for a checklist item: keeps a local draft while typing
+ * and commits to the task (via `tasksUpdate`) on blur or Enter.
+ */
+function ChecklistItemInput({
+  item,
+  onUpdate,
+}: {
+  item: ChecklistItem;
+  onUpdate: (id: string, text: string) => void;
+}): JSX.Element {
+  const [text, setText] = useState(item.text);
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) {
+      setText(item.text);
+    }
+  }, [item.text, focused]);
+
+  function commit(): void {
+    const trimmed = text.trim();
+    if (trimmed && trimmed !== item.text) {
+      onUpdate(item.id, trimmed);
+    } else {
+      setText(item.text);
+    }
+  }
+
+  return (
+    <input
+      className={item.done ? `${styles.checklistInput} ${styles.strike}` : styles.checklistInput}
+      type="text"
+      value={text}
+      onChange={(event) => setText(event.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => {
+        setFocused(false);
+        commit();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        } else if (event.key === "Escape") {
+          setText(item.text);
+          event.currentTarget.blur();
+        }
+      }}
+    />
   );
 }
