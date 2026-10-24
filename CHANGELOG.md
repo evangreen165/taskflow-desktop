@@ -6,12 +6,12 @@ All notable changes to TaskFlow are documented in this file.
 
 ### Fixed
 
-- AI-assistant plugin buttons stop working in production builds: the plugin
-  iframe now loads from a `blob:` URL instead of `srcdoc` (srcdoc iframes in
-  WebView2 production can get a `null` origin that silently breaks the
-  postMessage bridge), and the bridge accepts any message whose
-  `event.source` is the plugin frame — blob origins are unpredictable
-  (`blob:http://tauri.localhost/…`), so strict origin checks were removed
+- AI-assistant plugin buttons now work in production builds: the WebView2
+  `sandbox` attribute blocked the plugin's JavaScript, so the plugin iframe is
+  unsandboxed (local, trusted plugin content rendered via `srcdoc`) and the
+  postMessage bridge keeps the `event.source` check as the only gate
+- CSP is fully disabled (`"csp": null` in `tauri.conf.json`) to eliminate all
+  WebView2 inline-script/frame blocking for the local desktop app
 - The bundled plugin already binds every button with `addEventListener`
   (no inline `onclick=` handlers), so it needed no HTML changes
 

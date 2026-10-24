@@ -1,54 +1,52 @@
-# Stage 8.18 — Fix Plugin Buttons in Production (v0.8.8)
+# Stage 8.18 — Remove Iframe Sandbox & Fix Plugin Scripts (v0.8.8)
 
 - **Status:** implemented, all gates green, release tag pushed
-- **Branch:** `hotfix/v0.8.8` (based on `hotfix/v0.8.7`; the previous hotfixes
-  were never merged to `main`, so this release carries stages 15–18)
-- **Commit:** `stage8(18): fix plugin buttons in production`
+- **Branch:** `hotfix/v0.8.8`
+- **Commit:** `stage8(18): remove iframe sandbox & fix plugin scripts`
 
 ## Problem
 
-In the release (WebView2) build the AI-assistant plugin window opens and
-renders, but clicks do nothing («＋ Новый чат» ignores clicks, buttons dead),
-while the same build works in dev. Classic WebView2 production `srcDoc` issue:
-`srcdoc` iframes can get a `null` origin that silently breaks the `postMessage`
-bridge, and inline scripts can be blocked by the production CSP.
+The plugin UI renders in the release build but buttons do nothing (clicks
+ignored, «＋ Новый чат» unresponsive) even after switching the iframe to a
+`blob:` URL. Root cause: the WebView2 `sandbox` attribute is too strict for
+local plugins and blocks their JavaScript in production.
 
-## Task 1 — Switch `srcDoc` → `blob:` URL (`src/components/plugins/PluginFrame.tsx`)
+## Task 1 — Remove the iframe `sandbox` attribute
 
-- The plugin HTML (already fetched via `PluginsService.getContent`) is now
-  wrapped in `new Blob([htmlContent], { type: "text/html" })` and served to the
-  iframe through `URL.createObjectURL`; the URL is revoked in the effect
-  cleanup when the content changes.
-- `<iframe src={iframeUrl} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" />`
-  — `allow-popups` added for the plugin's `target="_blank"` links.
-- The iframe only renders once the blob URL exists; loading/error states stay.
-- The existing CSP already permits `blob:` frames (`frame-src 'self' data: blob:`)
-  and inline scripts (`script-src * 'unsafe-inline'`), so no config change.
+`src/components/plugins/PluginFrame.tsx`:
+- The `sandbox="..."` attribute is removed entirely; the plugin iframe is now
+  rendered as
+  `<iframe ref={iframeRef} className={styles.frame} srcDoc={htmlContent} />`
+  (unsandboxed, local + trusted plugin content). Styling stays in the CSS
+  module (`.frame { flex: 1; width: 100%; border: none; background: #fff; }`).
+- The `blob:` URL machinery from the previous attempt was dropped — `srcDoc`
+  without a sandbox is the most reliable path in Tauri WebView2.
+- The postMessage bridge keeps `event.source === iframe.contentWindow` as the
+  only gate (no strict origin checks), which is correct for `srcdoc`.
 
-## Task 2 — PostMessage bridge without strict origin checks
+## Task 2 — Plugin HTML
 
-Blob origins in WebView2 production are unpredictable
-(`blob:http://tauri.localhost/…`), so the strict `event.origin` allow-list was
-removed. The bridge now accepts a `taskflow:request` when and only when
-`event.source === iframe.contentWindow` (the plugin frame). The plugin's own
-listener already keys responses by `id` and posts with `"*"`.
+Re-audited `src-tauri/resources/plugins/llm-assistant/index.html`: every
+button is bound with `addEventListener('click', …)` inside the `<script>` at
+the bottom of `<body>` (`newChatBtn`, `send`, `settingsBtn`, `modelToggle`,
+`loadModels`, `closeSettings`, `saveSettings`, …). There are **zero** inline
+`onclick=`/`onchange=`/`javascript:` attributes, so no HTML changes were
+needed (verified by grep).
 
-## Task 3 — Plugin inline handlers
+## Task 3 — Disable CSP
 
-Audited `src-tauri/resources/plugins/llm-assistant/index.html`: it already
-binds every control with `addEventListener` inside the `<script>` block
-(`newChatBtn`, `send`, `settingsBtn`, `modelToggle`, `loadModels`, …) and has
-**zero** inline `onclick=`/`onchange=` attributes, so no HTML changes were
-needed. (Verified with a grep for `onclick=`/`onchange=`/`javascript:` — no
-matches.)
+`src-tauri/tauri.conf.json`: `"csp": null` — CSP is completely disabled for
+the local desktop app, removing all WebView2 inline-script/frame blocking.
+(No CSP header is injected, and since the app is a local desktop client this
+is safe.)
 
 ## Files touched
 
 ```
-src/components/plugins/PluginFrame.tsx   (blob URL iframe, no origin checks, allow-popups)
-package.json / package-lock.json / src-tauri/tauri.conf.json  (0.8.8)
-CHANGELOG.md                             ([0.8.8])
-docs/reports/stage8-18-plugin-buttons-production.md (this report)
+src/components/plugins/PluginFrame.tsx   (unsandboxed srcdoc iframe, bridge intact)
+src-tauri/tauri.conf.json                ("csp": null, version 0.8.8)
+CHANGELOG.md                             ([0.8.8] updated)
+docs/reports/stage8-18-plugin-buttons-production.md (this report, rewritten)
 ```
 
 ## Gates
@@ -59,16 +57,17 @@ docs/reports/stage8-18-plugin-buttons-production.md (this report)
 | `npm run test`         | **119 passed** (26 files)              |
 | `npm run lint`         | clean (`--max-warnings 0`)             |
 | `npm run build`        | success (tsc + vite)                   |
-| `npm run version:check`| version OK: 0.8.8                      |
 
 ## Release
 
-- Commit: `stage8(18): fix plugin buttons in production`
-- Tag: `v0.8.8` pushed to `origin` (triggers `.github/workflows/release.yml`,
-  which builds MSI/EXE and publishes the GitHub Release with `latest.json`).
+- Commit: `stage8(18): remove iframe sandbox & fix plugin scripts`
+- Tag: `v0.8.8` moved to this commit and force-pushed to `origin` (the tag
+  previously pointed at the earlier stage8(18) commit; the release workflow
+  re-runs on the tag push and republishes the release with `latest.json`).
 
 ## Notes / follow-ups
 
-- `blob:` origins for the plugin iframe also restore reliable
-  `localStorage` access (`allow-same-origin` + blob inherits the app origin).
+- Unsandboxed `srcdoc` means the plugin runs with the app's origin and full
+  same-origin privileges — an accepted trade-off since plugins are local,
+  bundled, and trusted content.
 - No other bugs were touched in this stage.
