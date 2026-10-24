@@ -34,10 +34,17 @@ export default function LoginScreen(): JSX.Element {
       return;
     }
     // "Запомнить меня": keep a machine-local token so the next launch can
-    // auto-login without a password.
+    // auto-login without a password. Only overwrite an existing token when a
+    // new one was actually issued.
     if (rememberMe) {
+      console.log("[login] remember-me checked:", rememberMe);
       const token = await AuthService.loginRemember(loginName.trim(), password);
-      await ConfigService.setRememberToken(token.ok ? token.value.token : null);
+      if (token.ok) {
+        console.log("Saving token:", token.value.token);
+        await ConfigService.setRememberToken(token.value.token);
+      } else {
+        console.warn("[login] loginRemember failed:", token.error.code, token.error.message);
+      }
     }
     setBusy(false);
     const from = (location.state as { from?: string } | null)?.from;

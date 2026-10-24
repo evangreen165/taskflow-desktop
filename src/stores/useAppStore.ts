@@ -35,27 +35,39 @@ async function startWatcherSafely(): Promise<void> {
 }
 
 /**
- * Resolves the phase after the workspace is active. First tries the in-memory
+ * Resolves the phase after the workspace is active. First probes the in-memory
  * Rust session; if none exists, tries the machine-local "remember me" token
- * (`authAutoLogin`). A valid token restores the session; a failed token is
- * cleared so the login screen shows immediately next time.
+ * (`authAutoLogin`). A valid token restores the session. The token is cleared
+ * only when the backend rejects it (TOKEN_INVALID / AUTH_FAILED) — transient
+ * IO errors must not destroy a valid token.
+ *
+ * Uses the "quiet" auth probes: the global error handler would navigate to
+ * /login on AUTH_REQUIRED and strand the user there despite a successful
+ * auto-login.
  */
 async function resolvePhase(): Promise<AppPhase> {
   const auth = useAuthStore.getState();
-  await auth.refreshSession();
-  if (auth.session) {
+  const probe = await AuthService.refreshSessionQuiet();
+  if (probe.ok) {
+    auth.setSession(probe.value);
     return "workspace";
   }
   const token = await ConfigService.getRememberToken();
   if (!token) {
+    console.log("[boot] no remember token -> login");
     return "login";
   }
-  const auto = await AuthService.autoLogin(token);
+  console.log("[boot] AutoLogin token:", token);
+  const auto = await AuthService.autoLoginQuiet(token);
   if (auto.ok) {
+    console.log(`[boot] auto-login OK: ${auto.value.user.login}`);
     auth.setSession(auto.value);
     return "workspace";
   }
-  await ConfigService.setRememberToken(null);
+  console.warn(`[boot] auto-login failed: ${auto.error.code} — ${auto.error.message}`);
+  if (auto.error.code === "TOKEN_INVALID" || auto.error.code === "AUTH_FAILED") {
+    await ConfigService.setRememberToken(null);
+  }
   return "login";
 }
 

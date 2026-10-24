@@ -2,6 +2,30 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.9.2] - 2026-10-24
+
+### Fixed
+
+- **Remember me now actually works**: on startup the boot probe went through
+  the global error handler, which navigates to `/login` on `AUTH_REQUIRED` —
+  that raced the auto-login and stranded the user on the login screen despite
+  a valid token. The boot path now uses quiet auth probes
+  (`refreshSessionQuiet`/`autoLoginQuiet`) that never navigate; the token is
+  cleared only when the backend rejects it (`TOKEN_INVALID`/`AUTH_FAILED`),
+  not on transient IO errors
+- `authLoginRemember` only saves the token when a new token was actually
+  issued (a failed request no longer wipes an existing valid token)
+- GitHub `main` synced: the rewritten README (0.9.1/0.9.2, plugin architecture,
+  stages) is now on `main` and pushed (it previously lived only on the stage
+  branch, so GitHub still showed the v0.8.4 README)
+- Diagnostics: `tracing` logs in `authLoginRemember`/`authAutoLogin` (token
+  generation, receipt, HMAC-mismatch / disabled-account failures) and
+  `console.log` diagnostics in the login and boot flows
+
+### Changed
+
+- Version bumped to `0.9.2`
+
 ## [0.9.1] - 2026-10-24
 
 ### Added

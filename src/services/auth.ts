@@ -1,5 +1,5 @@
 import type { Result } from "@/lib/errors";
-import { invokeCommand } from "@/lib/invoke";
+import { invokeCommand, invokeQuiet } from "@/lib/invoke";
 import type { SessionView, UserInfo } from "@/services/types";
 
 export const AuthService = {
@@ -35,6 +35,18 @@ export const AuthService = {
   /** Restores a session from a machine-local remember-me token. */
   autoLogin(token: string): Promise<Result<SessionView>> {
     return invokeCommand<SessionView>("authAutoLogin", { token });
+  },
+
+  /**
+   * Boot-time variants without the global error handler — the handler
+   * navigates to `/login` on AUTH_REQUIRED, which would race the auto-login.
+   */
+  refreshSessionQuiet(): Promise<Result<SessionView>> {
+    return invokeQuiet<SessionView>("authRefreshSession");
+  },
+
+  autoLoginQuiet(token: string): Promise<Result<SessionView>> {
+    return invokeQuiet<SessionView>("authAutoLogin", { token });
   },
 
   register(

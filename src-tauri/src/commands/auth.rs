@@ -278,6 +278,7 @@ fn remember_token_impl(
     let payload = format!("{}:{}", account.id, account.password_hash);
     let encoded_id = URL_SAFE_NO_PAD.encode(account.id.as_bytes());
     let token = format!("{encoded_id}.{}", hmac_hex(&state.machine_id(), &payload));
+    tracing::info!(user_id = %account.id, "Generated remember-me token: {}", token);
     Ok(RememberToken { token })
 }
 
@@ -295,6 +296,7 @@ pub fn auth_login_remember(
 /// tied to the current password hash, so a password change or a copy to another
 /// machine invalidates it.
 fn auto_login_impl(state: &AppState, token: &str) -> Result<SessionView, AppError> {
+    tracing::info!("Auto-login token received: {}", token);
     let root = state.root()?;
     let (encoded_id, signature) = token
         .split_once('.')
@@ -305,15 +307,28 @@ fn auto_login_impl(state: &AppState, token: &str) -> Result<SessionView, AppErro
     let user_id = String::from_utf8(id_bytes)
         .map_err(|_| AppError::new("TOKEN_INVALID", "malformed remember token"))?;
 
-    let account = users::find_by_id(&root, &user_id)?;
+    let account = match users::find_by_id(&root, &user_id) {
+        Ok(account) => account,
+        Err(e) => {
+            tracing::warn!(
+                user_id = %user_id,
+                error = %e.message,
+                "auto-login failed: user not found"
+            );
+            return Err(e);
+        }
+    };
     if !account.is_active {
+        tracing::warn!(user_id = %user_id, "auto-login failed: account is disabled");
         return Err(AppError::new("AUTH_FAILED", "account is disabled"));
     }
     let payload = format!("{}:{}", account.id, account.password_hash);
     if signature != hmac_hex(&state.machine_id(), &payload) {
+        tracing::warn!(user_id = %user_id, "auto-login failed: HMAC mismatch (stale token or wrong machine)");
         return Err(AppError::new("TOKEN_INVALID", "invalid remember token"));
     }
 
+    tracing::info!(user_id = %user_id, "auto-login OK, restoring session");
     establish_session(state, &UserInfo::from(&account))
 }
 
@@ -404,5 +419,27 @@ mod tests {
             auto_login_impl(&state2, &token.token).unwrap_err().code,
             "TOKEN_INVALID"
         );
+    }
+
+    /// Exercises the remember flow with a tracing subscriber installed so the
+    /// generated token and the auto-login outcome are visible in test output
+    /// (`cargo test -- --nocapture`).
+    #[test]
+    fn remember_flow_logs_trace() {
+        use tracing_subscriber::fmt;
+        let subscriber = fmt().with_test_writer().finish();
+        tracing::subscriber::with_default(subscriber, || {
+            let dir = tempdir().unwrap();
+            let info = workspace::init(dir.path(), "Trace").unwrap();
+            users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+
+            let state = AppState::new("machine-1".into());
+            state.set_workspace(dir.path().to_path_buf(), info);
+            let token = remember_token_impl(&state, "admin", "password123").unwrap();
+
+            let state2 = activated(&dir, "machine-1");
+            let view = auto_login_impl(&state2, &token.token).unwrap();
+            assert_eq!(view.user.login, "admin");
+        });
     }
 }

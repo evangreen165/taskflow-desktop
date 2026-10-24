@@ -21,3 +21,21 @@ export async function invokeCommand<T>(
     return err(error);
   }
 }
+
+/**
+ * Same as `invokeCommand` but WITHOUT the global error handler. Used by
+ * boot-time auth probes (`authRefreshSession` / `authAutoLogin`): the handler
+ * navigates to `/login` on `AUTH_REQUIRED`, which would race the "remember me"
+ * auto-login and strand the user on the login screen despite a valid token.
+ */
+export async function invokeQuiet<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<Result<T>> {
+  try {
+    const value = await invoke<T>(command, args);
+    return ok(value);
+  } catch (cause) {
+    return err(AppError.from(cause));
+  }
+}
