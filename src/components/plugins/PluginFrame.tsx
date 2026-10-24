@@ -13,21 +13,23 @@ import styles from "./PluginFrame.module.css";
 
 const PLUGIN_REQUEST = "taskflow:request";
 const PLUGIN_RESPONSE = "taskflow:response";
+const PLUGIN_ERROR = "plugin:error";
 
 /**
- * Loads a plugin's entry HTML into a sandbox-free iframe via `srcdoc` and
- * hosts the postMessage bridge between the plugin and TaskFlow.
+ * Loads a plugin's entry HTML into a sandboxed `blob:` URL iframe and hosts
+ * the postMessage bridge between the plugin and TaskFlow.
  *
- * The WebView2 `sandbox` attribute is too strict for local plugins (it blocks
- * their scripts in production builds). Plugins are local and trusted, so the
- * iframe runs unsandboxed — `srcdoc` keeps a stable, predictable origin and
- * the bridge relies on `event.source === contentWindow`.
+ * A `blob:` URL behaves more reliably than `srcDoc` in WebView2 production.
+ * The plugin guards its own `localStorage` access (it can throw a
+ * SecurityError in production iframes and halt the script), and reports
+ * runtime errors via `plugin:error` so the host can surface them.
  */
 export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const pushToast = useToastStore((s) => s.push);
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
+  const [iframeUrl, setIframeUrl] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,6 +50,19 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
       cancelled = true;
     };
   }, [pluginId]);
+
+  // Keep the plugin document alive in a Blob URL, revoked when the content
+  // changes so the webview never pins stale data.
+  useEffect(() => {
+    if (!htmlContent) {
+      setIframeUrl("");
+      return;
+    }
+    const blob = new Blob([htmlContent], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    setIframeUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [htmlContent]);
 
   /**
    * Whitelisted plugin actions. Read-only plus note creation and the LLM proxy;
@@ -197,20 +212,32 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
   );
 
   /**
-   * Bridge: accepts `taskflow:request` messages only from the plugin iframe,
-   * runs the whitelisted action, and posts `taskflow:response` back into it.
+   * Bridge: accepts messages only from the plugin iframe, runs the whitelisted
+   * action, and posts `taskflow:response` back into it. Runtime errors reported
+   * by the plugin (`plugin:error`) are surfaced for diagnostics.
    */
   const handleMessage = useCallback(
     (event: MessageEvent) => {
-      // Origin checks are intentionally skipped: with `srcdoc` (unsandboxed)
-      // the origin is the app origin, but the robust guarantee that the message
-      // came from the plugin frame is `event.source` matching its window.
+      // Origin checks are intentionally skipped: blob/srcDoc iframes can report
+      // unpredictable origins in WebView2; `event.source` matching the plugin
+      // frame's contentWindow is the robust gate.
       const iframe = iframeRef.current;
       if (!iframe || event.source !== iframe.contentWindow) {
         return;
       }
       const data = event.data as Record<string, unknown> | null;
-      if (!data || data.type !== PLUGIN_REQUEST) {
+      if (!data) {
+        return;
+      }
+      if (data.type === PLUGIN_ERROR) {
+        const message =
+          typeof data.message === "string" && data.message ? data.message : "Неизвестная ошибка плагина";
+        const stack = typeof data.stack === "string" ? data.stack : "";
+        console.error(`[plugin:${pluginId}] ${message}`, stack);
+        pushToast(`Ошибка плагина: ${message}`, "error");
+        return;
+      }
+      if (data.type !== PLUGIN_REQUEST) {
         return;
       }
       const id = typeof data.id === "string" ? data.id : "";
@@ -241,7 +268,7 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
           }
         });
     },
-    [runAction],
+    [runAction, pushToast, pluginId],
   );
 
   useEffect(() => {
@@ -253,19 +280,17 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
     return <div className={styles.status}>Ошибка загрузки плагина: {loadError}</div>;
   }
 
-  if (htmlContent === null) {
+  if (!iframeUrl) {
     return <div className={styles.status}>Загрузка плагина…</div>;
   }
 
   return (
     <div className={styles.root}>
-      {/* No sandbox attribute: WebView2's sandbox blocks the plugin's scripts
-          in production. Plugins are local and trusted, so the iframe runs
-          unsandboxed (styling via CSS module .frame). */}
       <iframe
         ref={iframeRef}
         className={styles.frame}
-        srcDoc={htmlContent}
+        sandbox="allow-scripts allow-same-origin allow-forms"
+        src={iframeUrl}
         title={`Плагин ${pluginId}`}
       />
     </div>

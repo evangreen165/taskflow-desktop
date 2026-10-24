@@ -444,6 +444,40 @@
     </div>
 
     <script>
+      // Diagnostics: surface any runtime error in the parent app so the bridge
+      // can show it in a toast (helps debug WebView2-specific failures).
+      window.onerror = function (message, source, lineno, colno, error) {
+        try {
+          window.parent.postMessage(
+            { type: "plugin:error", message: message, stack: error ? error.stack : "" },
+            "*",
+          );
+        } catch (e) {
+          // postMessage is best-effort diagnostics; never fail the plugin on it.
+        }
+      };
+
+      // WebView2 in production can throw a SecurityError when an iframe touches
+      // localStorage (blocked origin). A thrown error halts the whole script —
+      // including addEventListener calls — which is why the plugin buttons did
+      // nothing. These safe wrappers keep the script running; persistence just
+      // degrades to in-memory when storage is blocked.
+      function safeGetStorage(key) {
+        try {
+          return localStorage.getItem(key);
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function safeSetStorage(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch (e) {
+          console.warn("[llm-assistant] localStorage blocked");
+        }
+      }
+
       const $ = (id) => document.getElementById(id);
       const messagesEl = $("messages");
       const chatListEl = $("chatList");
@@ -470,7 +504,7 @@
 
       const settings = {
         ...DEFAULT_SETTINGS,
-        ...JSON.parse(localStorage.getItem("taskflow_llm_settings") || "{}"),
+        ...JSON.parse(safeGetStorage("taskflow_llm_settings") || "{}"),
       };
       let allModels = [];
       let busy = false;
@@ -480,7 +514,7 @@
       let chats = [];
       let currentChatId = null;
       try {
-        chats = JSON.parse(localStorage.getItem("taskflow_llm_chats") || "[]") || [];
+        chats = JSON.parse(safeGetStorage("taskflow_llm_chats") || "[]") || [];
       } catch {
         chats = [];
       }
@@ -490,7 +524,7 @@
       }
 
       function saveChats() {
-        localStorage.setItem("taskflow_llm_chats", JSON.stringify(chats));
+        safeSetStorage("taskflow_llm_chats", JSON.stringify(chats));
         renderChatList();
       }
 
@@ -939,7 +973,7 @@
           $("apiUrl").value.trim() || (settings.provider === "local" ? OLLAMA_URL : OPENROUTER_URL);
         settings.apiKey = settings.provider === "local" ? "" : $("apiKey").value.trim();
         settings.freeOnly = $("freeOnly").checked;
-        localStorage.setItem("taskflow_llm_settings", JSON.stringify(settings));
+        safeSetStorage("taskflow_llm_settings", JSON.stringify(settings));
         $("settingsModal").classList.add("hidden");
       }
 

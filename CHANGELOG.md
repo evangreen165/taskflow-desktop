@@ -2,6 +2,28 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.9.0] - 2026-10-24
+
+### Fixed
+
+- AI-assistant plugin buttons finally work in release builds: in WebView2
+  production `localStorage` inside the plugin iframe throws a `SecurityError`,
+  which halted the whole script before `addEventListener` ran. The plugin now
+  accesses storage through `safeGetStorage`/`safeSetStorage` wrappers (try/
+  catch), so the script always finishes attaching its handlers even when
+  storage is blocked
+- The plugin reports runtime errors to the host via `plugin:error`; the bridge
+  in `PluginFrame` logs them and shows an error toast for diagnostics
+- Plugin iframe is back on a `blob:` URL with
+  `sandbox="allow-scripts allow-same-origin allow-forms"` (behaves better with
+  WebView2 than `srcDoc`)
+- Bundled `llm-assistant` plugin bumped to 1.1.0 so installed workspaces pick
+  up the fix
+
+### Changed
+
+- Version bumped to `0.9.0`
+
 ## [0.8.9] - 2026-10-24
 
 ### Changed
