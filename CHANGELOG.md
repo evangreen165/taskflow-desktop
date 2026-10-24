@@ -2,6 +2,33 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.9.4] - 2026-10-24
+
+### Added
+
+- **Audit log UI**: new «Журнал аудита» tab in the admin panel (`audit.view`)
+  with a data table (Время / Пользователь / Действие / Сущность / Детали),
+  filters by user login, exact action, and date (`YYYY-MM-DD`), and
+  pagination; backend `auditGetLogs` reads the monthly JSONL files
+- **Per-user session lifetime**: `users.json` gains `sessionLifetimeDays`
+  (null = workspace default, 0 = never); the admin Users tab has a
+  «Время жизни сессии» dropdown («По умолчанию», «Бессрочно», 1/7/30 дней)
+  saved via `usersUpdate`; `authLoginRemember` and sessions prefer the
+  per-user override
+- **Import settings**: `config.json > autoCreateCategoryOnImport` (default
+  true) toggled from «Настройки → Общие»; when enabled, imported `.md`/`.pdf`
+  files get the category named after their source folder
+- **Image editor UX**: clicking an image in the note preview opens a floating
+  inline toolbar positioned directly above the image — S (300px), M (500px),
+  L (100%), Слева/Центр/Справа (writes `width`/`style` into the Markdown)
+- **Security documentation**: «Безопасность и шифрование» section in
+  `docs/data-layout.md` and the README (plain-text storage rationale, no
+  encryption, forgeable logs, planned digital signatures)
+
+### Changed
+
+- Version bumped to `0.9.4`
+
 ## [0.9.3] - 2026-10-24
 
 ### Added

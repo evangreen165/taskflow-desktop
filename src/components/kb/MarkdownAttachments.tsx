@@ -17,7 +17,7 @@ export function AttachmentImage({
   src?: string | undefined;
   alt?: string | undefined;
   width?: string | number | undefined;
-  onImageClick?: (sha: string, alt: string) => void;
+  onImageClick?: (sha: string, alt: string, rect: DOMRect) => void;
 }): JSX.Element {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
 
@@ -49,7 +49,7 @@ export function AttachmentImage({
       src={dataUrl}
       alt={alt ?? ""}
       width={width}
-      onClick={() => onImageClick?.(sha, alt ?? "")}
+      onClick={(event) => onImageClick?.(sha, alt ?? "", event.currentTarget.getBoundingClientRect())}
     />
   );
 }

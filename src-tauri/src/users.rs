@@ -31,6 +31,10 @@ pub struct User {
     pub last_login_at: Option<String>,
     pub is_active: bool,
     pub must_change_password: bool,
+    /// Per-user session lifetime override (days). `None` = use the workspace
+    /// default; `Some(0)` = never expire.
+    #[serde(default)]
+    pub session_lifetime_days: Option<u32>,
 }
 
 /// Account record safe to send to the UI (no password hash, no salt).
@@ -48,6 +52,7 @@ pub struct UserInfo {
     pub last_login_at: Option<String>,
     pub is_active: bool,
     pub must_change_password: bool,
+    pub session_lifetime_days: Option<u32>,
 }
 
 impl From<&User> for UserInfo {
@@ -64,6 +69,7 @@ impl From<&User> for UserInfo {
             last_login_at: u.last_login_at.clone(),
             is_active: u.is_active,
             must_change_password: u.must_change_password,
+            session_lifetime_days: u.session_lifetime_days,
         }
     }
 }
@@ -79,6 +85,9 @@ pub struct UserPatch {
     pub avatar_color: Option<String>,
     pub is_active: Option<bool>,
     pub avatar_sha256: Option<String>,
+    /// Outer `None` = field not provided; `Some(None)` = clear to workspace
+    /// default; `Some(Some(days))` = explicit override (0 = never expire).
+    pub session_lifetime_days: Option<Option<u32>>,
 }
 
 pub fn hash_password(password: &str) -> Result<String, AppError> {
@@ -196,6 +205,7 @@ pub fn create(
         last_login_at: None,
         is_active: true,
         must_change_password: false,
+        session_lifetime_days: None,
     };
     let mut bytes = serde_json::to_vec_pretty(&user)?;
     bytes.push(b'\n');
@@ -348,6 +358,9 @@ pub fn update(root: &Path, user_id: &str, patch: UserPatch) -> Result<UserInfo, 
     }
     if let Some(active) = patch.is_active {
         user.is_active = active;
+    }
+    if let Some(session_lifetime_days) = patch.session_lifetime_days {
+        user.session_lifetime_days = session_lifetime_days;
     }
 
     let is_active_admin = user.is_active && user.role_id == "admin";

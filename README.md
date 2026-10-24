@@ -30,6 +30,27 @@ Plugins are self-contained HTML files bundled with the app (`src-tauri/resources
 - **Injection points:** plugins can inject UI into the sidebar, topbar, or as a floating button.
 - **Master toggle:** the extension system is **off by default**. It is enabled from **Настройки → Расширения** (per workspace, stored in the workspace `config.json`). Individual plugins have their own ON/OFF toggles. When the system is off, the «Расширения» menu item and all floating plugin buttons are hidden.
 
+## Security & Encryption
+
+TaskFlow deliberately does **not** encrypt data on disk. All workspace files
+(JSON, Markdown, attachments) are stored in plain text for:
+
+- **Portability & transparency** — data can be read, moved, and backed up with
+  any tool, without special utilities.
+- **Crash recovery** — an open JSON/MD file can be repaired by hand; an
+  encrypted file without its key would be unrecoverable.
+
+Consequences to be aware of:
+
+- Passwords are stored as Argon2id hashes, but the hash files sit on the shared
+  folder — anyone with SMB access can copy `users/*.json` and attack the hashes
+  offline. Protect the folder with NTFS ACLs.
+- Audit logs and data files are **forgeable**: the app cannot distinguish an
+  edit made through the UI from a manual edit in Notepad. Tamper-proofing via
+  digital signatures on journal records is planned for a future release.
+- The app's RBAC protects against **accidental** damage only; real access
+  control is the OS file permission layer on the SMB share.
+
 ## Security Model & Limitations
 
 TaskFlow's RBAC is enforced in the Rust backend and governs what the _application_

@@ -51,6 +51,8 @@ export default function SettingsPage(): JSX.Element {
   const [sessionDays, setSessionDays] = useState("30");
   const [sessionBusy, setSessionBusy] = useState(false);
   const [sessionSaved, setSessionSaved] = useState(false);
+  const [importCategory, setImportCategory] = useState(true);
+  const [importBusy, setImportBusy] = useState(false);
 
   // Load the extension-system settings, installed plugins, and (for admins)
   // the session lifetime once.
@@ -68,11 +70,27 @@ export default function SettingsPage(): JSX.Element {
           setSessionDays(String(result.value));
         }
       });
+      void WorkspaceService.getImportSettings().then((result) => {
+        if (!cancelled && result.ok) {
+          setImportCategory(result.value);
+        }
+      });
     }
     return () => {
       cancelled = true;
     };
   }, [can, loadExtensions]);
+
+  async function saveImportSettings(value: boolean): Promise<void> {
+    setImportBusy(true);
+    const result = await WorkspaceService.setImportSettings(value);
+    setImportBusy(false);
+    if (!result.ok) {
+      pushToast(result.error.message, "error");
+      return;
+    }
+    setImportCategory(result.value);
+  }
 
   function handleClearCache(): void {
     localStorage.clear();
@@ -237,6 +255,21 @@ export default function SettingsPage(): JSX.Element {
                 </button>
               </div>
               {sessionSaved ? <p className={styles.done}>Сохранено.</p> : null}
+            </div>
+          ) : null}
+
+          {can("workspace.settings") ? (
+            <div className={styles.sessionBlock}>
+              <h3>Импорт заметок</h3>
+              <label className={styles.settingRow}>
+                <input
+                  type="checkbox"
+                  checked={importCategory}
+                  disabled={importBusy}
+                  onChange={(event) => void saveImportSettings(event.target.checked)}
+                />
+                <span>Создавать категорию по имени папки при импорте .md файлов</span>
+              </label>
             </div>
           ) : null}
 

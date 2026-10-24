@@ -37,14 +37,25 @@ fn hmac_hex(machine_id: &str, data: &str) -> String {
     hex::encode(mac.finalize().into_bytes())
 }
 
+/// Effective session lifetime window (seconds) for a user: the per-user
+/// override wins; otherwise the workspace global applies. `None` = never expire
+/// (lifetime 0).
+fn effective_session_window(root: &std::path::Path, user_days: Option<u32>) -> Result<Option<i64>, AppError> {
+    let days = match user_days {
+        Some(days) => days,
+        None => workspace::session_lifetime_days(root)?,
+    };
+    Ok(if days == 0 { None } else { Some(days as i64 * 86_400) })
+}
+
 /// Builds the in-memory session for an already-authenticated account (common
 /// tail of password login and remember-token auto-login). The session expires
-/// after the admin-configured lifetime (`config.json > sessionLifetimeDays`,
-/// 0 = never).
+/// after the user's session lifetime (per-user override, else the
+/// admin-configured workspace default; 0 = never).
 fn establish_session(state: &AppState, info: &UserInfo) -> Result<SessionView, AppError> {
     let root = state.root()?;
     users::touch_last_login(&root, &info.id)?;
-    let expires_at = workspace::session_lifetime_window(&root)?
+    let expires_at = effective_session_window(&root, info.session_lifetime_days)?
         .map(|window| chrono::Utc::now().timestamp() + window);
     state.set_session(Session {
         user_id: info.id.clone(),
@@ -286,7 +297,7 @@ fn remember_token_impl(
     let view = auth_login_impl(state, login, password)?;
     let root = state.root()?;
     let account = users::find_by_id(&root, &view.user.id)?;
-    let expires_at = workspace::session_lifetime_window(&root)?
+    let expires_at = effective_session_window(&root, account.session_lifetime_days)?
         .map(|window| chrono::Utc::now().timestamp() + window)
         .unwrap_or(0);
     let payload = format!("{}:{}:{}", account.id, account.password_hash, expires_at);

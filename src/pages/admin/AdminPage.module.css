@@ -299,3 +299,37 @@
 .memberOption input {
   accent-color: var(--accent);
 }
+
+.auditFilters {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.auditFilters .field {
+  min-width: 180px;
+}
+
+.auditScroll {
+  overflow-x: auto;
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.auditDetails {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+}

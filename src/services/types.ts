@@ -25,11 +25,13 @@ export interface UserInfo {
   email: string | null;
   roleId: string;
   avatarColor: string;
-  avatarSha256: string | null;
+  avatarSha256?: string | null;
   createdAt: string;
   lastLoginAt: string | null;
   isActive: boolean;
   mustChangePassword: boolean;
+  /** Per-user session lifetime override (days); null = workspace default; 0 = never. */
+  sessionLifetimeDays: number | null;
 }
 
 export interface RoleView {
@@ -63,6 +65,8 @@ export interface UserPatch {
   avatarColor?: string;
   isActive?: boolean;
   avatarSha256?: string | null;
+  /** null = use workspace default; number = explicit days (0 = never). */
+  sessionLifetimeDays?: number | null;
 }
 
 export interface RolePatch {
@@ -70,4 +74,20 @@ export interface RolePatch {
   description?: string;
   color?: string;
   permissions?: string[];
+}
+
+/** One parsed audit entry from `audit/{yyyy-mm}.log` (JSONL). */
+export interface AuditEntry {
+  ts: string;
+  userId: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  meta: unknown;
+}
+
+/** Paginated, filtered slice of the audit journal. */
+export interface AuditLogPage {
+  items: AuditEntry[];
+  total: number;
 }

@@ -23,24 +23,11 @@ pub const WORKSPACE_DIRS: [&str; 10] = [
     "audit",
 ];
 
-const DAY_SECONDS: i64 = 86_400;
-
 /// Admin-configurable session lifetime in days. 0 means "never expire".
 pub const DEFAULT_SESSION_LIFETIME_DAYS: u32 = 30;
 
 fn default_session_lifetime_days() -> u32 {
     DEFAULT_SESSION_LIFETIME_DAYS
-}
-
-/// Resolves the effective session lifetime window (seconds) for a workspace.
-/// `None` means the session never expires (lifetime == 0).
-pub fn session_lifetime_window(root: &Path) -> Result<Option<i64>, AppError> {
-    let cfg = read_cfg(root)?;
-    if cfg.session_lifetime_days == 0 {
-        Ok(None)
-    } else {
-        Ok(Some(cfg.session_lifetime_days as i64 * DAY_SECONDS))
-    }
 }
 
 /// Current configured session lifetime in days.
@@ -79,6 +66,27 @@ pub struct WorkspaceConfig {
     /// Admin session lifetime in days (0 = never expire).
     #[serde(default = "default_session_lifetime_days")]
     pub session_lifetime_days: u32,
+    /// When importing a `.md` file, create/assign a category named after the
+    /// source file's parent folder.
+    #[serde(default = "default_true")]
+    pub auto_create_category_on_import: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Current import setting: auto-create category from the source folder name.
+pub fn auto_create_category_on_import(root: &Path) -> Result<bool, AppError> {
+    Ok(read_cfg(root)?.auto_create_category_on_import)
+}
+
+/// Persists the import setting.
+pub fn set_auto_create_category_on_import(root: &Path, value: bool) -> Result<bool, AppError> {
+    let mut cfg = read_cfg(root)?;
+    cfg.auto_create_category_on_import = value;
+    fsops::write_json_atomic(&root.join("config.json"), &cfg)?;
+    Ok(value)
 }
 
 /// Plugin management settings exposed to the UI (workspace-wide).
@@ -201,6 +209,7 @@ pub fn init(root: &Path, name: &str) -> Result<WorkspaceInfo, AppError> {
         plugins_enabled: false,
         plugins_state: std::collections::BTreeMap::from([("llm-assistant".to_string(), false)]),
         session_lifetime_days: DEFAULT_SESSION_LIFETIME_DAYS,
+        auto_create_category_on_import: true,
     };
     let mut bytes = serde_json::to_vec_pretty(&cfg)?;
     bytes.push(b'\n');

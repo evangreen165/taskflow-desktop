@@ -389,6 +389,52 @@
   border-color: var(--red) !important;
 }
 
+/* Floating inline toolbar anchored directly above the clicked image. */
+.mdPreview {
+  position: relative;
+}
+
+.imageToolbarFloat {
+  position: absolute;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  white-space: nowrap;
+}
+
+.imageToolbarFloat span {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-right: 2px;
+}
+
+.imageToolbarFloat button {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.imageToolbarFloat button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.imageToolbarFloat .imageToolbarSep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
 .actions {
   display: flex;
   gap: 8px;

@@ -27,4 +27,13 @@ export const WorkspaceService = {
   setSessionLifetime(days: number): Promise<Result<number>> {
     return invokeCommand<number>("workspaceSetSessionLifetime", { days });
   },
+
+  /** Import setting: auto-create a category from the source folder name. */
+  getImportSettings(): Promise<Result<boolean>> {
+    return invokeCommand<boolean>("workspaceGetImportSettings");
+  },
+
+  setImportSettings(value: boolean): Promise<Result<boolean>> {
+    return invokeCommand<boolean>("workspaceSetImportSettings", { value });
+  },
 };

@@ -553,15 +553,28 @@ fn import_from_disk(
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "Импорт".to_string());
 
+    // When enabled, the source file's parent folder name becomes the category
+    // (auto-created by `notes::create`). Otherwise imported notes land in
+    // «Импорт».
+    let category = if crate::workspace::auto_create_category_on_import(root)? {
+        path.parent()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().trim().to_string())
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| "Импорт".to_string())
+    } else {
+        "Импорт".to_string()
+    };
+
     match ext.as_str() {
         "md" | "markdown" => {
             let text = fsops::read_text(path)?;
-            notes::create(space_dir, user_id, &title, "Импорт", &text)
+            notes::create(space_dir, user_id, &title, &category, &text)
         }
         "pdf" => {
             let (info, _) = attachments::add(root, source_path, &name)?;
             let content = format!("[Открыть PDF](attachment://{})", info.sha256);
-            notes::create(space_dir, user_id, &title, "Импорт", &content)
+            notes::create(space_dir, user_id, &title, &category, &content)
         }
         _ => unreachable!(),
     }
@@ -944,6 +957,8 @@ mod tests {
     #[test]
     fn imports_markdown_and_pdf() {
         let fx = fixture();
+        // With the auto-category setting OFF the category falls back to «Импорт».
+        crate::workspace::set_auto_create_category_on_import(fx._dir.path(), false).unwrap();
 
         let md = fx._dir.path().join("guide.md");
         std::fs::write(&md, "# Онбординг\n\nТекст.").unwrap();
@@ -964,5 +979,17 @@ mod tests {
             notes_import_impl(&fx.state, SPACE.to_string(), exe.to_string_lossy().into_owned()).unwrap_err().code,
             "INVALID_INPUT"
         );
+
+        // With the setting ON, the source file's parent folder name becomes the
+        // category.
+        crate::workspace::set_auto_create_category_on_import(fx._dir.path(), true).unwrap();
+        let docs = fx._dir.path().join("Docs");
+        std::fs::create_dir_all(&docs).unwrap();
+        let nested = docs.join("onboarding.md");
+        std::fs::write(&nested, "# Docs").unwrap();
+        let nested_note =
+            notes_import_impl(&fx.state, SPACE.to_string(), nested.to_string_lossy().into_owned())
+                .unwrap();
+        assert_eq!(nested_note.meta.category, "Docs");
     }
 }

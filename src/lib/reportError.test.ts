@@ -27,6 +27,7 @@ const session: SessionView = {
     lastLoginAt: null,
     isActive: true,
     mustChangePassword: false,
+    sessionLifetimeDays: null,
   },
   role: { id: "admin", name: "Администратор", color: "#5b5bd6" },
   permissions: ["task.view"],

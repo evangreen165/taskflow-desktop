@@ -1,4 +1,5 @@
 mod attachments;
+mod audit;
 mod auth;
 mod dashboard;
 mod llm;
@@ -15,6 +16,7 @@ mod users;
 mod workspace;
 
 pub use attachments::*;
+pub use audit::*;
 pub use auth::*;
 pub use dashboard::*;
 pub use llm::*;

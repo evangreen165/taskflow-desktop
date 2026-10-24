@@ -4,18 +4,48 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSION_GROUPS, PERMISSION_LABELS } from "@/lib/permissions";
 import { canDeleteRole, slugifyRoleId, validateRoleDraft } from "@/lib/roleForm";
 import { AuthService } from "@/services/auth";
+import { AuditService } from "@/services/audit";
 import { PermissionsService } from "@/services/permissions";
 import { RolesService } from "@/services/roles";
 import { SpacesService, type Space } from "@/services/spaces";
-import type { Role, UserInfo, UserPatch } from "@/services/types";
+import type { AuditEntry, Role, UserInfo, UserPatch } from "@/services/types";
 import { UsersService, type UserSummary } from "@/services/users";
 import { isPersonalSpace } from "@/stores/useSpaceStore";
 
 import styles from "./AdminPage.module.css";
 
-type Tab = "users" | "spaces" | "roles";
+type Tab = "users" | "spaces" | "roles" | "audit";
 
 const COLOR_PRESETS = ["#5b5bd6", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
+
+const SESSION_LIFETIME_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "По умолчанию" },
+  { value: "0", label: "Бессрочно" },
+  { value: "1", label: "1 день" },
+  { value: "7", label: "7 дней" },
+  { value: "30", label: "30 дней" },
+];
+
+const AUDIT_ACTION_OPTIONS = [
+  "auth.login",
+  "auth.logout",
+  "auth.login_failed",
+  "task.create",
+  "task.edit",
+  "task.delete",
+  "task.move",
+  "article.create",
+  "article.edit",
+  "article.delete",
+  "space.create",
+  "space.update",
+  "user.create",
+  "user.update",
+  "user.reset_password",
+  "role.update",
+  "workspace.settings",
+  "plugin.settings",
+];
 
 function formatDate(value: string | null): string {
   if (!value) {
@@ -38,6 +68,9 @@ export default function AdminPage(): JSX.Element {
     }
     if (can("roles.manage")) {
       items.push({ id: "roles", label: "Роли" });
+    }
+    if (can("audit.view")) {
+      items.push({ id: "audit", label: "Журнал аудита" });
     }
     return items;
   }, [can]);
@@ -67,7 +100,15 @@ export default function AdminPage(): JSX.Element {
           </button>
         ))}
       </div>
-      {activeTab === "users" ? <UsersTab /> : activeTab === "spaces" ? <SpacesTab /> : <RolesTab />}
+      {activeTab === "users" ? (
+        <UsersTab />
+      ) : activeTab === "spaces" ? (
+        <SpacesTab />
+      ) : activeTab === "audit" ? (
+        <AuditTab />
+      ) : (
+        <RolesTab />
+      )}
     </div>
   );
 }
@@ -352,6 +393,7 @@ interface EditDraft {
   roleId: string;
   avatarColor: string;
   isActive: boolean;
+  sessionLifetime: string;
 }
 
 function UsersTab(): JSX.Element {
@@ -430,6 +472,7 @@ function UsersTab(): JSX.Element {
       roleId: user.roleId,
       avatarColor: user.avatarColor,
       isActive: user.isActive,
+      sessionLifetime: user.sessionLifetimeDays === null ? "" : String(user.sessionLifetimeDays),
     });
   }
 
@@ -452,6 +495,10 @@ function UsersTab(): JSX.Element {
     }
     if (draft.isActive !== user.isActive) {
       patch.isActive = draft.isActive;
+    }
+    const sessionValue = draft.sessionLifetime === "" ? null : Number(draft.sessionLifetime);
+    if (user.sessionLifetimeDays !== sessionValue) {
+      patch.sessionLifetimeDays = sessionValue;
     }
     setBusy(true);
     setError(null);
@@ -579,6 +626,7 @@ function UsersTab(): JSX.Element {
               <th>Логин</th>
               <th>Роль</th>
               <th>Статус</th>
+              <th>Сессия</th>
               <th>Последний вход</th>
               <th />
             </tr>
@@ -638,6 +686,21 @@ function UsersTab(): JSX.Element {
                         <option value="0">Отключён</option>
                       </select>
                     </td>
+                    <td>
+                      <select
+                        value={draft.sessionLifetime}
+                        title="Время жизни сессии"
+                        onChange={(e) =>
+                          setDraft({ ...draft, sessionLifetime: e.target.value })
+                        }
+                      >
+                        {SESSION_LIFETIME_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
                     <td>{formatDate(user.lastLoginAt)}</td>
                     <td>
                       <div className={styles.rowActions}>
@@ -675,6 +738,13 @@ function UsersTab(): JSX.Element {
                     <td>{user.login}</td>
                     <td>{roleName(user.roleId)}</td>
                     <td>{user.isActive ? "Активен" : "Отключён"}</td>
+                    <td>
+                      {user.sessionLifetimeDays === null
+                        ? "По умолчанию"
+                        : user.sessionLifetimeDays === 0
+                          ? "Бессрочно"
+                          : `${user.sessionLifetimeDays} дн.`}
+                    </td>
                     <td>{formatDate(user.lastLoginAt)}</td>
                     <td>
                       <div className={styles.rowActions}>
@@ -1032,6 +1102,171 @@ function RolesTab(): JSX.Element {
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Audit log
+// ---------------------------------------------------------------------------
+
+const AUDIT_PAGE_SIZE = 50;
+
+function AuditTab(): JSX.Element {
+  const [items, setItems] = useState<AuditEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [userFilter, setUserFilter] = useState("");
+  const [actionFilter, setActionFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    const result = await AuditService.getLogs(AUDIT_PAGE_SIZE, offset, userFilter, actionFilter, dateFilter);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setItems(result.value.items);
+    setTotal(result.value.total);
+  }, [offset, userFilter, actionFilter, dateFilter]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  function formatDetails(entry: AuditEntry): string {
+    if (entry.meta === null || typeof entry.meta !== "object") {
+      return "—";
+    }
+    const text = JSON.stringify(entry.meta);
+    return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+  }
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.auditFilters}>
+        <div className="field">
+          <label htmlFor="au-user">Пользователь</label>
+          <input
+            id="au-user"
+            type="text"
+            placeholder="Логин"
+            value={userFilter}
+            onChange={(e) => {
+              setUserFilter(e.target.value);
+              setOffset(0);
+            }}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="au-action">Действие</label>
+          <select
+            id="au-action"
+            value={actionFilter}
+            onChange={(e) => {
+              setActionFilter(e.target.value);
+              setOffset(0);
+            }}
+          >
+            <option value="">— все —</option>
+            {AUDIT_ACTION_OPTIONS.map((action) => (
+              <option key={action} value={action}>
+                {action}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="au-date">Дата</label>
+          <input
+            id="au-date"
+            type="date"
+            value={dateFilter}
+            onChange={(e) => {
+              setDateFilter(e.target.value);
+              setOffset(0);
+            }}
+          />
+        </div>
+      </div>
+
+      {error ? (
+        <div className="alert" style={{ marginBottom: 16 }}>
+          {error}
+        </div>
+      ) : null}
+
+      <div className={styles.card}>
+        <div className={styles.matrixHeader}>
+          <h3>Журнал аудита</h3>
+          <span className={styles.muted}>
+            {total} записей{busy ? " · загрузка…" : ""}
+          </span>
+        </div>
+        <div className={styles.auditScroll}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Время</th>
+                <th>Пользователь</th>
+                <th>Действие</th>
+                <th>Сущность</th>
+                <th>Детали</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className={styles.muted}>
+                    Записей не найдено.
+                  </td>
+                </tr>
+              ) : (
+                items.map((entry, index) => (
+                  <tr key={`${entry.ts}-${index}`}>
+                    <td className={styles.nowrap}>{formatDate(entry.ts)}</td>
+                    <td className={styles.mono}>{entry.userId}</td>
+                    <td className={styles.mono}>{entry.action}</td>
+                    <td className={styles.mono}>
+                      {entry.entity}
+                      {entry.entityId ? `:${entry.entityId}` : ""}
+                    </td>
+                    <td className={styles.auditDetails}>{formatDetails(entry)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {total > AUDIT_PAGE_SIZE ? (
+          <div className={styles.rowActions} style={{ marginTop: 12 }}>
+            <button
+              className="btn-ghost"
+              type="button"
+              disabled={offset === 0}
+              onClick={() => setOffset((value) => Math.max(0, value - AUDIT_PAGE_SIZE))}
+            >
+              ← Назад
+            </button>
+            <span className={styles.muted}>
+              {offset + 1}–{Math.min(offset + AUDIT_PAGE_SIZE, total)} из {total}
+            </span>
+            <button
+              className="btn-ghost"
+              type="button"
+              disabled={offset + AUDIT_PAGE_SIZE >= total}
+              onClick={() => setOffset((value) => value + AUDIT_PAGE_SIZE)}
+            >
+              Вперёд →
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

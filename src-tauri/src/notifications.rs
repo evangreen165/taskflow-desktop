@@ -356,6 +356,7 @@ mod tests {
                 last_login_at: None,
                 is_active: true,
                 must_change_password: false,
+                session_lifetime_days: None,
             },
             UserInfo {
                 id: "id-alice".to_string(),
@@ -369,6 +370,7 @@ mod tests {
                 last_login_at: None,
                 is_active: true,
                 must_change_password: false,
+                session_lifetime_days: None,
             },
         ];
         let mut out = BTreeSet::new();

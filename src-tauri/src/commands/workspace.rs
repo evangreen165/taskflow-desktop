@@ -225,3 +225,25 @@ pub async fn workspace_set_session_lifetime(
         .await
         .map_err(|e| AppError::new("IO", format!("session lifetime write failed: {e}")))?
 }
+
+/// Current import setting (auto-create category from the source folder name).
+#[tauri::command(rename = "workspaceGetImportSettings")]
+pub fn workspace_get_import_settings(state: State<'_, AppState>) -> Result<bool, AppError> {
+    state.require_auth()?;
+    let root = state.root()?;
+    workspace::auto_create_category_on_import(&root)
+}
+
+/// Persists the import setting. Requires `workspace.settings`.
+#[tauri::command(rename = "workspaceSetImportSettings")]
+#[tracing::instrument(skip(state))]
+pub async fn workspace_set_import_settings(
+    state: State<'_, AppState>,
+    value: bool,
+) -> Result<bool, AppError> {
+    state.require_perm("workspace.settings")?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || workspace::set_auto_create_category_on_import(&root, value))
+        .await
+        .map_err(|e| AppError::new("IO", format!("import settings write failed: {e}")))?
+}

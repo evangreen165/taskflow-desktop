@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
@@ -358,10 +358,15 @@ export default function KbArticlePage(): JSX.Element {
 }
 
 /** Replaces an existing resized `<img>` or the plain Markdown image for `sha`. */
-function resizeImageInMarkdown(content: string, sha: string, width: string): string {
+function resizeImageInMarkdown(
+  content: string,
+  sha: string,
+  width: string,
+  style: string,
+): string {
   const imgTag = new RegExp(`<img[^>]*src="attachment://${sha}"[^>]*>`);
   const mdImg = new RegExp(`!\\[[^\\]]*\\]\\(attachment://${sha}\\)`);
-  const replacement = `<img src="attachment://${sha}" width="${width}" />`;
+  const replacement = `<img src="attachment://${sha}" width="${width}" style="${style}" />`;
   if (imgTag.test(content)) {
     return content.replace(imgTag, replacement);
   }
@@ -398,8 +403,14 @@ function ArticleEditor({
 
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [tagInput, setTagInput] = useState("");
-  const [resizeTarget, setResizeTarget] = useState<{ sha: string; alt: string } | null>(null);
+  const [resizeTarget, setResizeTarget] = useState<{
+    sha: string;
+    alt: string;
+    rect: DOMRect;
+    align: "left" | "center" | "right";
+  } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
   // Explicit category list from the backend (`categories.json`).
   const categories = useNoteStore((s) => s.categories);
 
@@ -455,13 +466,37 @@ function ArticleEditor({
     }
   }
 
-  function applyImageWidth(width: string): void {
+  const alignStyle = (align: "left" | "center" | "right"): string =>
+    align === "left"
+      ? "float: left;"
+      : align === "right"
+        ? "float: right;"
+        : "display: block; margin: 0 auto;";
+
+  function applyImageFormat(width: string, align: "left" | "center" | "right"): void {
     if (!resizeTarget) {
       return;
     }
-    setContent(resizeImageInMarkdown(draft.content, resizeTarget.sha, width));
+    setContent(resizeImageInMarkdown(draft.content, resizeTarget.sha, width, alignStyle(align)));
     setResizeTarget(null);
   }
+
+  // Position the floating toolbar directly above the clicked image, relative
+  // to the scrollable preview wrapper.
+  const toolbarPosition = useMemo(() => {
+    if (!resizeTarget) {
+      return undefined;
+    }
+    const wrapper = previewRef.current;
+    if (!wrapper) {
+      return undefined;
+    }
+    const wrect = wrapper.getBoundingClientRect();
+    return {
+      top: Math.max(4, resizeTarget.rect.top - wrect.top - 44),
+      left: Math.max(4, resizeTarget.rect.left - wrect.left),
+    };
+  }, [resizeTarget]);
 
   return (
     <div className={styles.editor}>
@@ -559,7 +594,7 @@ function ArticleEditor({
           </>
         ) : (
           <>
-            <div className={styles.mdPreview}>
+            <div className={styles.mdPreview} ref={previewRef}>
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw]}
@@ -568,7 +603,9 @@ function ArticleEditor({
                   img: (props) => (
                     <AttachmentImage
                       {...props}
-                      onImageClick={(sha, alt) => setResizeTarget({ sha, alt })}
+                      onImageClick={(sha, alt, rect) =>
+                        setResizeTarget({ sha, alt, rect, align: "center" })
+                      }
                     />
                   ),
                   a: AttachmentLink,
@@ -577,17 +614,30 @@ function ArticleEditor({
                 {draft.content || "*Нет содержания.*"}
               </ReactMarkdown>
             </div>
-            {resizeTarget ? (
-              <div className={styles.imageToolbar}>
-                <span>Размер картинки:</span>
-                <button type="button" onClick={() => applyImageWidth("300")}>
-                  S (300px)
+            {resizeTarget && toolbarPosition ? (
+              <div
+                className={styles.imageToolbarFloat}
+                style={{ top: toolbarPosition.top, left: toolbarPosition.left }}
+              >
+                <span>Размер:</span>
+                <button type="button" onClick={() => applyImageFormat("300", resizeTarget.align)}>
+                  S
                 </button>
-                <button type="button" onClick={() => applyImageWidth("500")}>
-                  M (500px)
+                <button type="button" onClick={() => applyImageFormat("500", resizeTarget.align)}>
+                  M
                 </button>
-                <button type="button" onClick={() => applyImageWidth("100%")}>
-                  L (100%)
+                <button type="button" onClick={() => applyImageFormat("100%", resizeTarget.align)}>
+                  L
+                </button>
+                <span className={styles.imageToolbarSep} />
+                <button type="button" onClick={() => applyImageFormat("500", "left")}>
+                  Слева
+                </button>
+                <button type="button" onClick={() => applyImageFormat("500", "center")}>
+                  Центр
+                </button>
+                <button type="button" onClick={() => applyImageFormat("500", "right")}>
+                  Справа
                 </button>
                 <button
                   type="button"
