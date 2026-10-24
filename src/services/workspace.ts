@@ -17,4 +17,14 @@ export const WorkspaceService = {
   inspectFolder(path: string): Promise<Result<FolderInspection>> {
     return invokeCommand<FolderInspection>("inspectFolder", { path });
   },
+
+  /** Admin session lifetime in days (0 = never expire). */
+  getSessionLifetime(): Promise<Result<number>> {
+    return invokeCommand<number>("workspaceGetSessionLifetime");
+  },
+
+  /** Persists the admin session lifetime (days, 0 = never). `workspace.settings`. */
+  setSessionLifetime(days: number): Promise<Result<number>> {
+    return invokeCommand<number>("workspaceSetSessionLifetime", { days });
+  },
 };

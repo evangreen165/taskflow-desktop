@@ -202,3 +202,26 @@ pub fn inspect_folder(path: String) -> Result<FolderInspection, AppError> {
         has_users,
     })
 }
+
+/// Current admin session lifetime in days (0 = never expire).
+#[tauri::command(rename = "workspaceGetSessionLifetime")]
+pub fn workspace_get_session_lifetime(state: State<'_, AppState>) -> Result<u32, AppError> {
+    state.require_auth()?;
+    let root = state.root()?;
+    workspace::session_lifetime_days(&root)
+}
+
+/// Persists the admin session lifetime (days, 0 = never). Requires the
+/// `workspace.settings` permission.
+#[tauri::command(rename = "workspaceSetSessionLifetime")]
+#[tracing::instrument(skip(state))]
+pub async fn workspace_set_session_lifetime(
+    state: State<'_, AppState>,
+    days: u32,
+) -> Result<u32, AppError> {
+    state.require_perm("workspace.settings")?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || workspace::set_session_lifetime_days(&root, days))
+        .await
+        .map_err(|e| AppError::new("IO", format!("session lifetime write failed: {e}")))?
+}

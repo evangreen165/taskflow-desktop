@@ -95,13 +95,22 @@ impl AppState {
         }
     }
 
-    /// `AUTH_REQUIRED` when no session is active.
+    /// `AUTH_REQUIRED` when no session is active. An expired session (admin
+    /// session lifetime elapsed while the app stayed open) is cleared and
+    /// treated as unauthenticated — the next API call then prompts a re-login.
     pub fn require_auth(&self) -> Result<Session, AppError> {
-        self.inner
-            .lock()
-            .session
-            .clone()
-            .ok_or_else(|| AppError::new("AUTH_REQUIRED", "authentication required"))
+        let mut inner = self.inner.lock();
+        if let Some(session) = inner.session.clone() {
+            if let Some(expires_at) = session.expires_at {
+                if chrono::Utc::now().timestamp() > expires_at {
+                    inner.session = None;
+                    return Err(AppError::new("AUTH_REQUIRED", "session has expired"));
+                }
+            }
+            Ok(session)
+        } else {
+            Err(AppError::new("AUTH_REQUIRED", "authentication required"))
+        }
     }
 
     /// Full session view: sanitized user, resolved role, effective
@@ -204,6 +213,8 @@ pub fn run() {
             commands::init_workspace,
             commands::activate_workspace,
             commands::inspect_folder,
+            commands::workspace_get_session_lifetime,
+            commands::workspace_set_session_lifetime,
             commands::create_admin,
             commands::auth_login,
             commands::auth_logout,
@@ -303,6 +314,7 @@ mod tests {
             avatar_color: "#5b5bd6".to_string(),
             must_change_password: must_change,
             login_at: "2026-10-15T00:00:00Z".to_string(),
+            expires_at: None,
             role_missing_reported: false,
         }
     }

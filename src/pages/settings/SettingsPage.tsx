@@ -4,8 +4,10 @@ import type { Update } from "@tauri-apps/plugin-updater";
 import packageJson from "@/../package.json";
 
 import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
+import { usePermissions } from "@/hooks/usePermissions";
 import { PluginsService, type PluginManifest } from "@/services/plugins";
 import { UpdaterService, type OfflineUpdate } from "@/services/updater";
+import { WorkspaceService } from "@/services/workspace";
 import { useAppStore } from "@/stores/useAppStore";
 import { usePluginStore } from "@/stores/usePluginStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
@@ -29,6 +31,7 @@ export default function SettingsPage(): JSX.Element {
   const setHideEmptyColumns = useSettingsStore((s) => s.setHideEmptyColumns);
   const workspace = useAppStore((s) => s.workspace);
   const pushToast = useToastStore((s) => s.push);
+  const { can } = usePermissions();
   const extensionsEnabled = usePluginStore((s) => s.extensionsEnabled);
   const pluginStates = usePluginStore((s) => s.pluginStates);
   const extensionsLoaded = usePluginStore((s) => s.extensionsLoaded);
@@ -45,8 +48,12 @@ export default function SettingsPage(): JSX.Element {
   const [onlineError, setOnlineError] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
+  const [sessionDays, setSessionDays] = useState("30");
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [sessionSaved, setSessionSaved] = useState(false);
 
-  // Load the extension-system settings and the installed plugins once.
+  // Load the extension-system settings, installed plugins, and (for admins)
+  // the session lifetime once.
   useEffect(() => {
     void loadExtensions();
     let cancelled = false;
@@ -55,14 +62,40 @@ export default function SettingsPage(): JSX.Element {
         setPluginList(result.value);
       }
     });
+    if (can("workspace.settings")) {
+      void WorkspaceService.getSessionLifetime().then((result) => {
+        if (!cancelled && result.ok) {
+          setSessionDays(String(result.value));
+        }
+      });
+    }
     return () => {
       cancelled = true;
     };
-  }, [loadExtensions]);
+  }, [can, loadExtensions]);
 
   function handleClearCache(): void {
     localStorage.clear();
     pushToast("Кэш очищен", "success");
+  }
+
+  async function saveSessionLifetime(): Promise<void> {
+    const days = Number(sessionDays);
+    if (!Number.isFinite(days) || days < 0) {
+      pushToast("Введите неотрицательное число дней", "error");
+      return;
+    }
+    setSessionBusy(true);
+    setSessionSaved(false);
+    const result = await WorkspaceService.setSessionLifetime(Math.floor(days));
+    setSessionBusy(false);
+    if (!result.ok) {
+      pushToast(result.error.message, "error");
+      return;
+    }
+    setSessionDays(String(result.value));
+    setSessionSaved(true);
+    pushToast("Время жизни сессии сохранено", "success");
   }
 
   async function checkUpdates(): Promise<void> {
@@ -178,6 +211,35 @@ export default function SettingsPage(): JSX.Element {
             <dt>Workspace</dt>
             <dd className={styles.path}>{workspace?.path ?? "—"}</dd>
           </dl>
+
+          {can("workspace.settings") ? (
+            <div className={styles.sessionBlock}>
+              <h3>Время жизни сессии</h3>
+              <p className={styles.muted}>
+                Сколько дней действует «запомнить меня» и открытая сессия. 0 — бессрочно.
+              </p>
+              <div className={styles.sessionRow}>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={sessionDays}
+                  onChange={(event) => setSessionDays(event.target.value)}
+                />
+                <span className={styles.muted}>дней</span>
+                <button
+                  className="btn-primary"
+                  type="button"
+                  disabled={sessionBusy}
+                  onClick={() => void saveSessionLifetime()}
+                >
+                  {sessionBusy ? "Сохранение…" : "Сохранить"}
+                </button>
+              </div>
+              {sessionSaved ? <p className={styles.done}>Сохранено.</p> : null}
+            </div>
+          ) : null}
+
           <div className={styles.updateBlock}>
             <h3>Кэш</h3>
             <p className={styles.muted}>

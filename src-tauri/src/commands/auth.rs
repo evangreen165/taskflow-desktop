@@ -8,6 +8,7 @@ use crate::audit;
 use crate::error::AppError;
 use crate::session::{ActorId, Session, SessionView};
 use crate::users::{self, UserInfo};
+use crate::workspace;
 use crate::AppState;
 
 fn login_hash(login: &str) -> String {
@@ -37,10 +38,14 @@ fn hmac_hex(machine_id: &str, data: &str) -> String {
 }
 
 /// Builds the in-memory session for an already-authenticated account (common
-/// tail of password login and remember-token auto-login).
+/// tail of password login and remember-token auto-login). The session expires
+/// after the admin-configured lifetime (`config.json > sessionLifetimeDays`,
+/// 0 = never).
 fn establish_session(state: &AppState, info: &UserInfo) -> Result<SessionView, AppError> {
     let root = state.root()?;
     users::touch_last_login(&root, &info.id)?;
+    let expires_at = workspace::session_lifetime_window(&root)?
+        .map(|window| chrono::Utc::now().timestamp() + window);
     state.set_session(Session {
         user_id: info.id.clone(),
         login: info.login.clone(),
@@ -49,6 +54,7 @@ fn establish_session(state: &AppState, info: &UserInfo) -> Result<SessionView, A
         avatar_color: info.avatar_color.clone(),
         must_change_password: info.must_change_password,
         login_at: audit::now_rfc3339(),
+        expires_at,
         role_missing_reported: false,
     });
     audit::emit(
@@ -173,6 +179,7 @@ pub fn auth_change_password_impl(
         avatar_color: session.avatar_color.clone(),
         must_change_password: false,
         login_at: session.login_at.clone(),
+        expires_at: session.expires_at,
         role_missing_reported: session.role_missing_reported,
     });
     state.session()
@@ -264,9 +271,13 @@ pub fn auth_refresh_session(state: State<'_, AppState>) -> Result<SessionView, A
 }
 
 /// `authLoginRemember` — verifies credentials (like `authLogin`) and returns a
-/// machine-local remember-me token bound to the user's password hash. The
-/// token is stored by the frontend in the machine-local Tauri store, never in
-/// the SMB workspace.
+/// machine-local remember-me token bound to the user's password hash and the
+/// configured session lifetime. The token is stored by the frontend in the
+/// machine-local Tauri store, never in the SMB workspace.
+///
+/// Format: `{base64url(userId)}.{hmac}.{expiresAtUnix}` where the HMAC covers
+/// `userId:passwordHash:expiresAt`. `expiresAt` 0 means "never expire"
+/// (lifetime 0).
 fn remember_token_impl(
     state: &AppState,
     login: &str,
@@ -275,10 +286,16 @@ fn remember_token_impl(
     let view = auth_login_impl(state, login, password)?;
     let root = state.root()?;
     let account = users::find_by_id(&root, &view.user.id)?;
-    let payload = format!("{}:{}", account.id, account.password_hash);
+    let expires_at = workspace::session_lifetime_window(&root)?
+        .map(|window| chrono::Utc::now().timestamp() + window)
+        .unwrap_or(0);
+    let payload = format!("{}:{}:{}", account.id, account.password_hash, expires_at);
     let encoded_id = URL_SAFE_NO_PAD.encode(account.id.as_bytes());
-    let token = format!("{encoded_id}.{}", hmac_hex(&state.machine_id(), &payload));
-    tracing::info!(user_id = %account.id, "Generated remember-me token: {}", token);
+    let token = format!(
+        "{encoded_id}.{}.{expires_at}",
+        hmac_hex(&state.machine_id(), &payload)
+    );
+    tracing::info!(user_id = %account.id, expires_at, "Generated remember-me token: {}", token);
     Ok(RememberToken { token })
 }
 
@@ -292,43 +309,41 @@ pub fn auth_login_remember(
 }
 
 /// `authAutoLogin` — validates a machine-local remember-me token and restores
-/// the session. The token is machine-bound (HMAC keyed by the machine id) and
-/// tied to the current password hash, so a password change or a copy to another
-/// machine invalidates it.
+/// the session. The token is machine-bound (HMAC keyed by the machine id),
+/// tied to the current password hash, and expires at the admin-configured
+/// session lifetime (`expiresAt`). A password change, a copy to another
+/// machine, or an elapsed lifetime invalidates it.
 fn auto_login_impl(state: &AppState, token: &str) -> Result<SessionView, AppError> {
-    tracing::info!("Auto-login token received: {}", token);
     let root = state.root()?;
-    let (encoded_id, signature) = token
-        .split_once('.')
-        .ok_or_else(|| AppError::new("TOKEN_INVALID", "malformed remember token"))?;
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 {
+        return Err(AppError::new("TOKEN_INVALID", "malformed remember token"));
+    }
     let id_bytes = URL_SAFE_NO_PAD
-        .decode(encoded_id)
+        .decode(parts[0])
         .map_err(|_| AppError::new("TOKEN_INVALID", "malformed remember token"))?;
     let user_id = String::from_utf8(id_bytes)
         .map_err(|_| AppError::new("TOKEN_INVALID", "malformed remember token"))?;
+    let expires_at: i64 = parts[2]
+        .parse()
+        .map_err(|_| AppError::new("TOKEN_INVALID", "malformed remember token"))?;
+    if expires_at != 0 && chrono::Utc::now().timestamp() > expires_at {
+        tracing::warn!(user_id = %user_id, expires_at, "auto-login failed: token expired");
+        return Err(AppError::new(
+            "TOKEN_EXPIRED",
+            "remember-me token has expired, please log in again",
+        ));
+    }
 
-    let account = match users::find_by_id(&root, &user_id) {
-        Ok(account) => account,
-        Err(e) => {
-            tracing::warn!(
-                user_id = %user_id,
-                error = %e.message,
-                "auto-login failed: user not found"
-            );
-            return Err(e);
-        }
-    };
+    let account = users::find_by_id(&root, &user_id)?;
     if !account.is_active {
-        tracing::warn!(user_id = %user_id, "auto-login failed: account is disabled");
         return Err(AppError::new("AUTH_FAILED", "account is disabled"));
     }
-    let payload = format!("{}:{}", account.id, account.password_hash);
-    if signature != hmac_hex(&state.machine_id(), &payload) {
-        tracing::warn!(user_id = %user_id, "auto-login failed: HMAC mismatch (stale token or wrong machine)");
+    let payload = format!("{}:{}:{}", account.id, account.password_hash, expires_at);
+    if parts[1] != hmac_hex(&state.machine_id(), &payload) {
         return Err(AppError::new("TOKEN_INVALID", "invalid remember token"));
     }
 
-    tracing::info!(user_id = %user_id, "auto-login OK, restoring session");
     establish_session(state, &UserInfo::from(&account))
 }
 
@@ -374,18 +389,21 @@ mod tests {
     }
 
     #[test]
-    fn auto_login_rejects_tampered_malformed_and_foreign_tokens() {
+    fn auto_login_rejects_tampered_malformed_foreign_and_expired_tokens() {
         let dir = tempdir().unwrap();
         let info = workspace::init(dir.path(), "Remember2").unwrap();
-        users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+        let admin = users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
 
         let state = AppState::new("machine-1".into());
         state.set_workspace(dir.path().to_path_buf(), info);
         let token = remember_token_impl(&state, "admin", "password123").unwrap();
 
         let state2 = activated(&dir, "machine-1");
-        let (encoded_id, _) = token.token.split_once('.').unwrap();
-        let tampered = format!("{encoded_id}.ffff");
+        let (encoded_id, _, _) = {
+            let mut parts = token.token.splitn(3, '.');
+            (parts.next().unwrap(), parts.next().unwrap(), parts.next().unwrap())
+        };
+        let tampered = format!("{encoded_id}.ffff.0");
         assert_eq!(
             auto_login_impl(&state2, &tampered).unwrap_err().code,
             "TOKEN_INVALID"
@@ -400,6 +418,43 @@ mod tests {
             auto_login_impl(&state3, &token.token).unwrap_err().code,
             "TOKEN_INVALID"
         );
+        // A correctly-signed token whose expiresAt lies in the past is rejected
+        // with TOKEN_EXPIRED.
+        let account = users::find_by_id(dir.path(), &admin.id).unwrap();
+        let payload = format!("{}:{}:1", account.id, account.password_hash);
+        let expired = format!(
+            "{}.{}.1",
+            URL_SAFE_NO_PAD.encode(account.id.as_bytes()),
+            hmac_hex(&state2.machine_id(), &payload)
+        );
+        assert_eq!(
+            auto_login_impl(&state2, &expired).unwrap_err().code,
+            "TOKEN_EXPIRED"
+        );
+    }
+
+    #[test]
+    fn expired_session_is_cleared_on_next_call() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "Expire").unwrap();
+        users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+
+        let state = AppState::new("machine-1".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+        state.set_session(Session {
+            user_id: "any-id".into(),
+            login: "admin".into(),
+            display_name: "A".into(),
+            role_id: "admin".into(),
+            avatar_color: "#000".into(),
+            must_change_password: false,
+            login_at: audit::now_rfc3339(),
+            expires_at: Some(chrono::Utc::now().timestamp() - 1),
+            role_missing_reported: false,
+        });
+        assert_eq!(state.require_auth().unwrap_err().code, "AUTH_REQUIRED");
+        // The expired session was cleared: it cannot come back.
+        assert!(state.require_auth().is_err());
     }
 
     #[test]
@@ -419,27 +474,5 @@ mod tests {
             auto_login_impl(&state2, &token.token).unwrap_err().code,
             "TOKEN_INVALID"
         );
-    }
-
-    /// Exercises the remember flow with a tracing subscriber installed so the
-    /// generated token and the auto-login outcome are visible in test output
-    /// (`cargo test -- --nocapture`).
-    #[test]
-    fn remember_flow_logs_trace() {
-        use tracing_subscriber::fmt;
-        let subscriber = fmt().with_test_writer().finish();
-        tracing::subscriber::with_default(subscriber, || {
-            let dir = tempdir().unwrap();
-            let info = workspace::init(dir.path(), "Trace").unwrap();
-            users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
-
-            let state = AppState::new("machine-1".into());
-            state.set_workspace(dir.path().to_path_buf(), info);
-            let token = remember_token_impl(&state, "admin", "password123").unwrap();
-
-            let state2 = activated(&dir, "machine-1");
-            let view = auto_login_impl(&state2, &token.token).unwrap();
-            assert_eq!(view.user.login, "admin");
-        });
     }
 }

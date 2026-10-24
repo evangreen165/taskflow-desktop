@@ -15,6 +15,8 @@ pub struct Session {
     pub avatar_color: String,
     pub must_change_password: bool,
     pub login_at: String,
+    /// Unix seconds when the session expires. `None` = never (lifetime 0).
+    pub expires_at: Option<i64>,
     /// Dedup flag: `role.missing` is emitted at most once per session.
     pub role_missing_reported: bool,
 }

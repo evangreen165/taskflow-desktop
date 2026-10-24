@@ -23,6 +23,39 @@ pub const WORKSPACE_DIRS: [&str; 10] = [
     "audit",
 ];
 
+const DAY_SECONDS: i64 = 86_400;
+
+/// Admin-configurable session lifetime in days. 0 means "never expire".
+pub const DEFAULT_SESSION_LIFETIME_DAYS: u32 = 30;
+
+fn default_session_lifetime_days() -> u32 {
+    DEFAULT_SESSION_LIFETIME_DAYS
+}
+
+/// Resolves the effective session lifetime window (seconds) for a workspace.
+/// `None` means the session never expires (lifetime == 0).
+pub fn session_lifetime_window(root: &Path) -> Result<Option<i64>, AppError> {
+    let cfg = read_cfg(root)?;
+    if cfg.session_lifetime_days == 0 {
+        Ok(None)
+    } else {
+        Ok(Some(cfg.session_lifetime_days as i64 * DAY_SECONDS))
+    }
+}
+
+/// Current configured session lifetime in days.
+pub fn session_lifetime_days(root: &Path) -> Result<u32, AppError> {
+    Ok(read_cfg(root)?.session_lifetime_days)
+}
+
+/// Persists the session lifetime (days). 0 = never expire.
+pub fn set_session_lifetime_days(root: &Path, days: u32) -> Result<u32, AppError> {
+    let mut cfg = read_cfg(root)?;
+    cfg.session_lifetime_days = days;
+    fsops::write_json_atomic(&root.join("config.json"), &cfg)?;
+    Ok(days)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceConfig {
@@ -43,6 +76,9 @@ pub struct WorkspaceConfig {
     /// that is not present is treated as disabled.
     #[serde(default)]
     pub plugins_state: std::collections::BTreeMap<String, bool>,
+    /// Admin session lifetime in days (0 = never expire).
+    #[serde(default = "default_session_lifetime_days")]
+    pub session_lifetime_days: u32,
 }
 
 /// Plugin management settings exposed to the UI (workspace-wide).
@@ -164,6 +200,7 @@ pub fn init(root: &Path, name: &str) -> Result<WorkspaceInfo, AppError> {
         plugins_enabled_by_default: true,
         plugins_enabled: false,
         plugins_state: std::collections::BTreeMap::from([("llm-assistant".to_string(), false)]),
+        session_lifetime_days: DEFAULT_SESSION_LIFETIME_DAYS,
     };
     let mut bytes = serde_json::to_vec_pretty(&cfg)?;
     bytes.push(b'\n');

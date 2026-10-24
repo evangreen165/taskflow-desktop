@@ -17,6 +17,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   LOG_INIT: "Не удалось инициализировать журнал",
   INTERNAL: "Внутренняя ошибка",
   AUTH_REQUIRED: "Требуется вход",
+  TOKEN_EXPIRED: "Время сессии истекло, войдите снова",
   FORBIDDEN: "Недостаточно прав",
   PASSWORD_CHANGE_REQUIRED: "Требуется сменить пароль",
   SESSION_INVALIDATED: "Миграция завершена, войдите заново",

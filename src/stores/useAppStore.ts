@@ -65,7 +65,11 @@ async function resolvePhase(): Promise<AppPhase> {
     return "workspace";
   }
   console.warn(`[boot] auto-login failed: ${auto.error.code} — ${auto.error.message}`);
-  if (auto.error.code === "TOKEN_INVALID" || auto.error.code === "AUTH_FAILED") {
+  if (
+    auto.error.code === "TOKEN_INVALID" ||
+    auto.error.code === "TOKEN_EXPIRED" ||
+    auto.error.code === "AUTH_FAILED"
+  ) {
     await ConfigService.setRememberToken(null);
   }
   return "login";

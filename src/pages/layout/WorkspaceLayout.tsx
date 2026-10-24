@@ -21,15 +21,20 @@ import styles from "./WorkspaceLayout.module.css";
 function SideNavLink({
   to,
   disabled,
+  title,
   children,
 }: {
   to: string;
   disabled: boolean;
+  title?: string;
   children: ReactNode;
 }): JSX.Element {
   if (disabled) {
     return (
-      <span className={`${styles.navItem} ${styles.navDisabled}`} title="Сначала смените пароль">
+      <span
+        className={`${styles.navItem} ${styles.navDisabled}`}
+        title={title ? `${title} — сначала смените пароль` : "Сначала смените пароль"}
+      >
         {children}
       </span>
     );
@@ -37,6 +42,7 @@ function SideNavLink({
   return (
     <NavLink
       to={to}
+      title={title}
       className={({ isActive }) => `${styles.navItem} ${isActive ? styles.active : ""}`}
     >
       {children}
@@ -54,6 +60,26 @@ export default function WorkspaceLayout(): JSX.Element {
   const forced = session?.mustChangePassword ?? false;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("taskflow.sidebarCollapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  function toggleSidebar(): void {
+    setSidebarCollapsed((collapsed) => {
+      const next = !collapsed;
+      try {
+        localStorage.setItem("taskflow.sidebarCollapsed", next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
 
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
@@ -225,7 +251,20 @@ export default function WorkspaceLayout(): JSX.Element {
 
   return (
     <div className={styles.app}>
-      <aside className={styles.sidebar}>
+      <aside
+        className={sidebarCollapsed ? `${styles.sidebar} ${styles.collapsed}` : styles.sidebar}
+      >
+        <div className={styles.collapseWrap}>
+          <button
+            type="button"
+            className={styles.collapseBtn}
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}
+            aria-label={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}
+          >
+            ☰
+          </button>
+        </div>
         <div className={styles.logo}>
           <div className={styles.mark}>T</div>
           <div className={styles.logoText}>
@@ -235,27 +274,33 @@ export default function WorkspaceLayout(): JSX.Element {
 
         <nav className={styles.nav}>
           <div className={styles.navLabel}>Работа</div>
-          <SideNavLink to="/app/dashboard" disabled={forced}>
-            🏠 Главная
+          <SideNavLink to="/app/dashboard" disabled={forced} title="Главная">
+            <span aria-hidden="true">🏠</span>
+            <span className={styles.itemText}>Главная</span>
           </SideNavLink>
-          <SideNavLink to="/app/tasks" disabled={forced}>
-            Задачи
+          <SideNavLink to="/app/tasks" disabled={forced} title="Задачи">
+            <span aria-hidden="true">📋</span>
+            <span className={styles.itemText}>Задачи</span>
           </SideNavLink>
-          <SideNavLink to="/app/calendar" disabled={forced}>
-            Календарь
+          <SideNavLink to="/app/calendar" disabled={forced} title="Календарь">
+            <span aria-hidden="true">📅</span>
+            <span className={styles.itemText}>Календарь</span>
           </SideNavLink>
-          <SideNavLink to="/app/kb" disabled={forced}>
-            Заметки
+          <SideNavLink to="/app/kb" disabled={forced} title="Заметки">
+            <span aria-hidden="true">📝</span>
+            <span className={styles.itemText}>Заметки</span>
           </SideNavLink>
           {extensionsEnabled ? (
-            <SideNavLink to="/app/plugins" disabled={forced}>
-              🧩 Расширения
+            <SideNavLink to="/app/plugins" disabled={forced} title="Расширения">
+              <span aria-hidden="true">🧩</span>
+              <span className={styles.itemText}>Расширения</span>
             </SideNavLink>
           ) : null}
           <div className={styles.navLabel}>Управление</div>
           {canAdmin ? (
-            <SideNavLink to="/app/admin" disabled={forced}>
-              Администрирование
+            <SideNavLink to="/app/admin" disabled={forced} title="Администрирование">
+              <span aria-hidden="true">⚙️</span>
+              <span className={styles.itemText}>Администрирование</span>
             </SideNavLink>
           ) : null}
           {injectedSidebar.length > 0 ? (
@@ -266,9 +311,11 @@ export default function WorkspaceLayout(): JSX.Element {
                   key={plugin.id}
                   type="button"
                   className={styles.pluginNavButton}
+                  title={plugin.name}
                   onClick={() => openPlugin(plugin.id)}
                 >
-                  <span aria-hidden="true">🧩</span> {plugin.name}
+                  <span aria-hidden="true">🧩</span>
+                  <span className={styles.itemText}>{plugin.name}</span>
                   {pluginBusy[plugin.id] ? (
                     <span className={styles.pluginBusyDot} aria-label="Идёт генерация…" />
                   ) : null}
@@ -320,6 +367,7 @@ export default function WorkspaceLayout(): JSX.Element {
               className={styles.userCard}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
+              title={`${user?.displayName ?? "—"} · ${role?.name ?? "—"}`}
               onClick={() => setMenuOpen((open) => !open)}
             >
               <Avatar
@@ -346,6 +394,7 @@ export default function WorkspaceLayout(): JSX.Element {
               className={styles.spaceButton}
               aria-haspopup="menu"
               aria-expanded={spaceMenuOpen}
+              title={currentSpace?.name ?? "Пространство"}
               onClick={() => setSpaceMenuOpen((open) => !open)}
             >
               <span className={styles.spaceIcon}>

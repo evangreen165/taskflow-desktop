@@ -238,6 +238,7 @@ mod tests {
             avatar_color: "#5b5bd6".to_string(),
             must_change_password: false,
             login_at: "2026-10-01T00:00:00Z".to_string(),
+            expires_at: None,
             role_missing_reported: false,
         }
     }

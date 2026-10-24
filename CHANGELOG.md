@@ -2,6 +2,25 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.9.3] - 2026-10-24
+
+### Added
+
+- **Admin session lifetime** («Настройки → Общие», requires `workspace.settings`):
+  config.json `sessionLifetimeDays` (default 30, 0 = never). Remember-me tokens
+  now embed `expiresAt` (`userId.hash.expiresAt`, covered by the HMAC);
+  `authAutoLogin` rejects expired tokens with `TOKEN_EXPIRED`, and an open
+  session that outlives the lifetime is cleared on the next API call (graceful
+  re-login). Existing 0.9.2 tokens are invalidated once
+- **Collapsible sidebar**: ☰ toggle near the logo persists in localStorage;
+  collapsed mode is a 64px icon rail (text labels and section headers hidden,
+  items centered) with `title` tooltips on every item; the space switcher and
+  user card adapt (folder icon / avatar only)
+
+### Changed
+
+- Version bumped to `0.9.3`
+
 ## [0.9.2] - 2026-10-24
 
 ### Fixed
