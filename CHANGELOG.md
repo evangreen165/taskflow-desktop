@@ -2,6 +2,18 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.8.5] - 2026-10-24
+
+### Fixed
+
+- Plugin white screen on Windows: the iframe now loads `plugin://localhost/<pluginId>/index.html`, and the CSP also allows `http://plugin.localhost` (the WebView2 rewrite of the custom scheme), so scripts/styles/frames are no longer blocked in release builds
+- Plugin assets now use `application/javascript` for `.js`/`.mjs` files; the `plugin://` route parsing is covered by Rust tests for all platform URL forms
+- Analytics widget disappearing after tab switches: charts get a stable `ResponsiveContainer` (`height={300}`, `minWidth={200}`), the widget box has `min-height`/`min-width`, and cached tasks from the task store are reused on remount instead of refetching
+
+### Changed
+
+- Version bumped to `0.8.5`
+
 ## [0.8.4] - 2026-10-23
 
 ### Fixed

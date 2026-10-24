@@ -2,6 +2,11 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* recharts ResponsiveContainer needs a measurable box even while the widget
+     is hidden or remounting after a tab switch; otherwise the charts render at
+     zero size and disappear. */
+  min-height: 300px;
+  min-width: 300px;
 }
 
 .block {

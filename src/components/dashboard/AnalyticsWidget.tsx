@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   Bar,
   BarChart,
@@ -16,6 +16,8 @@ import {
 import { statusLabel } from "@/lib/taskMeta";
 import type { Task, TaskStatus } from "@/services/tasks";
 import type { UserSummary } from "@/services/users";
+import { useSpaceStore } from "@/stores/useSpaceStore";
+import { useTaskStore } from "@/stores/useTaskStore";
 
 import styles from "./AnalyticsWidget.module.css";
 
@@ -49,20 +51,42 @@ export default function AnalyticsWidget({
   tasks: Task[];
   users: Record<string, UserSummary>;
 }): JSX.Element {
+  const spaceId = useSpaceStore((s) => s.currentSpaceId);
+  const storeTasks = useTaskStore((s) => s.tasks);
+  const fetchTasks = useTaskStore((s) => s.fetchTasks);
+
+  /**
+   * Charts must not flash empty after tab switches: the widget remounts while
+   * the parent refetches. If the shared task store already holds the current
+   * space's tasks, use them instead of issuing a duplicate request.
+   */
+  useEffect(() => {
+    if (!spaceId || tasks.length > 0) {
+      return;
+    }
+    const store = useTaskStore.getState();
+    if (store.tasks.length > 0 || store.loading) {
+      return;
+    }
+    void fetchTasks(spaceId);
+  }, [fetchTasks, spaceId, tasks.length]);
+
+  const chartTasks = tasks.length > 0 ? tasks : storeTasks;
+
   const statusData = useMemo(
     () =>
       PIE_STATUSES.map((status) => ({
         status,
         name: statusLabel(status),
-        value: tasks.filter((task) => task.status === status).length,
+        value: chartTasks.filter((task) => task.status === status).length,
         color: STATUS_COLORS[status],
       })).filter((item) => item.value > 0),
-    [tasks],
+    [chartTasks],
   );
 
   const workloadData = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const task of tasks) {
+    for (const task of chartTasks) {
       if (task.status === "done" || task.status === "rejected") {
         continue;
       }
@@ -77,9 +101,9 @@ export default function AnalyticsWidget({
       }))
       .sort((a, b) => b.tasks - a.tasks)
       .slice(0, 8);
-  }, [tasks, users]);
+  }, [chartTasks, users]);
 
-  if (tasks.length === 0) {
+  if (chartTasks.length === 0) {
     return <div className={styles.empty}>В этом пространстве пока нет задач.</div>;
   }
 
@@ -90,7 +114,7 @@ export default function AnalyticsWidget({
         {statusData.length === 0 ? (
           <div className={styles.empty}>Нет задач в выбранных статусах.</div>
         ) : (
-          <ResponsiveContainer width="100%" height={150}>
+          <ResponsiveContainer width="100%" height={300} minWidth={200}>
             <PieChart>
               <Pie
                 data={statusData}
@@ -117,7 +141,7 @@ export default function AnalyticsWidget({
         {workloadData.length === 0 ? (
           <div className={styles.empty}>Нет активных задач с исполнителями.</div>
         ) : (
-          <ResponsiveContainer width="100%" height={160}>
+          <ResponsiveContainer width="100%" height={300} minWidth={200}>
             <BarChart data={workloadData} margin={{ top: 4, right: 8, bottom: 0, left: -18 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis

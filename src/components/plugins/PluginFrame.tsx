@@ -234,7 +234,7 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
         ref={iframeRef}
         className={styles.frame}
         sandbox="allow-scripts allow-same-origin"
-        src={`plugin://${encodeURIComponent(pluginId)}/index.html`}
+        src={`plugin://localhost/${encodeURIComponent(pluginId)}/index.html`}
         title={`Плагин ${pluginId}`}
       />
     </div>
