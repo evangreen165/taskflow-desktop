@@ -164,6 +164,21 @@
   margin-top: 8px;
 }
 
+.rememberRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.rememberRow input {
+  accent-color: var(--accent);
+}
+
 .actions .spacer {
   flex: 1;
 }

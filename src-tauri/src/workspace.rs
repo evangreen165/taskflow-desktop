@@ -30,6 +30,49 @@ pub struct WorkspaceConfig {
     pub workspace_id: String,
     pub name: String,
     pub created_at: String,
+    /// Marks that the workspace carries the Stage 9 plugin defaults (extensions
+    /// hidden/disabled until the master toggle is turned on).
+    #[serde(default)]
+    pub plugins_enabled_by_default: bool,
+    /// Master switch for the extension system. OFF by default; when off, the
+    /// «Расширения» menu item and all plugin UI (sidebar/topbar/floating) are
+    /// hidden.
+    #[serde(default)]
+    pub plugins_enabled: bool,
+    /// Per-plugin on/off state, e.g. `{ "llm-assistant": false }`. A plugin
+    /// that is not present is treated as disabled.
+    #[serde(default)]
+    pub plugins_state: std::collections::BTreeMap<String, bool>,
+}
+
+/// Plugin management settings exposed to the UI (workspace-wide).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginSettings {
+    pub enabled: bool,
+    pub plugins: std::collections::BTreeMap<String, bool>,
+}
+
+/// Reads the workspace `config.json`.
+fn read_cfg(root: &Path) -> Result<WorkspaceConfig, AppError> {
+    fsops::read_json(&root.join("config.json"))
+}
+
+/// Current plugin settings (defaults applied when the fields are absent).
+pub fn plugin_settings(root: &Path) -> Result<PluginSettings, AppError> {
+    let cfg = read_cfg(root)?;
+    Ok(PluginSettings {
+        enabled: cfg.plugins_enabled,
+        plugins: cfg.plugins_state,
+    })
+}
+
+/// Persists the plugin settings into the workspace `config.json` (atomic).
+pub fn set_plugin_settings(root: &Path, settings: &PluginSettings) -> Result<(), AppError> {
+    let mut cfg = read_cfg(root)?;
+    cfg.plugins_enabled = settings.enabled;
+    cfg.plugins_state = settings.plugins.clone();
+    fsops::write_json_atomic(&root.join("config.json"), &cfg)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -116,6 +159,11 @@ pub fn init(root: &Path, name: &str) -> Result<WorkspaceInfo, AppError> {
         workspace_id: uuid::Uuid::new_v4().to_string(),
         name: name.to_string(),
         created_at: now_rfc3339(),
+        // Stage 9: extension system starts disabled (master toggle OFF); the
+        // bundled AI assistant ships disabled until enabled in settings.
+        plugins_enabled_by_default: true,
+        plugins_enabled: false,
+        plugins_state: std::collections::BTreeMap::from([("llm-assistant".to_string(), false)]),
     };
     let mut bytes = serde_json::to_vec_pretty(&cfg)?;
     bytes.push(b'\n');

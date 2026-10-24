@@ -159,3 +159,29 @@
 .updateCard button {
   align-self: flex-start;
 }
+
+.pluginList {
+  margin-top: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pluginList h3 {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.pluginRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.pluginRow input {
+  accent-color: var(--accent);
+}

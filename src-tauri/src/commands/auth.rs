@@ -1,5 +1,7 @@
 use tauri::State;
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use serde::Serialize;
 use taskflow_macros::write_command;
 
 use crate::audit;
@@ -13,6 +15,63 @@ fn login_hash(login: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(login.trim().to_lowercase().as_bytes());
     hex::encode(hasher.finalize())
+}
+
+/// Machine-local "remember me" token: `{base64url(userId)}.{hmacHex}`. The HMAC
+/// key is the per-machine id, so the token is only valid on the machine that
+/// issued it and it is bound to the user's current password hash.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RememberToken {
+    pub token: String,
+}
+
+fn hmac_hex(machine_id: &str, data: &str) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    type HmacSha256 = Hmac<Sha256>;
+    let mut mac =
+        HmacSha256::new_from_slice(machine_id.as_bytes()).expect("hmac accepts any key length");
+    mac.update(data.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+/// Builds the in-memory session for an already-authenticated account (common
+/// tail of password login and remember-token auto-login).
+fn establish_session(state: &AppState, info: &UserInfo) -> Result<SessionView, AppError> {
+    let root = state.root()?;
+    users::touch_last_login(&root, &info.id)?;
+    state.set_session(Session {
+        user_id: info.id.clone(),
+        login: info.login.clone(),
+        display_name: info.display_name.clone(),
+        role_id: info.role_id.clone(),
+        avatar_color: info.avatar_color.clone(),
+        must_change_password: info.must_change_password,
+        login_at: audit::now_rfc3339(),
+        role_missing_reported: false,
+    });
+    audit::emit(
+        &ActorId::User(info.id.clone()),
+        "auth.login",
+        "user",
+        &info.id,
+        serde_json::json!({}),
+    );
+    state.session()
+}
+
+/// Testable body of `authLogin` (and the old login). Sets the in-memory
+/// session; returns the sanitized user.
+pub fn login_impl(
+    state: &AppState,
+    login: &str,
+    password: &str,
+) -> Result<UserInfo, AppError> {
+    let root = state.root()?;
+    let user = users::authenticate(&root, login, password)?;
+    establish_session(state, &user)?;
+    Ok(user)
 }
 
 #[tauri::command(rename = "createAdmin")]
@@ -40,36 +99,6 @@ pub fn create_admin(
         serde_json::json!({ "role": info.role_id }),
     );
     Ok(info)
-}
-
-/// Testable body of `authLogin` (and the old login). Sets the in-memory
-/// session; returns the sanitized user.
-pub fn login_impl(
-    state: &AppState,
-    login: &str,
-    password: &str,
-) -> Result<UserInfo, AppError> {
-    let root = state.root()?;
-    let user = users::authenticate(&root, login, password)?;
-    users::touch_last_login(&root, &user.id)?;
-    state.set_session(Session {
-        user_id: user.id.clone(),
-        login: user.login.clone(),
-        display_name: user.display_name.clone(),
-        role_id: user.role_id.clone(),
-        avatar_color: user.avatar_color.clone(),
-        must_change_password: user.must_change_password,
-        login_at: audit::now_rfc3339(),
-        role_missing_reported: false,
-    });
-    audit::emit(
-        &ActorId::User(user.id.clone()),
-        "auth.login",
-        "user",
-        &user.id,
-        serde_json::json!({}),
-    );
-    Ok(user)
 }
 
 /// `authLogin`: returns the full `SessionView`; failures emit
@@ -232,4 +261,148 @@ pub fn auth_reset_password(
 #[tauri::command(rename = "authRefreshSession")]
 pub fn auth_refresh_session(state: State<'_, AppState>) -> Result<SessionView, AppError> {
     state.session()
+}
+
+/// `authLoginRemember` — verifies credentials (like `authLogin`) and returns a
+/// machine-local remember-me token bound to the user's password hash. The
+/// token is stored by the frontend in the machine-local Tauri store, never in
+/// the SMB workspace.
+fn remember_token_impl(
+    state: &AppState,
+    login: &str,
+    password: &str,
+) -> Result<RememberToken, AppError> {
+    let view = auth_login_impl(state, login, password)?;
+    let root = state.root()?;
+    let account = users::find_by_id(&root, &view.user.id)?;
+    let payload = format!("{}:{}", account.id, account.password_hash);
+    let encoded_id = URL_SAFE_NO_PAD.encode(account.id.as_bytes());
+    let token = format!("{encoded_id}.{}", hmac_hex(&state.machine_id(), &payload));
+    Ok(RememberToken { token })
+}
+
+#[tauri::command(rename = "authLoginRemember")]
+pub fn auth_login_remember(
+    state: State<'_, AppState>,
+    login: String,
+    password: String,
+) -> Result<RememberToken, AppError> {
+    remember_token_impl(&state, &login, &password)
+}
+
+/// `authAutoLogin` — validates a machine-local remember-me token and restores
+/// the session. The token is machine-bound (HMAC keyed by the machine id) and
+/// tied to the current password hash, so a password change or a copy to another
+/// machine invalidates it.
+fn auto_login_impl(state: &AppState, token: &str) -> Result<SessionView, AppError> {
+    let root = state.root()?;
+    let (encoded_id, signature) = token
+        .split_once('.')
+        .ok_or_else(|| AppError::new("TOKEN_INVALID", "malformed remember token"))?;
+    let id_bytes = URL_SAFE_NO_PAD
+        .decode(encoded_id)
+        .map_err(|_| AppError::new("TOKEN_INVALID", "malformed remember token"))?;
+    let user_id = String::from_utf8(id_bytes)
+        .map_err(|_| AppError::new("TOKEN_INVALID", "malformed remember token"))?;
+
+    let account = users::find_by_id(&root, &user_id)?;
+    if !account.is_active {
+        return Err(AppError::new("AUTH_FAILED", "account is disabled"));
+    }
+    let payload = format!("{}:{}", account.id, account.password_hash);
+    if signature != hmac_hex(&state.machine_id(), &payload) {
+        return Err(AppError::new("TOKEN_INVALID", "invalid remember token"));
+    }
+
+    establish_session(state, &UserInfo::from(&account))
+}
+
+#[tauri::command(rename = "authAutoLogin")]
+pub fn auth_auto_login(
+    state: State<'_, AppState>,
+    token: String,
+) -> Result<SessionView, AppError> {
+    auto_login_impl(&state, &token)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::workspace;
+    use tempfile::tempdir;
+
+    fn activated(dir: &tempfile::TempDir, machine_id: &str) -> AppState {
+        let state = AppState::new(machine_id.to_string());
+        state.set_workspace(
+            dir.path().to_path_buf(),
+            workspace::validate(dir.path()).unwrap(),
+        );
+        state
+    }
+
+    #[test]
+    fn remember_token_roundtrips_auto_login() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "Remember").unwrap();
+        let admin = users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+
+        let state = AppState::new("machine-1".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+
+        let token = remember_token_impl(&state, "admin", "password123").unwrap();
+        assert!(token.token.contains('.'));
+
+        let state2 = activated(&dir, "machine-1");
+        let view = auto_login_impl(&state2, &token.token).unwrap();
+        assert_eq!(view.user.id, admin.id);
+        assert!(state2.require_auth().is_ok());
+    }
+
+    #[test]
+    fn auto_login_rejects_tampered_malformed_and_foreign_tokens() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "Remember2").unwrap();
+        users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+
+        let state = AppState::new("machine-1".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+        let token = remember_token_impl(&state, "admin", "password123").unwrap();
+
+        let state2 = activated(&dir, "machine-1");
+        let (encoded_id, _) = token.token.split_once('.').unwrap();
+        let tampered = format!("{encoded_id}.ffff");
+        assert_eq!(
+            auto_login_impl(&state2, &tampered).unwrap_err().code,
+            "TOKEN_INVALID"
+        );
+        assert_eq!(
+            auto_login_impl(&state2, "no-dot").unwrap_err().code,
+            "TOKEN_INVALID"
+        );
+        // A token issued on another machine never validates.
+        let state3 = activated(&dir, "machine-2");
+        assert_eq!(
+            auto_login_impl(&state3, &token.token).unwrap_err().code,
+            "TOKEN_INVALID"
+        );
+    }
+
+    #[test]
+    fn auto_login_invalidated_after_password_change() {
+        let dir = tempdir().unwrap();
+        let info = workspace::init(dir.path(), "Remember3").unwrap();
+        let admin = users::create(dir.path(), "admin", "password123", "A", "admin", None).unwrap();
+
+        let state = AppState::new("machine-1".into());
+        state.set_workspace(dir.path().to_path_buf(), info);
+        let token = remember_token_impl(&state, "admin", "password123").unwrap();
+
+        users::change_password(dir.path(), &admin.id, "password123", "new-password-1").unwrap();
+
+        let state2 = activated(&dir, "machine-1");
+        assert_eq!(
+            auto_login_impl(&state2, &token.token).unwrap_err().code,
+            "TOKEN_INVALID"
+        );
+    }
 }

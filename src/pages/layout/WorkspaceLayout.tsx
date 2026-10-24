@@ -77,15 +77,20 @@ export default function WorkspaceLayout(): JSX.Element {
   const [activePluginId, setActivePluginId] = useState<string | null>(null);
   const [pluginPanelOpen, setPluginPanelOpen] = useState(false);
   const pluginBusy = usePluginStore((s) => s.busy);
+  const extensionsEnabled = usePluginStore((s) => s.extensionsEnabled);
+  const pluginStates = usePluginStore((s) => s.pluginStates);
+  const loadExtensions = usePluginStore((s) => s.loadExtensions);
 
   const currentSpace = spaces.find((space) => space.id === currentSpaceId) ?? null;
   const canAdmin =
     can("users.manage") || can("roles.manage") || can("space.manage") || can("audit.view");
   const personalOwner = isOwnPersonalSpace(currentSpace, user?.id);
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const injectedSidebar = plugins.filter((plugin) => plugin.ui?.inject === "sidebar");
-  const injectedTopbar = plugins.filter((plugin) => plugin.ui?.inject === "topbar");
-  const injectedFloating = plugins.filter((plugin) => plugin.ui?.inject === "floating");
+  // Only plugins explicitly enabled in the settings inject their UI.
+  const enabledPlugins = plugins.filter((plugin) => pluginStates[plugin.id] === true);
+  const injectedSidebar = enabledPlugins.filter((plugin) => plugin.ui?.inject === "sidebar");
+  const injectedTopbar = enabledPlugins.filter((plugin) => plugin.ui?.inject === "topbar");
+  const injectedFloating = enabledPlugins.filter((plugin) => plugin.ui?.inject === "floating");
   const openPluginName =
     activePluginId !== null
       ? (plugins.find((plugin) => plugin.id === activePluginId)?.name ?? activePluginId)
@@ -137,10 +142,11 @@ export default function WorkspaceLayout(): JSX.Element {
         setPlugins(result.value);
       }
     });
+    void loadExtensions();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadExtensions]);
 
   async function createSpace(): Promise<void> {
     const name = newSpaceName.trim();
@@ -241,9 +247,11 @@ export default function WorkspaceLayout(): JSX.Element {
           <SideNavLink to="/app/kb" disabled={forced}>
             Заметки
           </SideNavLink>
-          <SideNavLink to="/app/plugins" disabled={forced}>
-            🧩 Расширения
-          </SideNavLink>
+          {extensionsEnabled ? (
+            <SideNavLink to="/app/plugins" disabled={forced}>
+              🧩 Расширения
+            </SideNavLink>
+          ) : null}
           <div className={styles.navLabel}>Управление</div>
           {canAdmin ? (
             <SideNavLink to="/app/admin" disabled={forced}>

@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import { AppError } from "@/lib/errors";
 import { appNavigate } from "@/lib/navigate";
+import { AuthService } from "@/services/auth";
 import { ConfigService } from "@/services/config";
 import { StorageService } from "@/services/storage";
 import type { WorkspaceInfo } from "@/services/types";
@@ -33,10 +34,29 @@ async function startWatcherSafely(): Promise<void> {
   await StorageService.startWatcher();
 }
 
-/** Sessions are in-memory, so a fresh boot always lands on /login. */
+/**
+ * Resolves the phase after the workspace is active. First tries the in-memory
+ * Rust session; if none exists, tries the machine-local "remember me" token
+ * (`authAutoLogin`). A valid token restores the session; a failed token is
+ * cleared so the login screen shows immediately next time.
+ */
 async function resolvePhase(): Promise<AppPhase> {
-  await useAuthStore.getState().refreshSession();
-  return useAuthStore.getState().session ? "workspace" : "login";
+  const auth = useAuthStore.getState();
+  await auth.refreshSession();
+  if (auth.session) {
+    return "workspace";
+  }
+  const token = await ConfigService.getRememberToken();
+  if (!token) {
+    return "login";
+  }
+  const auto = await AuthService.autoLogin(token);
+  if (auto.ok) {
+    auth.setSession(auto.value);
+    return "workspace";
+  }
+  await ConfigService.setRememberToken(null);
+  return "login";
 }
 
 export const useAppStore = create<AppState>((set) => ({

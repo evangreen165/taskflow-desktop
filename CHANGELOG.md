@@ -2,6 +2,32 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.9.1] - 2026-10-24
+
+### Added
+
+- **Remember me**: «Запомнить меня на этом компьютере» checkbox on the login
+  screen. `authLoginRemember` issues a machine-local token (HMAC of userId +
+  passwordHash, keyed by the per-machine id) stored in the Tauri store — never
+  in the SMB workspace. On startup the app tries `authAutoLogin` before
+  redirecting to the login screen and clears the token on failure
+- **Extension system master toggle**: «Настройки → Расширения» with the master
+  switch «Включить систему расширений» (OFF by default) and per-plugin ON/OFF
+  toggles. State is stored in the workspace `config.json`
+  (`pluginsEnabledByDefault`, `pluginsEnabled`, `pluginsState`), backfilled for
+  existing workspaces. When the system is off, the «Расширения» menu item and
+  all plugin UI (sidebar/topbar/floating) are hidden
+- **Settings → Общие** tab: app version, workspace path (read-only), and
+  «Очистить кэш» (clears app localStorage)
+- Profile email editing was already available («Профиль» tab)
+
+### Changed
+
+- `main` branch merged with all pending hotfixes (v0.8.5 → v0.9.0); README
+  rewritten (version badge 0.9.1, plugin architecture, project stages,
+  clear dev instructions)
+- Version bumped to `0.9.1`
+
 ## [0.9.0] - 2026-10-24
 
 ### Fixed

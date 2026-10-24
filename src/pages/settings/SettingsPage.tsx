@@ -1,11 +1,13 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useState } from "react";
 import type { Update } from "@tauri-apps/plugin-updater";
 
 import packageJson from "@/../package.json";
 
 import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
+import { PluginsService, type PluginManifest } from "@/services/plugins";
 import { UpdaterService, type OfflineUpdate } from "@/services/updater";
 import { useAppStore } from "@/stores/useAppStore";
+import { usePluginStore } from "@/stores/usePluginStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useThemeStore, type AppTheme } from "@/stores/useThemeStore";
 import { useToastStore } from "@/stores/useToastStore";
@@ -18,7 +20,7 @@ const THEME_OPTIONS: { value: AppTheme; label: string }[] = [
   { value: "system", label: "Как в системе" },
 ];
 
-type SettingsTab = "appearance" | "behavior" | "about";
+type SettingsTab = "general" | "appearance" | "behavior" | "extensions" | "about";
 
 export default function SettingsPage(): JSX.Element {
   const theme = useThemeStore((s) => s.theme);
@@ -27,7 +29,14 @@ export default function SettingsPage(): JSX.Element {
   const setHideEmptyColumns = useSettingsStore((s) => s.setHideEmptyColumns);
   const workspace = useAppStore((s) => s.workspace);
   const pushToast = useToastStore((s) => s.push);
-  const [tab, setTab] = useState<SettingsTab>("appearance");
+  const extensionsEnabled = usePluginStore((s) => s.extensionsEnabled);
+  const pluginStates = usePluginStore((s) => s.pluginStates);
+  const extensionsLoaded = usePluginStore((s) => s.extensionsLoaded);
+  const loadExtensions = usePluginStore((s) => s.loadExtensions);
+  const setExtensionsEnabled = usePluginStore((s) => s.setExtensionsEnabled);
+  const setPluginState = usePluginStore((s) => s.setPluginState);
+  const [pluginList, setPluginList] = useState<PluginManifest[]>([]);
+  const [tab, setTab] = useState<SettingsTab>("general");
   const [changeFolderOpen, setChangeFolderOpen] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -36,6 +45,25 @@ export default function SettingsPage(): JSX.Element {
   const [onlineError, setOnlineError] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
+
+  // Load the extension-system settings and the installed plugins once.
+  useEffect(() => {
+    void loadExtensions();
+    let cancelled = false;
+    void PluginsService.list().then((result) => {
+      if (!cancelled && result.ok) {
+        setPluginList(result.value);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadExtensions]);
+
+  function handleClearCache(): void {
+    localStorage.clear();
+    pushToast("Кэш очищен", "success");
+  }
 
   async function checkUpdates(): Promise<void> {
     setChecking(true);
@@ -123,8 +151,10 @@ export default function SettingsPage(): JSX.Element {
       <div className={styles.tabs}>
         {(
           [
+            { id: "general", label: "Общие" },
             { id: "appearance", label: "Оформление" },
             { id: "behavior", label: "Поведение" },
+            { id: "extensions", label: "Расширения" },
             { id: "about", label: "О программе" },
           ] as { id: SettingsTab; label: string }[]
         ).map((item) => (
@@ -138,6 +168,28 @@ export default function SettingsPage(): JSX.Element {
           </button>
         ))}
       </div>
+
+      {tab === "general" ? (
+        <div className={styles.card}>
+          <h2>Общие</h2>
+          <dl className={styles.kv}>
+            <dt>Версия приложения</dt>
+            <dd>{packageJson.version}</dd>
+            <dt>Workspace</dt>
+            <dd className={styles.path}>{workspace?.path ?? "—"}</dd>
+          </dl>
+          <div className={styles.updateBlock}>
+            <h3>Кэш</h3>
+            <p className={styles.muted}>
+              Очищает локальные данные приложения (тема, настройки интерфейса). Workspace и
+              «запомнить меня» не затрагиваются.
+            </p>
+            <button className="btn-ghost" type="button" onClick={handleClearCache}>
+              Очистить кэш
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {tab === "appearance" ? (
         <div className={styles.card}>
@@ -174,6 +226,49 @@ export default function SettingsPage(): JSX.Element {
               <small className={styles.muted}> — «Новая», «В работе» и т.д. без задач</small>
             </span>
           </label>
+        </div>
+      ) : null}
+
+      {tab === "extensions" ? (
+        <div className={styles.card}>
+          <h2>Расширения</h2>
+          <p className={styles.muted}>
+            Система расширений выключена по умолчанию. Включите её, чтобы показывать пункт
+            «Расширения» в боковом меню и кнопки плагинов (например, AI-ассистента).
+          </p>
+          <label className={styles.settingRow}>
+            <input
+              type="checkbox"
+              checked={extensionsEnabled}
+              onChange={(event) => void setExtensionsEnabled(event.target.checked)}
+            />
+            <span>Включить систему расширений</span>
+          </label>
+
+          {extensionsEnabled ? (
+            <div className={styles.pluginList}>
+              <h3>Установленные расширения</h3>
+              {!extensionsLoaded ? (
+                <p className={styles.muted}>Загрузка…</p>
+              ) : pluginList.length === 0 ? (
+                <p className={styles.muted}>Установленных расширений нет.</p>
+              ) : (
+                pluginList.map((plugin) => (
+                  <label key={plugin.id} className={styles.pluginRow}>
+                    <input
+                      type="checkbox"
+                      checked={pluginStates[plugin.id] === true}
+                      onChange={(event) => void setPluginState(plugin.id, event.target.checked)}
+                    />
+                    <span>
+                      🧩 {plugin.name}
+                      <small className={styles.muted}> v{plugin.version}</small>
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
+          ) : null}
         </div>
       ) : null}
 

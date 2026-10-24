@@ -20,7 +20,30 @@ pub fn run(root: &Path) -> Result<(), AppError> {
     ensure_system_roles(root)?;
     ensure_personal_spaces(root)?;
     ensure_space_categories(root)?;
+    ensure_plugin_settings(root)?;
     Ok(())
+}
+
+/// Stage 9: existing workspaces gain the plugin settings block — the master
+/// toggle defaults to OFF and the bundled AI assistant ships disabled. Writes
+/// config.json only when the fields are absent, so user changes are never
+/// overwritten.
+fn ensure_plugin_settings(root: &Path) -> Result<(), AppError> {
+    let path = root.join("config.json");
+    let raw: serde_json::Value = fsops::read_json(&path)?;
+    let backfilled = raw.get("pluginsEnabledByDefault").is_some()
+        && raw.get("pluginsEnabled").is_some()
+        && raw.get("pluginsState").is_some();
+    if backfilled {
+        return Ok(());
+    }
+    let mut cfg: crate::workspace::WorkspaceConfig = fsops::read_json(&path)?;
+    cfg.plugins_enabled_by_default = true;
+    cfg.plugins_enabled = false;
+    cfg.plugins_state
+        .entry("llm-assistant".to_string())
+        .or_insert(false);
+    fsops::write_json_atomic(&path, &cfg)
 }
 
 fn ensure_admin_role(root: &Path) -> Result<(), AppError> {

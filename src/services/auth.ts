@@ -24,6 +24,19 @@ export const AuthService = {
     return invokeCommand<SessionView>("authRefreshSession");
   },
 
+  /**
+   * "Remember me": verifies credentials and returns a machine-local token
+   * (HMAC-bound to the user's password hash) for the store.
+   */
+  loginRemember(login: string, password: string): Promise<Result<{ token: string }>> {
+    return invokeCommand<{ token: string }>("authLoginRemember", { login, password });
+  },
+
+  /** Restores a session from a machine-local remember-me token. */
+  autoLogin(token: string): Promise<Result<SessionView>> {
+    return invokeCommand<SessionView>("authAutoLogin", { token });
+  },
+
   register(
     login: string,
     password: string,

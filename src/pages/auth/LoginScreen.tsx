@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import styles from "@/components/onboarding/Onboarding.module.css";
+import { AuthService } from "@/services/auth";
+import { ConfigService } from "@/services/config";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 
@@ -14,6 +16,7 @@ export default function LoginScreen(): JSX.Element {
 
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,11 +28,18 @@ export default function LoginScreen(): JSX.Element {
     setBusy(true);
     setError(null);
     const result = await login(loginName.trim(), password);
-    setBusy(false);
     if (!result.ok) {
+      setBusy(false);
       setError(result.error.message);
       return;
     }
+    // "Запомнить меня": keep a machine-local token so the next launch can
+    // auto-login without a password.
+    if (rememberMe) {
+      const token = await AuthService.loginRemember(loginName.trim(), password);
+      await ConfigService.setRememberToken(token.ok ? token.value.token : null);
+    }
+    setBusy(false);
     const from = (location.state as { from?: string } | null)?.from;
     navigate(from && from.startsWith("/app") ? from : "/app/dashboard", { replace: true });
   }
@@ -83,6 +93,15 @@ export default function LoginScreen(): JSX.Element {
             }}
           />
         </div>
+
+        <label className={styles.rememberRow}>
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(event) => setRememberMe(event.target.checked)}
+          />
+          <span>Запомнить меня на этом компьютере</span>
+        </label>
 
         <div className={styles.actions}>
           <button className="btn-ghost" type="button" onClick={() => void chooseDifferentFolder()}>
