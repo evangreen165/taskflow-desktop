@@ -57,6 +57,10 @@ export default function SettingsPage(): JSX.Element {
   const [taskSettingsBusy, setTaskSettingsBusy] = useState(false);
   const [dailyFormat, setDailyFormat] = useState("YYYY-MM-DD");
   const [dailyBusy, setDailyBusy] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateContent, setTemplateContent] = useState("");
+  const [templates, setTemplates] = useState<Record<string, string>>({});
+  const [templateBusy, setTemplateBusy] = useState(false);
 
   // Load the extension-system settings, installed plugins, and (for admins)
   // the session lifetime once.
@@ -66,6 +70,11 @@ export default function SettingsPage(): JSX.Element {
     void PluginsService.list().then((result) => {
       if (!cancelled && result.ok) {
         setPluginList(result.value);
+      }
+    });
+    void WorkspaceService.getTemplates().then((result) => {
+      if (!cancelled && result.ok) {
+        setTemplates(result.value);
       }
     });
     if (can("workspace.settings")) {
@@ -150,6 +159,25 @@ export default function SettingsPage(): JSX.Element {
     }
     setDailyFormat(result.value);
     pushToast("Формат дневника сохранён", "success");
+  }
+
+  async function saveTemplate(): Promise<void> {
+    const name = templateName.trim();
+    if (!name) {
+      pushToast("Введите название шаблона", "error");
+      return;
+    }
+    setTemplateBusy(true);
+    const result = await WorkspaceService.saveTemplate(name, templateContent);
+    setTemplateBusy(false);
+    if (!result.ok) {
+      pushToast(result.error.message, "error");
+      return;
+    }
+    setTemplates(result.value);
+    setTemplateName("");
+    setTemplateContent("");
+    pushToast("Шаблон сохранён", "success");
   }
 
   function handleClearCache(): void {
@@ -400,6 +428,45 @@ export default function SettingsPage(): JSX.Element {
               </div>
             </div>
           ) : null}
+
+          <div className={styles.sessionBlock}>
+            <h3>Шаблоны</h3>
+            <p className={styles.muted}>
+              Пользовательские шаблоны Markdown доступны в редакторе заметок (📋 Шаблоны).
+            </p>
+            <input
+              type="text"
+              placeholder="Название шаблона"
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+            />
+            <textarea
+              className={styles.templateArea}
+              placeholder="Markdown-содержимое шаблона"
+              value={templateContent}
+              onChange={(event) => setTemplateContent(event.target.value)}
+            />
+            <button
+              className="btn-primary"
+              type="button"
+              disabled={templateBusy}
+              onClick={() => void saveTemplate()}
+            >
+              {templateBusy ? "Сохранение…" : "Сохранить шаблон"}
+            </button>
+            {Object.keys(templates).length > 0 ? (
+              <div className={styles.templateList}>
+                <span className={styles.muted}>Сохранённые:</span>
+                {Object.keys(templates)
+                  .sort()
+                  .map((name) => (
+                    <span key={name} className={styles.templateChip}>
+                      {name}
+                    </span>
+                  ))}
+              </div>
+            ) : null}
+          </div>
 
           <div className={styles.sessionBlock}>
             <h3>Диагностика</h3>

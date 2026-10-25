@@ -2,6 +2,30 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.10.3] - 2026-10-25
+
+### Added
+
+- **Callout dropdown**: the 💡 toolbar button now opens a menu with
+  🔵 Note / 🔴 Warning / 🟢 Tip / 🟣 Important; selecting one inserts
+  `> [!TYPE]\n> ` with the caret on the second line
+- **Custom templates**: `config.json > customTemplates` (name → Markdown),
+  `workspaceGetTemplates` / `workspaceSaveTemplate`, a «Шаблоны» section in
+  Settings → Общие, and the toolbar «📋 Шаблоны» menu now lists the hardcoded
+  defaults **and** the user's templates (refreshed on open)
+
+### Fixed
+
+- **Daily notes logic**: notes are matched to a day by their **local** creation
+  date (`createdAt` no longer compared as a UTC substring) or by the daily
+  format title; all matching notes are listed (multiple per day allowed). The
+  daily-note button still opens the exact-format note or creates it
+- Toolbar dropdowns are no longer clipped (`overflow: visible`, `z-index: 100`)
+
+### Changed
+
+- Version bumped to `0.10.3`
+
 ## [0.10.2] - 2026-10-25
 
 ### Added

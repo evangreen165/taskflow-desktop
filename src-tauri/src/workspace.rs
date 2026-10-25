@@ -81,6 +81,9 @@ pub struct WorkspaceConfig {
     /// Date-fns-style format for the daily-note title (default `YYYY-MM-DD`).
     #[serde(default = "default_daily_note_format")]
     pub daily_note_format: String,
+    /// User-defined Markdown templates (name → content).
+    #[serde(default)]
+    pub custom_templates: std::collections::HashMap<String, String>,
 }
 
 fn default_true() -> bool {
@@ -112,6 +115,30 @@ pub fn set_daily_note_format(root: &Path, value: &str) -> Result<String, AppErro
     }
     fsops::write_json_atomic(&root.join("config.json"), &cfg)?;
     Ok(cfg.daily_note_format)
+}
+
+/// All user-defined Markdown templates.
+pub fn custom_templates(
+    root: &Path,
+) -> Result<std::collections::HashMap<String, String>, AppError> {
+    Ok(read_cfg(root)?.custom_templates)
+}
+
+/// Saves (or replaces) a custom template and returns the full map.
+pub fn save_template(
+    root: &Path,
+    name: &str,
+    content: &str,
+) -> Result<std::collections::HashMap<String, String>, AppError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(AppError::new("INVALID_INPUT", "template name is required"));
+    }
+    let mut cfg = read_cfg(root)?;
+    cfg.custom_templates
+        .insert(name.to_string(), content.to_string());
+    fsops::write_json_atomic(&root.join("config.json"), &cfg)?;
+    Ok(cfg.custom_templates)
 }
 
 /// Task-related workspace settings exposed to the UI.
@@ -285,6 +312,7 @@ pub fn init(root: &Path, name: &str) -> Result<WorkspaceInfo, AppError> {
         trash_retention_days: 7,
         due_soon_notify_minutes: 60,
         daily_note_format: default_daily_note_format(),
+        custom_templates: Default::default(),
     };
     let mut bytes = serde_json::to_vec_pretty(&cfg)?;
     bytes.push(b'\n');

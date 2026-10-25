@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { RefObject } from "react";
+
+import { WorkspaceService } from "@/services/workspace";
 
 import styles from "./MarkdownToolbar.module.css";
 
@@ -103,7 +105,27 @@ export default function MarkdownToolbar({
   obsidianEnabled = false,
 }: MarkdownToolbarProps): JSX.Element {
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [calloutOpen, setCalloutOpen] = useState(false);
+  const [customTemplates, setCustomTemplates] = useState<{ name: string; content: string }[]>([]);
   const today = new Date().toISOString().slice(0, 10);
+
+  // Refresh custom templates whenever the templates menu opens.
+  useEffect(() => {
+    if (!templatesOpen) {
+      return;
+    }
+    let cancelled = false;
+    void WorkspaceService.getTemplates().then((result) => {
+      if (!cancelled && result.ok) {
+        setCustomTemplates(
+          Object.entries(result.value).map(([name, content]) => ({ name, content })),
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [templatesOpen]);
 
   const templates = [
     {
@@ -155,13 +177,14 @@ export default function MarkdownToolbar({
     });
   }
 
-  function insertCallout(): void {
+  function insertCallout(type: string): void {
+    const template = `> [!${type}]\n> `;
     apply((val, start, end) => {
-      const template = "> [!NOTE]\n> Текст";
       const next = val.slice(0, start) + template + val.slice(end);
       const cursor = start + template.length;
       return { next, selectionStart: cursor, selectionEnd: cursor };
     });
+    setCalloutOpen(false);
   }
 
   function insertTemplate(text: string): void {
@@ -234,9 +257,36 @@ export default function MarkdownToolbar({
         <button type="button" title="Блок кода" onClick={() => wrap("\n```\n", "\n```\n", "код")}>
           {"</>"}
         </button>
-        <button type="button" title="Блок внимания (callout)" onClick={insertCallout}>
-          💡
-        </button>
+        <div className={`${styles.menuWrap} ${styles.calloutWrap}`}>
+          <button
+            type="button"
+            title="Блок внимания (callout)"
+            onClick={() => setCalloutOpen((open) => !open)}
+          >
+            💡
+          </button>
+          {calloutOpen ? (
+            <div className={styles.dropdownMenu}>
+              {[
+                { type: "NOTE", label: "🔵 Note" },
+                { type: "WARNING", label: "🔴 Warning" },
+                { type: "TIP", label: "🟢 Tip" },
+                { type: "IMPORTANT", label: "🟣 Important" },
+              ].map((option) => (
+                <button
+                  key={option.type}
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    insertCallout(option.type);
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className={styles.group}>
@@ -273,6 +323,21 @@ export default function MarkdownToolbar({
                 }}
               >
                 {template.label}
+              </button>
+            ))}
+            {customTemplates.length > 0 ? (
+              <div className={styles.menuSeparator}>Мои шаблоны</div>
+            ) : null}
+            {customTemplates.map((template) => (
+              <button
+                key={`custom-${template.name}`}
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  insertTemplate(template.content);
+                }}
+              >
+                {template.name}
               </button>
             ))}
           </div>

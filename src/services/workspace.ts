@@ -58,6 +58,15 @@ export const WorkspaceService = {
   setDailyNoteFormat(value: string): Promise<Result<string>> {
     return invokeCommand<string>("workspaceSetDailyNoteFormat", { value });
   },
+
+  /** User-defined Markdown templates (name → content). */
+  getTemplates(): Promise<Result<Record<string, string>>> {
+    return invokeCommand<Record<string, string>>("workspaceGetTemplates");
+  },
+
+  saveTemplate(name: string, content: string): Promise<Result<Record<string, string>>> {
+    return invokeCommand<Record<string, string>>("workspaceSaveTemplate", { name, content });
+  },
 };
 
 export interface TaskSettings {

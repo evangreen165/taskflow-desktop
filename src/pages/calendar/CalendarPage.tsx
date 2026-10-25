@@ -147,17 +147,20 @@ export default function CalendarPage(): JSX.Element {
     };
   }, [obsidianEnabled, spaceId]);
 
-  /** Notes created on a given day (plus the daily note matching the format). */
+  /** Notes belonging to a day: created that local day OR the daily-format title. */
   function notesForDate(day: Date): NoteListItem[] {
     if (!obsidianEnabled) {
       return [];
     }
     const key = format(day, "yyyy-MM-dd");
     const dailyTitle = formatDailyTitle(day, dailyFormat).toLowerCase();
-    return notes.filter(
-      (note) =>
-        note.createdAt.slice(0, 10) === key || note.title.trim().toLowerCase() === dailyTitle,
-    );
+    return notes.filter((note) => {
+      const created = new Date(note.createdAt);
+      const createdKey = Number.isNaN(created.getTime()) ? null : format(created, "yyyy-MM-dd");
+      return (
+        createdKey === key || note.title.trim().toLowerCase() === dailyTitle
+      );
+    });
   }
 
   async function openDailyNote(): Promise<void> {

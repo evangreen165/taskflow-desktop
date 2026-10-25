@@ -309,6 +309,30 @@ pub async fn workspace_set_daily_note_format(
         .map_err(|e| AppError::new("IO", format!("daily note format write failed: {e}")))?
 }
 
+/// All user-defined Markdown templates (name → content).
+#[tauri::command(rename = "workspaceGetTemplates")]
+pub fn workspace_get_templates(
+    state: State<'_, AppState>,
+) -> Result<std::collections::HashMap<String, String>, AppError> {
+    state.require_auth()?;
+    workspace::custom_templates(&state.root()?)
+}
+
+/// Saves (or replaces) a custom template; returns the full map.
+#[tauri::command(rename = "workspaceSaveTemplate")]
+#[tracing::instrument(skip(state, content))]
+pub async fn workspace_save_template(
+    state: State<'_, AppState>,
+    name: String,
+    content: String,
+) -> Result<std::collections::HashMap<String, String>, AppError> {
+    state.require_auth()?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || workspace::save_template(&root, &name, &content))
+        .await
+        .map_err(|e| AppError::new("IO", format!("template write failed: {e}")))?
+}
+
 /// Opens an external URL (http/https) in the default browser, or a local
 /// file/folder path (including `file://` URLs) in the OS file explorer.
 #[tauri::command(rename = "openExternal")]

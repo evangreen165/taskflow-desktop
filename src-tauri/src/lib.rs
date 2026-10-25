@@ -221,6 +221,8 @@ pub fn run() {
             commands::workspace_set_task_settings,
             commands::workspace_get_daily_note_format,
             commands::workspace_set_daily_note_format,
+            commands::workspace_get_templates,
+            commands::workspace_save_template,
             commands::open_log_folder,
             commands::open_external,
             commands::audit_get_logs,

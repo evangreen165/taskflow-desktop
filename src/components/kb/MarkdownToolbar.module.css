@@ -8,6 +8,8 @@
   border-bottom: none;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   background: var(--surface-2);
+  /* Dropdowns must not be clipped by the toolbar. */
+  overflow: visible;
 }
 
 .group {
@@ -48,11 +50,41 @@
   border-right: none;
 }
 
+.menuWrap {
+  position: relative;
+}
+
+.calloutWrap {
+  display: inline-flex;
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 100;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+}
+
+.dropdownMenu button,
+.templatesMenu button {
+  text-align: left;
+  width: 100%;
+}
+
 .templatesMenu {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  z-index: 70;
+  z-index: 100;
   min-width: 160px;
   display: flex;
   flex-direction: column;
@@ -64,7 +96,11 @@
   box-shadow: var(--shadow-lg);
 }
 
-.templatesMenu button {
-  text-align: left;
-  width: 100%;
+.menuSeparator {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
 }
