@@ -78,6 +78,9 @@ pub struct WorkspaceConfig {
     /// (default 60).
     #[serde(default = "default_due_soon_notify_minutes")]
     pub due_soon_notify_minutes: u32,
+    /// Date-fns-style format for the daily-note title (default `YYYY-MM-DD`).
+    #[serde(default = "default_daily_note_format")]
+    pub daily_note_format: String,
 }
 
 fn default_true() -> bool {
@@ -90,6 +93,25 @@ fn default_trash_retention_days() -> u32 {
 
 fn default_due_soon_notify_minutes() -> u32 {
     60
+}
+
+fn default_daily_note_format() -> String {
+    "YYYY-MM-DD".to_string()
+}
+
+/// Daily-note title format (date-fns tokens; default `YYYY-MM-DD`).
+pub fn daily_note_format(root: &Path) -> Result<String, AppError> {
+    Ok(read_cfg(root)?.daily_note_format)
+}
+
+pub fn set_daily_note_format(root: &Path, value: &str) -> Result<String, AppError> {
+    let mut cfg = read_cfg(root)?;
+    cfg.daily_note_format = value.trim().to_string();
+    if cfg.daily_note_format.is_empty() {
+        cfg.daily_note_format = default_daily_note_format();
+    }
+    fsops::write_json_atomic(&root.join("config.json"), &cfg)?;
+    Ok(cfg.daily_note_format)
 }
 
 /// Task-related workspace settings exposed to the UI.
@@ -262,6 +284,7 @@ pub fn init(root: &Path, name: &str) -> Result<WorkspaceInfo, AppError> {
         auto_create_category_on_import: true,
         trash_retention_days: 7,
         due_soon_notify_minutes: 60,
+        daily_note_format: default_daily_note_format(),
     };
     let mut bytes = serde_json::to_vec_pretty(&cfg)?;
     bytes.push(b'\n');

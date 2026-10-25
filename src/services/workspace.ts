@@ -49,6 +49,15 @@ export const WorkspaceService = {
   openLogFolder(): Promise<Result<void>> {
     return invokeCommand<void>("openLogFolder");
   },
+
+  /** Daily-note title format (date-fns tokens, default `YYYY-MM-DD`). */
+  getDailyNoteFormat(): Promise<Result<string>> {
+    return invokeCommand<string>("workspaceGetDailyNoteFormat");
+  },
+
+  setDailyNoteFormat(value: string): Promise<Result<string>> {
+    return invokeCommand<string>("workspaceSetDailyNoteFormat", { value });
+  },
 };
 
 export interface TaskSettings {

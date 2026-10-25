@@ -288,6 +288,27 @@ pub fn open_log_folder(app: tauri::AppHandle) -> Result<(), AppError> {
         .map_err(|e| AppError::new("IO", format!("open log folder: {e}")))
 }
 
+/// Current daily-note title format (date-fns tokens).
+#[tauri::command(rename = "workspaceGetDailyNoteFormat")]
+pub fn workspace_get_daily_note_format(state: State<'_, AppState>) -> Result<String, AppError> {
+    state.require_auth()?;
+    workspace::daily_note_format(&state.root()?)
+}
+
+/// Persists the daily-note title format. Requires `workspace.settings`.
+#[tauri::command(rename = "workspaceSetDailyNoteFormat")]
+#[tracing::instrument(skip(state))]
+pub async fn workspace_set_daily_note_format(
+    state: State<'_, AppState>,
+    value: String,
+) -> Result<String, AppError> {
+    state.require_perm("workspace.settings")?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || workspace::set_daily_note_format(&root, &value))
+        .await
+        .map_err(|e| AppError::new("IO", format!("daily note format write failed: {e}")))?
+}
+
 /// Opens an external URL (http/https) in the default browser, or a local
 /// file/folder path (including `file://` URLs) in the OS file explorer.
 #[tauri::command(rename = "openExternal")]

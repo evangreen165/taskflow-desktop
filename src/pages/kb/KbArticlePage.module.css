@@ -636,3 +636,42 @@
 .backlink:hover {
   text-decoration: underline;
 }
+
+.wikiSuggest {
+  position: fixed;
+  z-index: 80;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+}
+
+.wikiSuggest button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.wikiSuggest button:hover {
+  background: var(--surface-2);
+}
+
+.wikiSuggest small {
+  color: var(--text-muted);
+  font-size: 11px;
+}

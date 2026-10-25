@@ -26,11 +26,14 @@ import {
   subWeeks,
 } from "date-fns";
 import { ru } from "date-fns/locale";
+import { useNavigate } from "react-router-dom";
 
 import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import { messageForCode } from "@/lib/errorMessages";
 import { priorityColor } from "@/lib/taskMeta";
+import { NotesService } from "@/services/notes";
 import { TasksService, type Task } from "@/services/tasks";
+import { WorkspaceService } from "@/services/workspace";
 import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useToastStore } from "@/stores/useToastStore";
 
@@ -89,6 +92,7 @@ function dayKey(day: Date): string {
 export default function CalendarPage(): JSX.Element {
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const pushToast = useToastStore((s) => s.push);
+  const navigate = useNavigate();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const [view, setView] = useState<CalendarView>("month");
@@ -97,6 +101,39 @@ export default function CalendarPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [dailyFormat, setDailyFormat] = useState("YYYY-MM-DD");
+
+  useEffect(() => {
+    void WorkspaceService.getDailyNoteFormat().then((result) => {
+      if (result.ok) {
+        setDailyFormat(result.value);
+      }
+    });
+  }, []);
+
+  async function openDailyNote(): Promise<void> {
+    if (!selectedDay || !spaceId) {
+      return;
+    }
+    const fmt = dailyFormat
+      .replace(/YYYY/g, "yyyy")
+      .replace(/YY/g, "yy")
+      .replace(/DD/g, "dd")
+      .replace(/D/g, "d");
+    const title = format(new Date(`${selectedDay}T00:00:00`), fmt, { locale: ru });
+    const resolved = await NotesService.resolveTitle(spaceId, title);
+    if (resolved.ok && resolved.value) {
+      navigate(`/app/kb/${resolved.value}`);
+      return;
+    }
+    await NotesService.createCategory(spaceId, "Дневник");
+    const created = await NotesService.create(spaceId, { title, category: "Дневник" });
+    if (created.ok) {
+      navigate(`/app/kb/${created.value.meta.id}`);
+    } else {
+      pushToast(created.error.message, "error");
+    }
+  }
 
   const range = useMemo(() => {
     if (view === "week") {
@@ -341,6 +378,13 @@ export default function CalendarPage(): JSX.Element {
                   ✕
                 </button>
               </div>
+              <button
+                type="button"
+                className={styles.dailyNoteBtn}
+                onClick={() => void openDailyNote()}
+              >
+                📓 Дневник на этот день
+              </button>
               <p className={styles.mutedHint}>
                 Перетащите задачу на день календаря или в «Без срока».
               </p>

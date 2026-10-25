@@ -12,7 +12,7 @@ import { useNoteEditor } from "@/hooks/useNoteEditor";
 import { usePermissions } from "@/hooks/usePermissions";
 import { categoryIcon, formatDate, NOTE_STATUS_LABELS } from "@/lib/kbMeta";
 import { AttachmentsService } from "@/services/attachments";
-import { NotesService, type Note, type NoteMeta } from "@/services/notes";
+import { NotesService, type Note, type NoteListItem, type NoteMeta } from "@/services/notes";
 import { useNoteStore } from "@/stores/useNoteStore";
 import { usePluginStore } from "@/stores/usePluginStore";
 import { useRecentStore } from "@/stores/useRecentStore";
@@ -35,6 +35,45 @@ function preprocessWikiLinks(content: string, enabled: boolean): string {
     const title = rawTitle.trim();
     return `[${title}](wikilink:${encodeURIComponent(title)})`;
   });
+}
+
+/** Approximates the caret position (viewport coords) for a textarea. */
+function caretCoordinates(
+  textarea: HTMLTextAreaElement,
+  text: string,
+  caret: number,
+): { top: number; left: number } {
+  const style = window.getComputedStyle(textarea);
+  const mirror = document.createElement("div");
+  mirror.style.position = "fixed";
+  mirror.style.visibility = "hidden";
+  mirror.style.pointerEvents = "none";
+  mirror.style.left = "0";
+  mirror.style.top = "0";
+  mirror.style.whiteSpace = "pre-wrap";
+  mirror.style.wordWrap = "break-word";
+  mirror.style.width = `${textarea.clientWidth}px`;
+  mirror.style.font = style.font;
+  mirror.style.padding = style.padding;
+  mirror.style.border = style.border;
+  mirror.style.boxSizing = style.boxSizing;
+  mirror.style.lineHeight = style.lineHeight;
+  mirror.style.letterSpacing = style.letterSpacing;
+  mirror.textContent = text.slice(0, caret);
+  const marker = document.createElement("span");
+  marker.textContent = "\u200b";
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+  const mirrorRect = mirror.getBoundingClientRect();
+  const markerRect = marker.getBoundingClientRect();
+  const textareaRect = textarea.getBoundingClientRect();
+  const top = textareaRect.top + (markerRect.top - mirrorRect.top) - textarea.scrollTop + 20;
+  const left = textareaRect.left + (markerRect.left - mirrorRect.left);
+  document.body.removeChild(mirror);
+  return {
+    top: Math.max(8, Math.min(top, window.innerHeight - 240)),
+    left: Math.max(8, Math.min(left, window.innerWidth - 300)),
+  };
 }
 
 function WikiLink({
@@ -561,6 +600,68 @@ function ArticleEditor({
   // Preserves the caret and scroll position across controlled-textarea
   // re-renders so typing does not jump the editor to the bottom.
   const caretRef = useRef<{ start: number; end: number; scrollTop: number } | null>(null);
+  const [allNotes, setAllNotes] = useState<NoteListItem[]>([]);
+  const [wikiSuggest, setWikiSuggest] = useState<{
+    start: number;
+    items: NoteListItem[];
+    top: number;
+    left: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void NotesService.list(spaceId, {}).then((result) => {
+      if (!cancelled && result.ok) {
+        setAllNotes(result.value);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [spaceId]);
+
+  function updateWikiSuggest(value: string, caret: number): void {
+    if (!obsidianEnabled) {
+      setWikiSuggest(null);
+      return;
+    }
+    const before = value.slice(0, caret);
+    const open = before.lastIndexOf("[[");
+    if (open === -1) {
+      setWikiSuggest(null);
+      return;
+    }
+    const between = before.slice(open + 2);
+    if (between.includes("]]") || between.includes("[") || between.includes("\n")) {
+      setWikiSuggest(null);
+      return;
+    }
+    const query = between.trim().toLowerCase();
+    const items = allNotes
+      .filter((note) => note.title.toLowerCase().includes(query))
+      .slice(0, 8);
+    const element = textareaRef.current;
+    const coords = element ? caretCoordinates(element, value, caret) : { top: 0, left: 0 };
+    setWikiSuggest({ start: open, items, top: coords.top, left: coords.left });
+  }
+
+  function insertWikiSuggestion(title: string): void {
+    const element = textareaRef.current;
+    const suggestion = wikiSuggest;
+    if (!element || !suggestion) {
+      return;
+    }
+    const caret = element.selectionStart;
+    const next =
+      draft.content.slice(0, suggestion.start) + `[[${title}]]` + draft.content.slice(caret);
+    setContent(next);
+    setWikiSuggest(null);
+    requestAnimationFrame(() => {
+      element.focus();
+      const position = suggestion.start + title.length + 4;
+      element.setSelectionRange(position, position);
+    });
+  }
   // Explicit category list from the backend (`categories.json`).
   const categories = useNoteStore((s) => s.categories);
 
@@ -790,8 +891,49 @@ function ArticleEditor({
               rows={16}
               value={draft.content}
               placeholder="Текст статьи (Markdown)"
-              onChange={(e) => handleContentChange(e.target.value)}
+              onChange={(e) => {
+                handleContentChange(e.target.value);
+                updateWikiSuggest(e.target.value, e.target.selectionStart);
+              }}
+              onBlur={() => setWikiSuggest(null)}
+              onKeyDown={(e) => {
+                if (!wikiSuggest) {
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setWikiSuggest(null);
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  const first = wikiSuggest.items[0];
+                  if (first) {
+                    insertWikiSuggestion(first.title);
+                  } else {
+                    setWikiSuggest(null);
+                  }
+                }
+              }}
             />
+            {wikiSuggest && wikiSuggest.items.length > 0 ? (
+              <div
+                className={styles.wikiSuggest}
+                style={{ top: wikiSuggest.top, left: wikiSuggest.left }}
+              >
+                {wikiSuggest.items.map((note) => (
+                  <button
+                    key={note.id}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      insertWikiSuggestion(note.title);
+                    }}
+                  >
+                    <span>{note.title}</span>
+                    <small>{note.category}</small>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </>
         ) : (
           <>

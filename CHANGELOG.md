@@ -2,6 +2,27 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.10.1] - 2026-10-25
+
+### Added
+
+- **Wiki-link autocomplete**: typing `[[` in the article editor (Obsidian
+  plugin enabled) opens a caret-anchored dropdown of notes, filtered as you
+  type; clicking a suggestion inserts `[[Title]]` (Enter picks the first,
+  Escape/empty Enter closes it)
+- **Inline PDF viewer**: `.pdf` attachment links render an embedded
+  `<object type="application/pdf">` (base64) with a 600px scrollable viewer
+  and an «open file» fallback link
+- **Daily notes**: the calendar day panel has «📓 Дневник на этот день» — it
+  resolves the note named by the configurable format, creating it in the
+  «Дневник» category when missing, then navigates to it. Settings → Общие has
+  the «Формат названия дневника» input (default `YYYY-MM-DD`, stored in
+  `config.json > dailyNoteFormat`)
+
+### Changed
+
+- Version bumped to `0.10.1`
+
 ## [0.10.0] - 2026-10-25
 
 ### Added

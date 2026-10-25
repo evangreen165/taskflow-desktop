@@ -55,6 +55,8 @@ export default function SettingsPage(): JSX.Element {
   const [importBusy, setImportBusy] = useState(false);
   const [taskSettings, setTaskSettings] = useState({ trashRetentionDays: "7", dueSoonNotifyMinutes: "60" });
   const [taskSettingsBusy, setTaskSettingsBusy] = useState(false);
+  const [dailyFormat, setDailyFormat] = useState("YYYY-MM-DD");
+  const [dailyBusy, setDailyBusy] = useState(false);
 
   // Load the extension-system settings, installed plugins, and (for admins)
   // the session lifetime once.
@@ -83,6 +85,11 @@ export default function SettingsPage(): JSX.Element {
             trashRetentionDays: String(result.value.trashRetentionDays),
             dueSoonNotifyMinutes: String(result.value.dueSoonNotifyMinutes),
           });
+        }
+      });
+      void WorkspaceService.getDailyNoteFormat().then((result) => {
+        if (!cancelled && result.ok) {
+          setDailyFormat(result.value);
         }
       });
     }
@@ -131,6 +138,18 @@ export default function SettingsPage(): JSX.Element {
     if (!result.ok) {
       pushToast(result.error.message, "error");
     }
+  }
+
+  async function saveDailyFormat(): Promise<void> {
+    setDailyBusy(true);
+    const result = await WorkspaceService.setDailyNoteFormat(dailyFormat);
+    setDailyBusy(false);
+    if (!result.ok) {
+      pushToast(result.error.message, "error");
+      return;
+    }
+    setDailyFormat(result.value);
+    pushToast("Формат дневника сохранён", "success");
   }
 
   function handleClearCache(): void {
@@ -353,6 +372,30 @@ export default function SettingsPage(): JSX.Element {
                   onClick={() => void saveTaskSettings()}
                 >
                   {taskSettingsBusy ? "Сохранение…" : "Сохранить"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {can("workspace.settings") ? (
+            <div className={styles.sessionBlock}>
+              <h3>Дневник</h3>
+              <p className={styles.muted}>
+                Формат названия ежедневной заметки (date-fns, например YYYY-MM-DD).
+              </p>
+              <div className={styles.sessionRow}>
+                <input
+                  type="text"
+                  value={dailyFormat}
+                  onChange={(event) => setDailyFormat(event.target.value)}
+                />
+                <button
+                  className="btn-primary"
+                  type="button"
+                  disabled={dailyBusy}
+                  onClick={() => void saveDailyFormat()}
+                >
+                  {dailyBusy ? "Сохранение…" : "Сохранить"}
                 </button>
               </div>
             </div>

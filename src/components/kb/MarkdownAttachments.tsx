@@ -97,6 +97,12 @@ export function AttachmentLink({
   }
 
   const sha = shaFromAttachmentUrl(href);
+  const label = typeof children === "string" ? children : "";
+
+  // PDF attachments render inline so the user can scroll through them.
+  if (label.toLowerCase().endsWith(".pdf")) {
+    return <PdfAttachment sha={sha} label={label} />;
+  }
 
   async function handleClick(event: React.MouseEvent<HTMLAnchorElement>): Promise<void> {
     event.preventDefault();
@@ -116,5 +122,64 @@ export function AttachmentLink({
     >
       {busy ? "Открытие…" : <>📄 {children}</>}
     </a>
+  );
+}
+
+/** Inline PDF viewer backed by the `attachmentGetBase64` data URL. */
+function PdfAttachment({ sha, label }: { sha: string; label: string }): JSX.Element {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void AttachmentsService.getBase64(sha).then((result) => {
+      if (cancelled) {
+        return;
+      }
+      if (result.ok) {
+        setDataUrl(result.value);
+      } else {
+        setFailed(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sha]);
+
+  return (
+    <div style={{ margin: "12px 0" }}>
+      {dataUrl ? (
+        <object
+          data={dataUrl}
+          type="application/pdf"
+          style={{
+            width: "100%",
+            height: 600,
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+          }}
+        >
+          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
+            Не удалось показать PDF встроенно.
+          </p>
+        </object>
+      ) : failed ? (
+        <span style={{ color: "var(--text-muted)" }}>Не удалось загрузить PDF.</span>
+      ) : (
+        <span style={{ color: "var(--text-muted)" }}>Загрузка PDF…</span>
+      )}
+      <div style={{ marginTop: 6 }}>
+        <a
+          href="#"
+          onClick={(event) => {
+            event.preventDefault();
+            void AttachmentsService.open(sha);
+          }}
+        >
+          📄 {label}
+        </a>
+      </div>
+    </div>
   );
 }
