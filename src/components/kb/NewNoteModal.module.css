@@ -29,3 +29,13 @@
   gap: 8px;
   margin-top: 6px;
 }
+
+.categoryRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.categoryRow select {
+  flex: 1;
+}

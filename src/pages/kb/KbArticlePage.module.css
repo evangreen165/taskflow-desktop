@@ -585,3 +585,13 @@
   font-weight: 600;
   vertical-align: middle;
 }
+
+.categoryRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.categoryRow select {
+  flex: 1;
+}

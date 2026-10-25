@@ -287,3 +287,33 @@ pub fn open_log_folder(app: tauri::AppHandle) -> Result<(), AppError> {
         .open_path(dir.to_string_lossy().into_owned(), None::<&str>)
         .map_err(|e| AppError::new("IO", format!("open log folder: {e}")))
 }
+
+/// Opens an external URL (http/https) in the default browser, or a local
+/// file/folder path (including `file://` URLs) in the OS file explorer.
+#[tauri::command(rename = "openExternal")]
+pub fn open_external(app: tauri::AppHandle, target: String) -> Result<(), AppError> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let target = target.trim();
+    if target.is_empty() {
+        return Err(AppError::new("INVALID_INPUT", "empty link"));
+    }
+    if target.starts_with("http://") || target.starts_with("https://") {
+        return app
+            .opener()
+            .open_url(target.to_string(), None::<&str>)
+            .map_err(|e| AppError::new("IO", format!("open url: {e}")));
+    }
+    // Normalise `file:///C:/…` (and the non-standard `file://C:/…`) to a
+    // native path before handing it to the OS.
+    let path = if let Some(rest) = target.strip_prefix("file:///") {
+        rest.to_string()
+    } else if let Some(rest) = target.strip_prefix("file://") {
+        rest.to_string()
+    } else {
+        target.to_string()
+    };
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| AppError::new("IO", format!("open path: {e}")))
+}

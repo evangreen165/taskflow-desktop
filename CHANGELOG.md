@@ -2,6 +2,31 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.9.8] - 2026-10-25
+
+### Fixed
+
+- **Markdown links no longer freeze the app**: `http(s)` links open in the
+  default browser and local file/folder paths (including `file://`) open in the
+  OS file explorer via the new `openExternal` command; the webview never
+  navigates away
+- **Toolbar lists & tables**: bullet/numbered lists now apply to every selected
+  line, renumber, and toggle off; the table button asks for rows/columns and
+  inserts a clean header + separator + body table
+- **Editor scroll jumping**: the caret and `scrollTop` are preserved across
+  controlled-textarea re-renders (typing and image insertion no longer jump to
+  the bottom)
+- **Strict category dropdown**: the article editor and «Новая статья» modal use
+  a `<select>` populated from `notesListCategories`, with a «+» button that
+  creates a new category via `notesCreateCategory`
+- **Calendar day-panel DnD**: day-panel chips use unique drag ids (`panel:<id>`)
+  so dragging from the panel to a day or into «Без срока» works again (the
+  duplicate ids with the grid broke dnd-kit)
+
+### Changed
+
+- Version bumped to `0.9.8`
+
 ## [0.9.7] - 2026-10-25
 
 ### Added

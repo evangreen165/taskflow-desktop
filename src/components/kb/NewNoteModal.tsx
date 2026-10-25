@@ -30,12 +30,25 @@ export default function NewNoteModal({
     void NotesService.listCategories(spaceId).then((result) => {
       if (!cancelled && result.ok) {
         setAllCategories(result.value);
+        setCategory((current) => current || result.value[0] || "");
       }
     });
     return () => {
       cancelled = true;
     };
   }, [spaceId]);
+
+  async function addCategory(): Promise<void> {
+    const name = window.prompt("Название новой категории")?.trim();
+    if (!name) {
+      return;
+    }
+    const result = await NotesService.createCategory(spaceId, name);
+    if (result.ok) {
+      setAllCategories(result.value);
+      setCategory(name);
+    }
+  }
 
   async function submit(): Promise<void> {
     if (!title.trim() || !category.trim()) {
@@ -87,19 +100,28 @@ export default function NewNoteModal({
 
         <div className="field">
           <label htmlFor="nn-category">Категория</label>
-          <input
-            id="nn-category"
-            type="text"
-            list="nn-categories"
-            value={category}
-            placeholder="Например, Онбординг"
-            onChange={(event) => setCategory(event.target.value)}
-          />
-          <datalist id="nn-categories">
-            {allCategories.map((cat) => (
-              <option key={cat} value={cat} />
-            ))}
-          </datalist>
+          <div className={styles.categoryRow}>
+            <select
+              id="nn-category"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              <option value="">— выберите категорию —</option>
+              {allCategories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn-ghost"
+              title="Новая категория"
+              onClick={() => void addCategory()}
+            >
+              +
+            </button>
+          </div>
         </div>
 
         <div className={styles.actions}>

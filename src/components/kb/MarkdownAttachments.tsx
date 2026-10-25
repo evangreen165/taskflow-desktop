@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { isAttachmentUrl, shaFromAttachmentUrl } from "@/lib/attachments";
 import { AttachmentsService } from "@/services/attachments";
+import { SystemService } from "@/services/system";
 
 /**
  * Renders `attachment://` images: fetches the base64 data URL and shows it.
@@ -55,9 +56,10 @@ export function AttachmentImage({
 }
 
 /**
- * Renders `attachment://` links: clicking opens the stored file with the OS
- * default application (via the `attachmentOpen` command). `preventDefault` is
- * always called so the webview never navigates to the custom protocol.
+ * Renders links. `attachment://` opens the stored file with the OS default app;
+ * `http(s)` URLs open in the default browser and local file/folder paths open
+ * in the OS file explorer. Every non-anchor link calls `preventDefault` so the
+ * webview never navigates away (which used to freeze the app).
  */
 export function AttachmentLink({
   href,
@@ -68,8 +70,30 @@ export function AttachmentLink({
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
 
-  if (!href || !isAttachmentUrl(href)) {
+  if (!href) {
+    return <a>{children}</a>;
+  }
+
+  // In-page anchors stay native.
+  if (href.startsWith("#")) {
     return <a href={href}>{children}</a>;
+  }
+
+  if (!isAttachmentUrl(href)) {
+    async function handleExternal(event: React.MouseEvent<HTMLAnchorElement>): Promise<void> {
+      event.preventDefault();
+      if (busy) {
+        return;
+      }
+      setBusy(true);
+      await SystemService.openExternal(href ?? "");
+      setBusy(false);
+    }
+    return (
+      <a href={href} title="Открыть ссылку" onClick={(event) => void handleExternal(event)}>
+        {children}
+      </a>
+    );
   }
 
   const sha = shaFromAttachmentUrl(href);

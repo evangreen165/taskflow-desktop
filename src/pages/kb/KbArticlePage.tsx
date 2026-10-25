@@ -417,6 +417,9 @@ function ArticleEditor({
   } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
+  // Preserves the caret and scroll position across controlled-textarea
+  // re-renders so typing does not jump the editor to the bottom.
+  const caretRef = useRef<{ start: number; end: number; scrollTop: number } | null>(null);
   // Explicit category list from the backend (`categories.json`).
   const categories = useNoteStore((s) => s.categories);
 
@@ -433,13 +436,51 @@ function ArticleEditor({
     const element = textareaRef.current;
     const start = element?.selectionStart ?? draft.content.length;
     const end = element?.selectionEnd ?? start;
+    const scrollTop = element?.scrollTop ?? 0;
     const next = draft.content.slice(0, start) + markdown + draft.content.slice(end);
     setContent(next);
     requestAnimationFrame(() => {
       element?.focus();
       const position = start + markdown.length;
       element?.setSelectionRange(position, position);
+      if (element) {
+        element.scrollTop = scrollTop;
+      }
     });
+  }
+
+  /** Controlled-textarea change that restores caret/scroll after re-render. */
+  function handleContentChange(next: string): void {
+    const element = textareaRef.current;
+    if (element) {
+      caretRef.current = {
+        start: element.selectionStart,
+        end: element.selectionEnd,
+        scrollTop: element.scrollTop,
+      };
+    }
+    setContent(next);
+  }
+
+  useEffect(() => {
+    const element = textareaRef.current;
+    const saved = caretRef.current;
+    if (element && saved) {
+      element.setSelectionRange(saved.start, saved.end);
+      element.scrollTop = saved.scrollTop;
+      caretRef.current = null;
+    }
+  }, [draft.content]);
+
+  async function handleAddCategory(): Promise<void> {
+    const name = window.prompt("Название новой категории")?.trim();
+    if (!name) {
+      return;
+    }
+    const ok = await useNoteStore.getState().addCategory(spaceId, name);
+    if (ok) {
+      setCategory(name);
+    }
   }
 
   /**
@@ -524,18 +565,31 @@ function ArticleEditor({
         </div>
         <div className="field">
           <label htmlFor="ae-category">Категория</label>
-          <input
-            id="ae-category"
-            type="text"
-            list="ae-categories"
-            value={draft.category}
-            onChange={(e) => setCategory(e.target.value)}
-          />
-          <datalist id="ae-categories">
-            {Array.from(new Set(categories.filter(Boolean))).map((category) => (
-              <option key={category} value={category} />
-            ))}
-          </datalist>
+          <div className={styles.categoryRow}>
+            <select
+              id="ae-category"
+              value={draft.category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="">— выберите категорию —</option>
+              {Array.from(new Set(categories.filter(Boolean))).map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+              {draft.category && !categories.includes(draft.category) ? (
+                <option value={draft.category}>{draft.category}</option>
+              ) : null}
+            </select>
+            <button
+              type="button"
+              className="btn-ghost"
+              title="Новая категория"
+              onClick={() => void handleAddCategory()}
+            >
+              +
+            </button>
+          </div>
         </div>
       </div>
 
@@ -600,7 +654,7 @@ function ArticleEditor({
               rows={16}
               value={draft.content}
               placeholder="Текст статьи (Markdown)"
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => handleContentChange(e.target.value)}
             />
           </>
         ) : (

@@ -175,7 +175,10 @@ export default function CalendarPage(): JSX.Element {
     if (!over) {
       return;
     }
-    const task = tasks.find((item) => item.id === active.id);
+    // Day-panel chips use a `panel:` prefix so they don't collide with the
+    // same task rendered in the calendar grid (dnd-kit requires unique ids).
+    const activeId = String(active.id).replace(/^panel:/, "");
+    const task = tasks.find((item) => item.id === activeId);
     if (!task) {
       return;
     }
@@ -348,6 +351,7 @@ export default function CalendarPage(): JSX.Element {
                   <DraggableTask
                     key={task.id}
                     task={task}
+                    dragId={`panel:${task.id}`}
                     onOpen={() => setSelectedTaskId(task.id)}
                   />
                 ))
@@ -414,9 +418,17 @@ function DayCell({
   );
 }
 
-function DraggableTask({ task, onOpen }: { task: Task; onOpen: () => void }): JSX.Element {
+function DraggableTask({
+  task,
+  onOpen,
+  dragId,
+}: {
+  task: Task;
+  onOpen: () => void;
+  dragId?: string;
+}): JSX.Element {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: task.id,
+    id: dragId ?? task.id,
   });
 
   const draggedRef = useRef(false);

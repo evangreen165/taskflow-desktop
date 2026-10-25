@@ -220,6 +220,7 @@ pub fn run() {
             commands::workspace_get_task_settings,
             commands::workspace_set_task_settings,
             commands::open_log_folder,
+            commands::open_external,
             commands::audit_get_logs,
             commands::create_admin,
             commands::auth_login,
