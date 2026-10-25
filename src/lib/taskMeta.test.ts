@@ -10,13 +10,14 @@ import {
 } from "@/lib/taskMeta";
 
 describe("KANBAN_COLUMNS", () => {
-  it("lists the five statuses in board order", () => {
+  it("lists the six statuses in board order", () => {
     expect(KANBAN_COLUMNS.map((column) => column.status)).toEqual([
       "new",
       "in_progress",
       "review",
       "done",
       "rejected",
+      "trash",
     ]);
     expect(KANBAN_COLUMNS.map((column) => column.label)).toEqual([
       "Новая",
@@ -24,6 +25,7 @@ describe("KANBAN_COLUMNS", () => {
       "На проверке",
       "Готово",
       "Отклонена",
+      "На удаление",
     ]);
   });
 });

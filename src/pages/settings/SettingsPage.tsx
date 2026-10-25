@@ -53,6 +53,8 @@ export default function SettingsPage(): JSX.Element {
   const [sessionSaved, setSessionSaved] = useState(false);
   const [importCategory, setImportCategory] = useState(true);
   const [importBusy, setImportBusy] = useState(false);
+  const [taskSettings, setTaskSettings] = useState({ trashRetentionDays: "7", dueSoonNotifyMinutes: "60" });
+  const [taskSettingsBusy, setTaskSettingsBusy] = useState(false);
 
   // Load the extension-system settings, installed plugins, and (for admins)
   // the session lifetime once.
@@ -75,6 +77,14 @@ export default function SettingsPage(): JSX.Element {
           setImportCategory(result.value);
         }
       });
+      void WorkspaceService.getTaskSettings().then((result) => {
+        if (!cancelled && result.ok) {
+          setTaskSettings({
+            trashRetentionDays: String(result.value.trashRetentionDays),
+            dueSoonNotifyMinutes: String(result.value.dueSoonNotifyMinutes),
+          });
+        }
+      });
     }
     return () => {
       cancelled = true;
@@ -90,6 +100,37 @@ export default function SettingsPage(): JSX.Element {
       return;
     }
     setImportCategory(result.value);
+  }
+
+  async function saveTaskSettings(): Promise<void> {
+    const trash = Number(taskSettings.trashRetentionDays);
+    const due = Number(taskSettings.dueSoonNotifyMinutes);
+    if (!Number.isFinite(trash) || trash < 0 || !Number.isFinite(due) || due < 0) {
+      pushToast("Введите неотрицательные значения", "error");
+      return;
+    }
+    setTaskSettingsBusy(true);
+    const result = await WorkspaceService.setTaskSettings({
+      trashRetentionDays: Math.floor(trash),
+      dueSoonNotifyMinutes: Math.floor(due),
+    });
+    setTaskSettingsBusy(false);
+    if (!result.ok) {
+      pushToast(result.error.message, "error");
+      return;
+    }
+    setTaskSettings({
+      trashRetentionDays: String(result.value.trashRetentionDays),
+      dueSoonNotifyMinutes: String(result.value.dueSoonNotifyMinutes),
+    });
+    pushToast("Настройки задач сохранены", "success");
+  }
+
+  async function openLogs(): Promise<void> {
+    const result = await WorkspaceService.openLogFolder();
+    if (!result.ok) {
+      pushToast(result.error.message, "error");
+    }
   }
 
   function handleClearCache(): void {
@@ -272,6 +313,58 @@ export default function SettingsPage(): JSX.Element {
               </label>
             </div>
           ) : null}
+
+          {can("workspace.settings") ? (
+            <div className={styles.sessionBlock}>
+              <h3>Задачи</h3>
+              <p className={styles.muted}>
+                Через сколько дней задачи из «На удаление» удаляются навсегда и за сколько минут
+                предупреждать о сроке (0 — отключить).
+              </p>
+              <div className={styles.sessionRow}>
+                <span className={styles.muted}>Удаление из корзины:</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={taskSettings.trashRetentionDays}
+                  onChange={(event) =>
+                    setTaskSettings({ ...taskSettings, trashRetentionDays: event.target.value })
+                  }
+                />
+                <span className={styles.muted}>дн.</span>
+              </div>
+              <div className={styles.sessionRow}>
+                <span className={styles.muted}>Напоминание о сроке:</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={taskSettings.dueSoonNotifyMinutes}
+                  onChange={(event) =>
+                    setTaskSettings({ ...taskSettings, dueSoonNotifyMinutes: event.target.value })
+                  }
+                />
+                <span className={styles.muted}>мин.</span>
+                <button
+                  className="btn-primary"
+                  type="button"
+                  disabled={taskSettingsBusy}
+                  onClick={() => void saveTaskSettings()}
+                >
+                  {taskSettingsBusy ? "Сохранение…" : "Сохранить"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className={styles.sessionBlock}>
+            <h3>Диагностика</h3>
+            <p className={styles.muted}>Логи приложения хранятся локально на этом компьютере.</p>
+            <button className="btn-ghost" type="button" onClick={() => void openLogs()}>
+              Открыть папку с логами
+            </button>
+          </div>
 
           <div className={styles.updateBlock}>
             <h3>Кэш</h3>

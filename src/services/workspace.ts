@@ -36,4 +36,22 @@ export const WorkspaceService = {
   setImportSettings(value: boolean): Promise<Result<boolean>> {
     return invokeCommand<boolean>("workspaceSetImportSettings", { value });
   },
+
+  getTaskSettings(): Promise<Result<TaskSettings>> {
+    return invokeCommand<TaskSettings>("workspaceGetTaskSettings");
+  },
+
+  setTaskSettings(settings: TaskSettings): Promise<Result<TaskSettings>> {
+    return invokeCommand<TaskSettings>("workspaceSetTaskSettings", { settings });
+  },
+
+  /** Opens the machine-local app log folder in the OS file explorer. */
+  openLogFolder(): Promise<Result<void>> {
+    return invokeCommand<void>("openLogFolder");
+  },
 };
+
+export interface TaskSettings {
+  trashRetentionDays: number;
+  dueSoonNotifyMinutes: number;
+}

@@ -61,6 +61,10 @@
   background: var(--red);
 }
 
+.trash {
+  background: var(--text-muted);
+}
+
 .label {
   white-space: nowrap;
 }

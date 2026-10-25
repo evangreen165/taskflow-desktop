@@ -247,3 +247,43 @@ pub async fn workspace_set_import_settings(
         .await
         .map_err(|e| AppError::new("IO", format!("import settings write failed: {e}")))?
 }
+
+/// Current task settings (trash retention, due-soon window).
+#[tauri::command(rename = "workspaceGetTaskSettings")]
+pub fn workspace_get_task_settings(
+    state: State<'_, AppState>,
+) -> Result<workspace::TaskSettings, AppError> {
+    state.require_auth()?;
+    workspace::task_settings(&state.root()?)
+}
+
+/// Persists the task settings. Requires `workspace.settings`.
+#[tauri::command(rename = "workspaceSetTaskSettings")]
+#[tracing::instrument(skip(state))]
+pub async fn workspace_set_task_settings(
+    state: State<'_, AppState>,
+    settings: workspace::TaskSettings,
+) -> Result<workspace::TaskSettings, AppError> {
+    state.require_perm("workspace.settings")?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || workspace::set_task_settings(&root, &settings))
+        .await
+        .map_err(|e| AppError::new("IO", format!("task settings write failed: {e}")))?
+}
+
+/// Opens the machine-local application log folder in the OS file explorer.
+#[tauri::command(rename = "openLogFolder")]
+pub fn open_log_folder(app: tauri::AppHandle) -> Result<(), AppError> {
+    use tauri::Manager;
+    use tauri_plugin_opener::OpenerExt;
+
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| AppError::new("IO", format!("resolve app data dir: {e}")))?
+        .join("logs");
+    std::fs::create_dir_all(&dir).map_err(|e| AppError::io("create logs dir", e))?;
+    app.opener()
+        .open_path(dir.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|e| AppError::new("IO", format!("open log folder: {e}")))
+}

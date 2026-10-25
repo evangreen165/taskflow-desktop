@@ -1122,11 +1122,26 @@ function AuditTab(): JSX.Element {
   const [dateFilter, setDateFilter] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    void UsersService.list().then((result) => {
+      if (result.ok) {
+        setUserNames(Object.fromEntries(result.value.map((u) => [u.id, u.displayName])));
+      }
+    });
+  }, []);
 
   const load = useCallback(async () => {
     setBusy(true);
     setError(null);
-    const result = await AuditService.getLogs(AUDIT_PAGE_SIZE, offset, userFilter, actionFilter, dateFilter);
+    const result = await AuditService.getLogs(
+      AUDIT_PAGE_SIZE,
+      offset,
+      userFilter,
+      actionFilter,
+      dateFilter,
+    );
     setBusy(false);
     if (!result.ok) {
       setError(result.error.message);
@@ -1146,6 +1161,18 @@ function AuditTab(): JSX.Element {
     }
     const text = JSON.stringify(entry.meta);
     return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+  }
+
+  /** `u:<uuid>` → display name (fallback: short id); `s:<reason>` → «Система». */
+  function formatUser(userId: string): string {
+    if (userId.startsWith("u:")) {
+      const id = userId.slice(2);
+      return userNames[id] ?? id.slice(0, 8);
+    }
+    if (userId.startsWith("s:")) {
+      return `Система (${userId.slice(2)})`;
+    }
+    return userId || "—";
   }
 
   return (
@@ -1231,7 +1258,7 @@ function AuditTab(): JSX.Element {
                 items.map((entry, index) => (
                   <tr key={`${entry.ts}-${index}`}>
                     <td className={styles.nowrap}>{formatDate(entry.ts)}</td>
-                    <td className={styles.mono}>{entry.userId}</td>
+                    <td>{formatUser(entry.userId)}</td>
                     <td className={styles.mono}>{entry.action}</td>
                     <td className={styles.mono}>
                       {entry.entity}

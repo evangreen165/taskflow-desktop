@@ -70,10 +70,60 @@ pub struct WorkspaceConfig {
     /// source file's parent folder.
     #[serde(default = "default_true")]
     pub auto_create_category_on_import: bool,
+    /// Days a task stays in the trash before it is permanently deleted
+    /// (default 7).
+    #[serde(default = "default_trash_retention_days")]
+    pub trash_retention_days: u32,
+    /// Notify assignees when a task is due within this many minutes
+    /// (default 60).
+    #[serde(default = "default_due_soon_notify_minutes")]
+    pub due_soon_notify_minutes: u32,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_trash_retention_days() -> u32 {
+    7
+}
+
+fn default_due_soon_notify_minutes() -> u32 {
+    60
+}
+
+/// Task-related workspace settings exposed to the UI.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskSettings {
+    pub trash_retention_days: u32,
+    pub due_soon_notify_minutes: u32,
+}
+
+pub fn task_settings(root: &Path) -> Result<TaskSettings, AppError> {
+    let cfg = read_cfg(root)?;
+    Ok(TaskSettings {
+        trash_retention_days: cfg.trash_retention_days,
+        due_soon_notify_minutes: cfg.due_soon_notify_minutes,
+    })
+}
+
+pub fn set_task_settings(root: &Path, settings: &TaskSettings) -> Result<TaskSettings, AppError> {
+    let mut cfg = read_cfg(root)?;
+    cfg.trash_retention_days = settings.trash_retention_days;
+    cfg.due_soon_notify_minutes = settings.due_soon_notify_minutes;
+    fsops::write_json_atomic(&root.join("config.json"), &cfg)?;
+    Ok(settings.clone())
+}
+
+/// Trash retention in days (0 disables auto-deletion).
+pub fn trash_retention_days(root: &Path) -> Result<u32, AppError> {
+    Ok(read_cfg(root)?.trash_retention_days)
+}
+
+/// Due-soon notification window in minutes (0 disables the check).
+pub fn due_soon_notify_minutes(root: &Path) -> Result<u32, AppError> {
+    Ok(read_cfg(root)?.due_soon_notify_minutes)
 }
 
 /// Current import setting: auto-create category from the source folder name.
@@ -210,6 +260,8 @@ pub fn init(root: &Path, name: &str) -> Result<WorkspaceInfo, AppError> {
         plugins_state: std::collections::BTreeMap::from([("llm-assistant".to_string(), false)]),
         session_lifetime_days: DEFAULT_SESSION_LIFETIME_DAYS,
         auto_create_category_on_import: true,
+        trash_retention_days: 7,
+        due_soon_notify_minutes: 60,
     };
     let mut bytes = serde_json::to_vec_pretty(&cfg)?;
     bytes.push(b'\n');

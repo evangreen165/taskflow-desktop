@@ -573,3 +573,15 @@
 .shareOption input {
   accent-color: var(--accent);
 }
+
+.categoryBadge {
+  display: inline-block;
+  margin-left: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+}

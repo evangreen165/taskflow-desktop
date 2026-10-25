@@ -7,7 +7,7 @@ use crate::audit::now_rfc3339;
 use crate::error::AppError;
 use crate::fsops;
 use crate::spaces::Space;
-use crate::tasks::Task;
+use crate::tasks::{Task, TaskStatus};
 use crate::users::{self, UserInfo};
 
 /// Keep per-user notification files bounded.
@@ -19,6 +19,7 @@ pub enum NotificationType {
     TaskAssigned,
     CommentMention,
     SpaceAdded,
+    TaskExpiringSoon,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,6 +137,80 @@ pub fn new_notification(
 
 fn task_link(space_id: &str, task_id: &str) -> String {
     format!("/app/tasks?task={task_id}&space={space_id}")
+}
+
+/// Parses a due date/time from the several formats the app accepts:
+/// RFC 3339, `YYYY-MM-DDTHH:mm` (datetime-local), or `YYYY-MM-DD`.
+fn parse_due(value: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    use chrono::{NaiveDate, NaiveDateTime, TimeZone, Utc};
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(value) {
+        return Some(dt.with_timezone(&Utc));
+    }
+    if let Ok(naive) = NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M") {
+        return Some(Utc.from_utc_datetime(&naive));
+    }
+    if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+        return Some(Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0)?));
+    }
+    None
+}
+
+fn already_notified(
+    root: &Path,
+    user_id: &str,
+    link: &str,
+    kind: NotificationType,
+) -> Result<bool, AppError> {
+    Ok(list(root, user_id)?.iter().any(|n| {
+        !n.is_read && n.kind == kind && n.link_to.as_deref() == Some(link)
+    }))
+}
+
+/// Notifies assignees when a task is due within the next `window_minutes`.
+/// Tasks that are done/rejected/trashed are skipped, and each assignee gets at
+/// most one unread notification per task.
+pub fn on_tasks_due_soon(
+    root: &Path,
+    space_id: &str,
+    tasks: &[Task],
+    window_minutes: u32,
+) -> Result<(), AppError> {
+    if window_minutes == 0 {
+        return Ok(());
+    }
+    let now = chrono::Utc::now();
+    let horizon = now + chrono::Duration::minutes(window_minutes as i64);
+    for task in tasks {
+        if matches!(
+            task.status,
+            TaskStatus::Done | TaskStatus::Rejected | TaskStatus::Trash
+        ) {
+            continue;
+        }
+        let Some(due) = task.due_date.as_deref().and_then(parse_due) else {
+            continue;
+        };
+        if due < now || due > horizon {
+            continue;
+        }
+        let link = task_link(space_id, &task.id);
+        for assignee in &task.assignees {
+            if already_notified(root, assignee, &link, NotificationType::TaskExpiringSoon)? {
+                continue;
+            }
+            push(
+                root,
+                new_notification(
+                    assignee,
+                    NotificationType::TaskExpiringSoon,
+                    "Задача скоро истекает",
+                    &task.title,
+                    Some(link.clone()),
+                ),
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn notify_assignees(

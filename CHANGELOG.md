@@ -2,6 +2,34 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.9.5] - 2026-10-25
+
+### Added
+
+- **Trash column & auto-deletion**: new `trash` status + `trashedAt`; the
+  Kanban board has a 6th «На удаление» column (drag a task there to soft-delete
+  it). `tasks_list` sweeps trashed tasks older than `trashRetentionDays`
+  (default 7, 0 = off) — configurable in Settings → Общие
+- **Due time**: the task due field is now a `datetime-local` input (ISO
+  `YYYY-MM-DDTHH:mm`); `tasks_list` notifies assignees when a task is due
+  within `dueSoonNotifyMinutes` (default 60, 0 = off), deduped per task
+- **Open log folder**: «Настройки → Общие → Диагностика» button +
+  `openLogFolder` command (tauri-plugin-opener) for the machine-local logs
+- **Notes category badge**: the article title shows «Категория: …»
+- **Audit coverage**: `task.create`/`task.edit`/`task.delete`/`task.status`
+  and `article.create`/`article.edit`/`article.delete` are now recorded;
+  the audit tab resolves `u:<uuid>` to the user's display name and shows
+  «Система» for system actors
+
+### Fixed
+
+- Collapsed-sidebar user menu is rendered with `position: fixed`, so it is no
+  longer clipped by the sidebar in icon-only mode
+
+### Changed
+
+- Version bumped to `0.9.5`
+
 ## [0.9.4] - 2026-10-24
 
 ### Added

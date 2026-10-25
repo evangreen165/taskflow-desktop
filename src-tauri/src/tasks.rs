@@ -34,6 +34,10 @@ pub struct Task {
     pub watchers: Vec<String>,
     #[serde(default)]
     pub project_id: Option<String>,
+    /// When the task was moved to the `trash` status (ISO 8601). Used by the
+    /// auto-delete sweep.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trashed_at: Option<String>,
     /// Set only in cross-space dashboard responses; never persisted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub space_id: Option<String>,
@@ -50,6 +54,9 @@ pub enum TaskStatus {
     Review,
     Done,
     Rejected,
+    /// Soft-deleted: hidden in normal views, permanently removed after the
+    /// configured retention period.
+    Trash,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -259,6 +266,7 @@ pub fn create(
         version: 1,
         watchers: payload.watchers,
         project_id: payload.project_id,
+        trashed_at: None,
         space_id: None,
         space_name: None,
     };
@@ -323,10 +331,44 @@ pub fn change_status(
         return Err(version_conflict(&task));
     }
     task.status = status;
+    // Entering the trash stamps `trashedAt`; leaving it clears the stamp.
+    if status == TaskStatus::Trash {
+        if task.trashed_at.is_none() {
+            task.trashed_at = Some(now_rfc3339());
+        }
+    } else {
+        task.trashed_at = None;
+    }
     task.version += 1;
     task.updated_at = now_rfc3339();
     fsops::write_json_atomic(&task_path(root, id)?, &task)?;
     Ok(task)
+}
+
+/// Permanently deletes tasks that have been in the trash for longer than
+/// `retention_days`. Returns the number of removed tasks.
+pub fn purge_trashed(root: &Path, retention_days: u32) -> Result<usize, AppError> {
+    if retention_days == 0 {
+        return Ok(0);
+    }
+    let cutoff = chrono::Utc::now() - chrono::Duration::days(retention_days as i64);
+    let mut removed = 0usize;
+    for task in list(root)? {
+        if task.status != TaskStatus::Trash {
+            continue;
+        }
+        let Some(trashed_at) = task.trashed_at.as_deref() else {
+            continue;
+        };
+        let Ok(ts) = chrono::DateTime::parse_from_rfc3339(trashed_at) else {
+            continue;
+        };
+        if ts.with_timezone(&chrono::Utc) < cutoff {
+            delete(root, &task.id)?;
+            removed += 1;
+        }
+    }
+    Ok(removed)
 }
 
 /// Persists an existing task (used by cross-space moves).

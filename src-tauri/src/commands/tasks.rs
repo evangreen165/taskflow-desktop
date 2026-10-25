@@ -4,9 +4,10 @@ use tauri::State;
 
 use taskflow_macros::write_command;
 
+use crate::audit;
 use crate::error::AppError;
 use crate::roles;
-use crate::session::Session;
+use crate::session::{ActorId, Session};
 use crate::spaces::Space;
 use crate::tasks::{self, CreateTaskPayload, Task, TaskFilter, TaskStatus, UpdateTaskPayload};
 use crate::AppState;
@@ -118,6 +119,10 @@ pub async fn tasks_list(
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
     let view_all = has_perm(&root, &session, "task.view_all")?;
     let user_id = session.user_id.clone();
+    // Sweep trashed tasks older than the retention window, then list.
+    let retention = crate::workspace::trash_retention_days(&root)?;
+    let purge_dir = space_dir.clone();
+    let _ = tokio::task::spawn_blocking(move || tasks::purge_trashed(&purge_dir, retention)).await;
     let mut tasks = tokio::task::spawn_blocking(move || tasks::list(&space_dir))
         .await
         .map_err(|e| AppError::new("IO", format!("tasks list task failed: {e}")))??;
@@ -127,6 +132,11 @@ pub async fn tasks_list(
                 || task.author_id == user_id
                 || task.assignees.iter().any(|a| a == &user_id))
     });
+    // Notify assignees about tasks due soon (deduped per task).
+    let window = crate::workspace::due_soon_notify_minutes(&root)?;
+    if let Err(err) = crate::notifications::on_tasks_due_soon(&root, &space_id, &tasks, window) {
+        tracing::warn!(error = %err.message, "failed to create due-soon notifications");
+    }
     Ok(tasks)
 }
 
@@ -176,6 +186,13 @@ pub fn tasks_create_impl(
     validate_assignees(&space, &payload.assignees)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
     let task = tasks::create(&space_dir, &session.user_id, payload)?;
+    audit::emit(
+        &ActorId::User(session.user_id.clone()),
+        "task.create",
+        "task",
+        &task.id,
+        serde_json::json!({ "title": task.title, "space": space_id }),
+    );
     if let Err(err) =
         crate::notifications::on_task_created(&root, &session.user_id, &space_id, &task)
     {
@@ -218,6 +235,13 @@ pub fn tasks_update_impl(
         validate_assignees(&space, &added)?;
     }
     let updated = tasks::update(&space_dir, &id, patch, expected_version)?;
+    audit::emit(
+        &ActorId::User(session.user_id.clone()),
+        "task.edit",
+        "task",
+        &updated.id,
+        serde_json::json!({ "title": updated.title, "space": space_id }),
+    );
     if let Err(err) = crate::notifications::on_task_updated(
         &root,
         &session.user_id,
@@ -255,7 +279,15 @@ pub fn tasks_change_status_impl(
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
     let current = tasks::get(&space_dir, &id)?;
     ensure_visible(&root, &session, &current)?;
-    tasks::change_status(&space_dir, &id, status, expected_version)
+    let updated = tasks::change_status(&space_dir, &id, status, expected_version)?;
+    audit::emit(
+        &ActorId::User(session.user_id.clone()),
+        "task.status",
+        "task",
+        &updated.id,
+        serde_json::json!({ "status": status, "space": space_id }),
+    );
+    Ok(updated)
 }
 
 #[write_command(rename = "tasksChangeStatus")]
@@ -281,7 +313,15 @@ pub fn tasks_delete_impl(
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
     let task = tasks::get(&space_dir, &id)?;
     ensure_visible(&root, &session, &task)?;
-    tasks::delete(&space_dir, &id)
+    tasks::delete(&space_dir, &id)?;
+    audit::emit(
+        &ActorId::User(session.user_id.clone()),
+        "task.delete",
+        "task",
+        &id,
+        serde_json::json!({ "title": task.title, "space": space_id }),
+    );
+    Ok(())
 }
 
 #[write_command(rename = "tasksDelete")]

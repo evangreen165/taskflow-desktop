@@ -12,6 +12,7 @@ export const KANBAN_COLUMNS: KanbanColumn[] = [
   { status: "review", label: "На проверке" },
   { status: "done", label: "Готово" },
   { status: "rejected", label: "Отклонена" },
+  { status: "trash", label: "На удаление" },
 ];
 
 export const PRIORITY_LABELS: Record<TaskPriority, string> = {
@@ -52,7 +53,7 @@ export function formatDueDate(iso: string | null): string | null {
 
 /** A task is overdue when its due date is in the past and it is not done. */
 export function isOverdue(iso: string | null, status: TaskStatus): boolean {
-  if (!iso || status === "done") {
+  if (!iso || status === "done" || status === "trash") {
     return false;
   }
   const date = new Date(iso);

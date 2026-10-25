@@ -28,6 +28,7 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   review: "var(--accent)",
   done: "var(--green)",
   rejected: "var(--red)",
+  trash: "var(--text-muted)",
 };
 
 const PIE_STATUSES: TaskStatus[] = ["new", "in_progress", "review", "done"];

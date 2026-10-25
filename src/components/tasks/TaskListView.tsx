@@ -17,6 +17,7 @@ const STATUS_CLASS: Record<TaskStatus, string> = {
   review: styles.statusReview ?? "",
   done: styles.statusDone ?? "",
   rejected: styles.statusRejected ?? "",
+  trash: styles.statusRejected ?? "",
 };
 
 const MAX_AVATARS = 3;

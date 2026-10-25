@@ -234,7 +234,12 @@ export default function KbArticlePage(): JSX.Element {
 
       {mode === "read" ? (
         <div className={styles.read}>
-          <h1 className={styles.title}>{meta.title}</h1>
+          <h1 className={styles.title}>
+            {meta.title}
+            {meta.category ? (
+              <span className={styles.categoryBadge}>Категория: {meta.category}</span>
+            ) : null}
+          </h1>
           {meta.tags.length > 0 ? (
             <div className={styles.tags}>
               {meta.tags.map((tag) => (

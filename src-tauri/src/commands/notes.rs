@@ -10,7 +10,8 @@ use crate::attachments;
 use crate::error::AppError;
 use crate::fsops;
 use crate::notes::{self, Note, NoteMeta, NoteStatus};
-use crate::session::Session;
+use crate::audit;
+use crate::session::{ActorId, Session};
 use crate::AppState;
 
 /// Requires `perm`, except in the user's own personal space: the owner always
@@ -269,7 +270,15 @@ pub fn notes_create_impl(
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
-    notes::create(&space_dir, &session.user_id, &title, &category, &content)
+    let note = notes::create(&space_dir, &session.user_id, &title, &category, &content)?;
+    audit::emit(
+        &ActorId::User(session.user_id.clone()),
+        "article.create",
+        "note",
+        &note.meta.id,
+        serde_json::json!({ "title": note.meta.title, "space": space_id }),
+    );
+    Ok(note)
 }
 
 #[write_command(rename = "notesCreate")]
@@ -298,7 +307,7 @@ pub fn notes_update_impl(
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
-    notes::update(
+    let note = notes::update(
         &space_dir,
         &id,
         &title,
@@ -306,7 +315,15 @@ pub fn notes_update_impl(
         &tags,
         &content,
         expected_version,
-    )
+    )?;
+    audit::emit(
+        &ActorId::User(session.user_id.clone()),
+        "article.edit",
+        "note",
+        &note.meta.id,
+        serde_json::json!({ "title": note.meta.title, "space": space_id }),
+    );
+    Ok(note)
 }
 
 #[write_command(rename = "notesUpdate")]
@@ -366,7 +383,15 @@ pub fn notes_delete_impl(
     let root = state.root()?;
     crate::spaces::require_access(&root, &space_id, &session)?;
     let space_dir = crate::spaces::space_dir(&root, &space_id)?;
-    notes::delete(&space_dir, &id)
+    notes::delete(&space_dir, &id)?;
+    audit::emit(
+        &ActorId::User(session.user_id.clone()),
+        "article.delete",
+        "note",
+        &id,
+        serde_json::json!({ "space": space_id }),
+    );
+    Ok(())
 }
 
 #[write_command(rename = "notesDelete")]

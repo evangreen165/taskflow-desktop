@@ -60,6 +60,21 @@ export default function WorkspaceLayout(): JSX.Element {
   const forced = session?.mustChangePassword ?? false;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const userBtnRef = useRef<HTMLButtonElement | null>(null);
+  // The user menu is rendered with `position: fixed` so it is never clipped by
+  // the sidebar (which can overflow-hide in collapsed mode).
+  const [userMenuPos, setUserMenuPos] = useState<{ bottom: number; left: number } | null>(null);
+
+  function toggleUserMenu(): void {
+    if (!menuOpen && userBtnRef.current) {
+      const rect = userBtnRef.current.getBoundingClientRect();
+      setUserMenuPos({
+        bottom: Math.max(8, window.innerHeight - rect.top + 8),
+        left: Math.max(8, rect.left),
+      });
+    }
+    setMenuOpen((open) => !open);
+  }
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try {
@@ -328,7 +343,21 @@ export default function WorkspaceLayout(): JSX.Element {
         <div className={styles.footer}>
           <div className={styles.menuWrap} ref={menuRef}>
             {menuOpen ? (
-              <div className={styles.userMenu} role="menu">
+              <div
+                className={styles.userMenu}
+                role="menu"
+                style={
+                  userMenuPos
+                    ? {
+                        position: "fixed",
+                        bottom: userMenuPos.bottom,
+                        left: userMenuPos.left,
+                        right: "auto",
+                        width: 220,
+                      }
+                    : undefined
+                }
+              >
                 <button
                   type="button"
                   role="menuitem"
@@ -364,11 +393,12 @@ export default function WorkspaceLayout(): JSX.Element {
             ) : null}
             <button
               type="button"
+              ref={userBtnRef}
               className={styles.userCard}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               title={`${user?.displayName ?? "—"} · ${role?.name ?? "—"}`}
-              onClick={() => setMenuOpen((open) => !open)}
+              onClick={toggleUserMenu}
             >
               <Avatar
                 name={user?.displayName ?? "—"}

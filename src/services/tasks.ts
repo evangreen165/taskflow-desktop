@@ -1,7 +1,7 @@
 import type { Result } from "@/lib/errors";
 import { invokeCommand } from "@/lib/invoke";
 
-export type TaskStatus = "new" | "in_progress" | "review" | "done" | "rejected";
+export type TaskStatus = "new" | "in_progress" | "review" | "done" | "rejected" | "trash";
 export type TaskPriority = "low" | "medium" | "high" | "critical";
 
 export interface ChecklistItem {
@@ -44,6 +44,8 @@ export interface Task {
   version: number;
   watchers: string[];
   projectId: string | null;
+  /** When the task was moved to the trash (ISO 8601), if applicable. */
+  trashedAt?: string | null;
   /** Set only in cross-space dashboard responses. */
   spaceId: string | null;
   spaceName: string | null;

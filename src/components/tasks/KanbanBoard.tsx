@@ -99,14 +99,16 @@ function Column({
         <span className={`${styles.dot} ${styles[column.status] ?? ""}`} />
         <span className={styles.label}>{column.label}</span>
         <span className={styles.count}>{tasks.length}</span>
-        <button
-          className={styles.plus}
-          type="button"
-          title={`Добавить в «${column.label}»`}
-          onClick={() => onAdd(column.status)}
-        >
-          +
-        </button>
+        {column.status !== "trash" ? (
+          <button
+            className={styles.plus}
+            type="button"
+            title={`Добавить в «${column.label}»`}
+            onClick={() => onAdd(column.status)}
+          >
+            +
+          </button>
+        ) : null}
       </header>
 
       <div className={styles.cards}>

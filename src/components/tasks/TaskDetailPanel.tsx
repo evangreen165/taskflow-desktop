@@ -350,7 +350,7 @@ export default function TaskDetailPanel({
               <label htmlFor="td-due">Срок</label>
               <input
                 id="td-due"
-                type="date"
+                type="datetime-local"
                 value={draft.dueDate ?? ""}
                 onChange={(event) => setDueDate(event.target.value)}
               />
