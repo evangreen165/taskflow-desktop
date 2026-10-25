@@ -34,34 +34,35 @@ export function tabTitleForPath(pathname: string): string {
 }
 
 /**
- * Navigates and updates the tab system. The tab store — not the router — owns
- * the main area content:
- * - note paths obey `openNotesInNewTab` (new tab vs. replace the active one);
- * - task deep links obey `openTasksInNewTab`;
- * - every other page reuses an existing tab or opens one.
+ * Navigates within the app. For `/app/*` paths the tab store is the only
+ * source of truth: the URL is updated with `history.replaceState` (so F5
+ * works) but NO router navigation / history entry is created, and a synthetic
+ * `popstate` lets the top-level router notice a login → workspace transition.
+ * Non-app paths (`/login`, `/onboarding`) still use the router.
  */
 export function appNavigate(path: string, options?: AppNavigateOptions): void {
-  navigateFn?.(path, options);
   if (!path.startsWith("/app")) {
+    navigateFn?.(path, options);
     return;
   }
+
+  const url = `${window.location.pathname}${window.location.search}#${path}`;
+  window.history.replaceState(null, "", url);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+
   const state = useTabStore.getState();
   const title = options?.title ?? tabTitleForPath(path);
-  if (path.startsWith("/app/kb/")) {
-    if (state.openNotesInNewTab) {
-      state.openTab(title, path);
-    } else {
-      state.replaceActiveTab(title, path);
-    }
-    return;
-  }
+
   if (path.startsWith("/app/tasks") && path.includes("task=")) {
-    if (state.openTasksInNewTab) {
-      state.openTab(title, path);
-    } else {
-      state.openTab(title, "/app/tasks");
-    }
+    state.openTab(title, state.openTasksInNewTab ? path : "/app/tasks");
     return;
   }
-  state.openTab(title, path);
+
+  const replace =
+    options?.replace === true || (path.startsWith("/app/kb/") && !state.openNotesInNewTab);
+  if (replace) {
+    state.replaceActiveTab(title, path);
+  } else {
+    state.openTab(title, path);
+  }
 }

@@ -12,6 +12,7 @@ import { NotesService } from "@/services/notes";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNoteStore } from "@/stores/useNoteStore";
 import { useSpaceStore } from "@/stores/useSpaceStore";
+import { useTabStore } from "@/stores/useTabStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useUserDirectory } from "@/stores/useUserDirectory";
 
@@ -295,7 +296,10 @@ export default function KbPage(): JSX.Element {
                 key={item.id}
                 item={item}
                 author={users[item.authorId]}
-                onOpen={() => appNavigate(`/app/kb/${item.id}`)}
+                onOpen={() => {
+                  const openInNew = useTabStore.getState().openNotesInNewTab;
+                  appNavigate(`/app/kb/${item.id}`, { title: "Заметка", replace: !openInNew });
+                }}
               />
             ))}
           </div>
@@ -307,7 +311,10 @@ export default function KbPage(): JSX.Element {
           spaceId={spaceId}
           categories={categories}
           onClose={() => setModalOpen(false)}
-          onCreated={(note) => appNavigate(`/app/kb/${note.meta.id}`)}
+          onCreated={(note) => {
+            const openInNew = useTabStore.getState().openNotesInNewTab;
+            appNavigate(`/app/kb/${note.meta.id}`, { title: "Заметка", replace: !openInNew });
+          }}
         />
       ) : null}
     </div>

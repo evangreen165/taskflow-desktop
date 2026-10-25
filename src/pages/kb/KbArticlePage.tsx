@@ -372,7 +372,7 @@ export default function KbArticlePage({ noteId }: { noteId?: string } = {}): JSX
       <div className={styles.page}>
         <div className={styles.notFound}>
           <h1>Статья не найдена</h1>
-          <button className="btn-primary" type="button" onClick={() => appNavigate("/app/kb")}>
+          <button className="btn-primary" type="button" onClick={() => appNavigate("/app/kb", { replace: true })}>
             Назад в Заметки
           </button>
         </div>
@@ -409,7 +409,7 @@ export default function KbArticlePage({ noteId }: { noteId?: string } = {}): JSX
     }
     setConfirmDelete(false);
     pushToast("Статья удалена", "success");
-    appNavigate("/app/kb");
+    appNavigate("/app/kb", { replace: true });
   }
 
   async function openHistory(): Promise<void> {
@@ -451,7 +451,7 @@ export default function KbArticlePage({ noteId }: { noteId?: string } = {}): JSX
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <button className={styles.back} type="button" onClick={() => appNavigate("/app/kb")}>
+        <button className={styles.back} type="button" onClick={() => appNavigate("/app/kb", { replace: true })}>
           ← Заметки
         </button>
         <div className={styles.headerMeta}>

@@ -2,6 +2,29 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.10.10] - 2026-10-25
+
+### Fixed
+
+- **Tabs fully decoupled from router history**: `appNavigate` no longer calls
+  React Router for `/app/*` paths — it updates the tab store and the URL via
+  `history.replaceState` (so F5 works) with no history entries, then emits a
+  synthetic `popstate` only for the login → workspace transition. The workspace
+  no longer observes the router (`useLocation` removed) and initialises the
+  active tab from `window.location.hash` once on mount, so Back/Forward can
+  never spawn tabs
+- **Tab settings**: toggling «Вкладки» updates `useTabStore` immediately via
+  `setState`, and the note grid explicitly reads `openNotesInNewTab` and passes
+  `replace: true` when it is off; `appNavigate` honours a unified `replace`
+  flag (`replaceActiveTab`) for any path
+- **Navigation cleanup**: no `navigate()`/`useNavigate` remains outside
+  `main.tsx`; the article «← К заметкам» buttons replace the current tab rather
+  than using browser history
+
+### Changed
+
+- Version bumped to `0.10.10`
+
 ## [0.10.9] - 2026-10-25
 
 ### Fixed

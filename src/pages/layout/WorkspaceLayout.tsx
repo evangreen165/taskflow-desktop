@@ -1,5 +1,4 @@
 ﻿import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useLocation } from "react-router-dom";
 
 import Avatar from "@/components/Avatar";
 import NoAccess from "@/components/auth/NoAccess";
@@ -103,7 +102,6 @@ export default function WorkspaceLayout(): JSX.Element {
   const session = useAuthStore((s) => s.session);
   const logout = useAuthStore((s) => s.logout);
   const { can, role, user } = usePermissions();
-  const location = useLocation();
   const tabs = useTabStore((s) => s.tabs);
   const activeTabId = useTabStore((s) => s.activeTabId);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
@@ -205,23 +203,22 @@ export default function WorkspaceLayout(): JSX.Element {
     });
   }, []);
 
-  // Initialise the active tab from the URL once (deep link / F5). After this,
-  // only the tab store and `appNavigate` drive navigation — the router is not
-  // observed, so Back/Forward cannot spawn tabs.
+  // Initialise the active tab from the URL once (deep link / F5). This reads
+  // `window.location.hash` directly — the component does not observe the
+  // router, so Back/Forward can never spawn tabs.
   useEffect(() => {
     if (initializedTabsRef.current) {
       return;
     }
     initializedTabsRef.current = true;
-    const path = location.pathname;
+    const hashPath = window.location.hash.replace(/^#/, "");
+    const path = hashPath.startsWith("/app") ? hashPath : "/app/dashboard";
     if (path === "/app" || path === "/app/") {
       appNavigate("/app/dashboard", { replace: true });
       return;
     }
-    if (path.startsWith("/app")) {
-      useTabStore.getState().openTab(tabTitleForPath(path), path);
-    }
-  }, [location.pathname]);
+    useTabStore.getState().openTab(tabTitleForPath(path), path);
+  }, []);
 
   // Poll notifications so assignments from other users appear without a reload.
   useEffect(() => {

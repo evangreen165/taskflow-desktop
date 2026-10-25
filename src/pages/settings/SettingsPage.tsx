@@ -207,7 +207,11 @@ export default function SettingsPage(): JSX.Element {
     openTasksInNewTab: boolean;
   }): Promise<void> {
     setTabSettings(next);
-    useTabStore.getState().setTabSettings(next.openNotesInNewTab, next.openTasksInNewTab);
+    // Update the tab store immediately so the very next note click honours it.
+    useTabStore.setState({
+      openNotesInNewTab: next.openNotesInNewTab,
+      openTasksInNewTab: next.openTasksInNewTab,
+    });
     setTabBusy(true);
     const result = await WorkspaceService.setTabSettings(next);
     setTabBusy(false);
@@ -216,9 +220,10 @@ export default function SettingsPage(): JSX.Element {
       return;
     }
     setTabSettings(result.value);
-    useTabStore
-      .getState()
-      .setTabSettings(result.value.openNotesInNewTab, result.value.openTasksInNewTab);
+    useTabStore.setState({
+      openNotesInNewTab: result.value.openNotesInNewTab,
+      openTasksInNewTab: result.value.openTasksInNewTab,
+    });
   }
 
   function handleClearCache(): void {
