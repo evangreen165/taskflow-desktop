@@ -2,6 +2,24 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.10.9] - 2026-10-25
+
+### Fixed
+
+- **Plugin tab titles**: `appNavigate` accepts an optional `title`; the sidebar
+  plugin item and the plugins list pass the plugin's display name, and
+  `openTab` updates the title of an existing tab for that path
+- **Tab settings**: saving «Вкладки» in Settings now also updates
+  `useTabStore` immediately (previously only `config.json` and the next mount
+  were updated), so `openNotesInNewTab` is honoured right away
+- **All navigation goes through the tab logic**: replaced the remaining
+  `useNavigate` calls (login, onboarding, change-folder, tabs bar) with
+  `appNavigate`; only `main.tsx` (router registration) uses the router directly
+
+### Changed
+
+- Version bumped to `0.10.9`
+
 ## [0.10.8] - 2026-10-25
 
 ### Fixed

@@ -8,6 +8,8 @@ import { useTabStore } from "@/stores/useTabStore";
 export interface AppNavigateOptions {
   state?: unknown;
   replace?: boolean;
+  /** Tab title override (e.g. a plugin's display name). */
+  title?: string;
 }
 
 let navigateFn: ((path: string, options?: AppNavigateOptions) => void) | null = null;
@@ -44,7 +46,7 @@ export function appNavigate(path: string, options?: AppNavigateOptions): void {
     return;
   }
   const state = useTabStore.getState();
-  const title = tabTitleForPath(path);
+  const title = options?.title ?? tabTitleForPath(path);
   if (path.startsWith("/app/kb/")) {
     if (state.openNotesInNewTab) {
       state.openTab(title, path);

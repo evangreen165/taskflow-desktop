@@ -1,5 +1,4 @@
-import { useNavigate } from "react-router-dom";
-
+import { appNavigate } from "@/lib/navigate";
 import { useTabStore } from "@/stores/useTabStore";
 
 import styles from "./TabsBar.module.css";
@@ -9,15 +8,14 @@ export default function TabsBar(): JSX.Element | null {
   const tabs = useTabStore((s) => s.tabs);
   const activeTabId = useTabStore((s) => s.activeTabId);
   const closeTab = useTabStore((s) => s.closeTab);
-  const navigate = useNavigate();
 
   if (tabs.length === 0) {
     return null;
   }
 
-  function activate(tab: { id: string; path: string }): void {
+  function activate(tab: { id: string; path: string; title: string }): void {
     useTabStore.getState().setActiveTab(tab.id);
-    navigate(tab.path);
+    appNavigate(tab.path, { title: tab.title });
   }
 
   function close(id: string): void {
@@ -26,7 +24,11 @@ export default function TabsBar(): JSX.Element | null {
     if (wasActive) {
       const state = useTabStore.getState();
       const next = state.tabs.find((tab) => tab.id === state.activeTabId);
-      navigate(next ? next.path : "/app/dashboard");
+      if (next) {
+        appNavigate(next.path, { title: next.title });
+      } else {
+        appNavigate("/app/dashboard");
+      }
     }
   }
 

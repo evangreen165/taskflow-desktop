@@ -62,7 +62,11 @@ export default function PluginsPage(): JSX.Element {
               <button
                 className="btn-primary"
                 type="button"
-                onClick={() => appNavigate(`/app/plugins/${encodeURIComponent(plugin.id)}`)}
+                onClick={() =>
+                  appNavigate(`/app/plugins/${encodeURIComponent(plugin.id)}`, {
+                    title: plugin.name,
+                  })
+                }
               >
                 Открыть
               </button>

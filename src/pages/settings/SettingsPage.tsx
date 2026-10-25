@@ -11,6 +11,7 @@ import { WorkspaceService } from "@/services/workspace";
 import { useAppStore } from "@/stores/useAppStore";
 import { usePluginStore } from "@/stores/usePluginStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
+import { useTabStore } from "@/stores/useTabStore";
 import { useThemeStore, type AppTheme } from "@/stores/useThemeStore";
 import { useToastStore } from "@/stores/useToastStore";
 
@@ -206,6 +207,7 @@ export default function SettingsPage(): JSX.Element {
     openTasksInNewTab: boolean;
   }): Promise<void> {
     setTabSettings(next);
+    useTabStore.getState().setTabSettings(next.openNotesInNewTab, next.openTasksInNewTab);
     setTabBusy(true);
     const result = await WorkspaceService.setTabSettings(next);
     setTabBusy(false);
@@ -214,6 +216,9 @@ export default function SettingsPage(): JSX.Element {
       return;
     }
     setTabSettings(result.value);
+    useTabStore
+      .getState()
+      .setTabSettings(result.value.openNotesInNewTab, result.value.openTasksInNewTab);
   }
 
   function handleClearCache(): void {

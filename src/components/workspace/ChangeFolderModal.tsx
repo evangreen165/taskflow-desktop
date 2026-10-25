@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useNavigate } from "react-router-dom";
 
+import { appNavigate } from "@/lib/navigate";
 import { WorkspaceService } from "@/services/workspace";
 import { useAppStore } from "@/stores/useAppStore";
 
@@ -15,7 +15,6 @@ import styles from "./ChangeFolderModal.module.css";
 export default function ChangeFolderModal({ onClose }: { onClose: () => void }): JSX.Element {
   const workspace = useAppStore((s) => s.workspace);
   const switchWorkspace = useAppStore((s) => s.switchWorkspace);
-  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +42,7 @@ export default function ChangeFolderModal({ onClose }: { onClose: () => void }):
     }
     switchWorkspace();
     onClose();
-    navigate("/onboarding", { state: { path: selected } });
+    appNavigate("/onboarding", { state: { path: selected } });
   }
 
   return (

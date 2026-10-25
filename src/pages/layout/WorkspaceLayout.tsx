@@ -408,7 +408,7 @@ export default function WorkspaceLayout(): JSX.Element {
                   type="button"
                   className={styles.pluginNavButton}
                   title={plugin.name}
-                  onClick={() => appNavigate(`/app/plugins/${plugin.id}`)}
+                  onClick={() => appNavigate(`/app/plugins/${plugin.id}`, { title: plugin.name })}
                 >
                   <span aria-hidden="true">
                     {plugin.id === "obsidian-graph" ? "🕸️" : "🧩"}

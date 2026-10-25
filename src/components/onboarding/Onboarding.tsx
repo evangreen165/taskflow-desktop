@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
+import { appNavigate } from "@/lib/navigate";
 import { AuthService } from "@/services/auth";
 import type { FolderInspection, WorkspaceInfo } from "@/services/types";
 import { WorkspaceService } from "@/services/workspace";
@@ -16,7 +17,6 @@ const MIN_PASSWORD = 8;
 
 export default function Onboarding(): JSX.Element {
   const activateAndPersist = useAppStore((s) => s.activateAndPersist);
-  const navigate = useNavigate();
   const location = useLocation();
   const autoPickDone = useRef(false);
 
@@ -102,7 +102,7 @@ export default function Onboarding(): JSX.Element {
     setWorkspaceInfo(activated.value);
     await activateAndPersist(activated.value);
     if (inspection?.hasUsers) {
-      navigate("/login");
+      appNavigate("/login");
     } else {
       setStep("admin");
     }
@@ -154,7 +154,7 @@ export default function Onboarding(): JSX.Element {
     if (workspaceInfo) {
       await activateAndPersist(workspaceInfo);
     }
-    navigate("/login");
+    appNavigate("/login");
   }
 
   function backToFolder(): void {

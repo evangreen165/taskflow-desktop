@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import styles from "@/components/onboarding/Onboarding.module.css";
+import { appNavigate } from "@/lib/navigate";
 import { AuthService } from "@/services/auth";
 import { ConfigService } from "@/services/config";
 import { useAppStore } from "@/stores/useAppStore";
@@ -11,7 +12,6 @@ export default function LoginScreen(): JSX.Element {
   const workspace = useAppStore((s) => s.workspace);
   const chooseDifferentFolder = useAppStore((s) => s.chooseDifferentFolder);
   const login = useAuthStore((s) => s.login);
-  const navigate = useNavigate();
   const location = useLocation();
 
   const [loginName, setLoginName] = useState("");
@@ -48,7 +48,7 @@ export default function LoginScreen(): JSX.Element {
     }
     setBusy(false);
     const from = (location.state as { from?: string } | null)?.from;
-    navigate(from && from.startsWith("/app") ? from : "/app/dashboard", { replace: true });
+    appNavigate(from && from.startsWith("/app") ? from : "/app/dashboard", { replace: true });
   }
 
   return (
