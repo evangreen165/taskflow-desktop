@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { LlmService } from "@/services/llm";
 import { NotesService } from "@/services/notes";
@@ -26,6 +27,7 @@ const PLUGIN_ERROR = "plugin:error";
  */
 export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const navigate = useNavigate();
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const pushToast = useToastStore((s) => s.push);
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
@@ -166,6 +168,14 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
           );
           return null;
         }
+        case "navigate": {
+          const path = payload.path;
+          if (typeof path !== "string" || !path.startsWith("/app")) {
+            throw new Error("Параметр path обязателен (должен начинаться с /app)");
+          }
+          navigate(path);
+          return null;
+        }
         case "getTheme": {
           const theme = useThemeStore.getState().theme;
           if (theme === "dark" || theme === "light") {
@@ -208,7 +218,7 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
           throw new Error(`Неизвестное действие плагина: ${action}`);
       }
     },
-    [spaceId, pushToast, pluginId],
+    [spaceId, pushToast, pluginId, navigate],
   );
 
   /**

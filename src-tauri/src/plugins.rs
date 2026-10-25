@@ -147,28 +147,38 @@ pub fn install_default_plugins(
 }
 
 /// Testable variant: `bundled_plugins` contains plugin folders
-/// (e.g. `.../plugins/llm-assistant`).
+/// (e.g. `.../plugins/llm-assistant`, `.../plugins/obsidian-graph`). Every
+/// folder with a valid `manifest.json` is installed/updated.
 pub fn install_default_plugins_from(
     workspace_root: &Path,
     bundled_plugins: &Path,
 ) -> Result<(), AppError> {
-    let source = bundled_plugins.join("llm-assistant");
-    if !source.is_dir() {
+    let Ok(entries) = std::fs::read_dir(bundled_plugins) else {
         return Ok(());
+    };
+    for entry in entries.flatten() {
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        if !is_dir {
+            continue;
+        }
+        let source = entry.path();
+        let manifest_path = source.join("manifest.json");
+        if !manifest_path.is_file() {
+            continue;
+        }
+        let bundled: PluginManifest = fsops::read_json(&manifest_path)?;
+        let target = workspace_root.join("plugins").join(&bundled.id);
+        let installed_version = fsops::read_json::<PluginManifest>(&target.join("manifest.json"))
+            .ok()
+            .map(|manifest| manifest.version);
+        let should_install = installed_version
+            .as_deref()
+            .map(|installed| version_is_newer(&bundled.version, installed))
+            .unwrap_or(true);
+        if should_install {
+            copy_dir_overwrite(&source, &target)?;
+        }
     }
-    let bundled: PluginManifest = fsops::read_json(&source.join("manifest.json"))?;
-    let target = workspace_root.join("plugins").join("llm-assistant");
-    let installed_version = fsops::read_json::<PluginManifest>(&target.join("manifest.json"))
-        .ok()
-        .map(|manifest| manifest.version);
-    let should_install = installed_version
-        .as_deref()
-        .map(|installed| version_is_newer(&bundled.version, installed))
-        .unwrap_or(true);
-    if !should_install {
-        return Ok(());
-    }
-    copy_dir_overwrite(&source, &target)?;
     Ok(())
 }
 

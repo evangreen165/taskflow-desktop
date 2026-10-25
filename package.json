@@ -1,7 +1,7 @@
 {
   "name": "taskflow",
   "private": true,
-  "version": "0.9.9",
+  "version": "0.10.0",
   "type": "module",
   "description": "TaskFlow — offline task tracker and knowledge base on a shared SMB folder",
   "scripts": {

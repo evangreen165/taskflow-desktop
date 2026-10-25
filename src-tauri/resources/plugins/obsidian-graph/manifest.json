@@ -1,0 +1,6 @@
+{
+  "id": "obsidian-graph",
+  "name": "Obsidian Core (Граф)",
+  "version": "1.0.0",
+  "ui": { "inject": "sidebar" }
+}

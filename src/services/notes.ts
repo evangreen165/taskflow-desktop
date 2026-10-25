@@ -112,6 +112,16 @@ export const NotesService = {
     return invokeCommand<string[]>("notesCreateCategory", { spaceId, name });
   },
 
+  /** Resolves a note id from an exact (case-insensitive) title. */
+  resolveTitle(spaceId: string, title: string): Promise<Result<string | null>> {
+    return invokeCommand<string | null>("notesResolveTitle", { spaceId, title });
+  },
+
+  /** Notes whose content links to `[[noteTitle]]`. */
+  getBacklinks(spaceId: string, noteTitle: string): Promise<Result<NoteMeta[]>> {
+    return invokeCommand<NoteMeta[]>("notesGetBacklinks", { spaceId, noteTitle });
+  },
+
   deleteCategory(spaceId: string, name: string): Promise<Result<string[]>> {
     return invokeCommand<string[]>("notesDeleteCategory", { spaceId, name });
   },

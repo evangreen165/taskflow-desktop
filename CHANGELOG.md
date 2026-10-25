@@ -2,6 +2,27 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.10.0] - 2026-10-25
+
+### Added
+
+- **Obsidian core (gated by the `obsidian-graph` plugin)**
+  - Wiki-links `[[Название заметки]]`: when the plugin is enabled, they render
+    as clickable links (`notesResolveTitle`); a missing note prompts to create
+    it. When disabled, `[[…]]` stays plain text
+  - Internal-link button `[[ ]]` in the Markdown toolbar (only when enabled)
+  - **Backlinks**: `notesGetBacklinks` + a «Ссылаются на эту заметку» block at
+    the bottom of the article (only when enabled)
+  - **Graph plugin** `obsidian-graph` («Obsidian Core (Граф)», sidebar): draws a
+    `vis-network` graph of notes and their `[[…]]` links; clicking a node opens
+    the note. The default plugin installer now installs every bundled plugin
+    (and the plugin is bundled via `tauri.conf.json` resources)
+  - The plugin bridge gained a `navigate` action for plugin-driven navigation
+
+### Changed
+
+- Version bumped to `0.10.0`
+
 ## [0.9.9] - 2026-10-25
 
 ### Fixed

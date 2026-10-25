@@ -14,12 +14,112 @@ import { categoryIcon, formatDate, NOTE_STATUS_LABELS } from "@/lib/kbMeta";
 import { AttachmentsService } from "@/services/attachments";
 import { NotesService, type Note, type NoteMeta } from "@/services/notes";
 import { useNoteStore } from "@/stores/useNoteStore";
+import { usePluginStore } from "@/stores/usePluginStore";
 import { useRecentStore } from "@/stores/useRecentStore";
 import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useUserDirectory } from "@/stores/useUserDirectory";
 
 import styles from "./KbArticlePage.module.css";
+
+/** The graph plugin acts as the toggle for all Obsidian-core features. */
+const OBSIDIAN_PLUGIN_ID = "obsidian-graph";
+const WIKI_LINK_RE = /\[\[([^\]\n]+)\]\]/g;
+
+/** Rewrites `[[Title]]` into a `wikilink:` Markdown link when enabled. */
+function preprocessWikiLinks(content: string, enabled: boolean): string {
+  if (!enabled) {
+    return content;
+  }
+  return content.replace(WIKI_LINK_RE, (_match, rawTitle: string) => {
+    const title = rawTitle.trim();
+    return `[${title}](wikilink:${encodeURIComponent(title)})`;
+  });
+}
+
+function WikiLink({
+  title,
+  spaceId,
+  category,
+}: {
+  title: string;
+  spaceId: string;
+  category: string;
+}): JSX.Element {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+
+  async function openLink(event: React.MouseEvent<HTMLAnchorElement>): Promise<void> {
+    event.preventDefault();
+    if (busy) {
+      return;
+    }
+    setBusy(true);
+    const result = await NotesService.resolveTitle(spaceId, title);
+    setBusy(false);
+    if (result.ok && result.value) {
+      navigate(`/app/kb/${result.value}`);
+      return;
+    }
+    if (result.ok && result.value === null) {
+      if (!window.confirm(`Заметка «${title}» не найдена. Создать?`)) {
+        return;
+      }
+      const created = await NotesService.create(spaceId, {
+        title,
+        category: category || "Импорт",
+      });
+      if (created.ok) {
+        navigate(`/app/kb/${created.value.meta.id}`);
+      }
+    }
+  }
+
+  return (
+    <a href="#" className={styles.wikiLink} onClick={(event) => void openLink(event)}>
+      {busy ? "…" : title}
+    </a>
+  );
+}
+
+function BacklinksBlock({ spaceId, title }: { spaceId: string; title: string }): JSX.Element | null {
+  const navigate = useNavigate();
+  const [items, setItems] = useState<NoteMeta[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void NotesService.getBacklinks(spaceId, title).then((result) => {
+      if (!cancelled) {
+        setItems(result.ok ? result.value : []);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [spaceId, title]);
+
+  if (!items || items.length === 0) {
+    return null;
+  }
+  return (
+    <div className={styles.backlinks}>
+      <h3>Ссылаются на эту заметку</h3>
+      <ul>
+        {items.map((note) => (
+          <li key={note.id}>
+            <button
+              type="button"
+              className={styles.backlink}
+              onClick={() => navigate(`/app/kb/${note.id}`)}
+            >
+              {note.title}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export default function KbArticlePage(): JSX.Element {
   const { id } = useParams();
@@ -35,6 +135,9 @@ export default function KbArticlePage(): JSX.Element {
   const pushToast = useToastStore((s) => s.push);
   const users = useUserDirectory((s) => s.users);
   const ensureUsers = useUserDirectory((s) => s.ensure);
+  const extensionsEnabled = usePluginStore((s) => s.extensionsEnabled);
+  const pluginStates = usePluginStore((s) => s.pluginStates);
+  const obsidianEnabled = extensionsEnabled && pluginStates[OBSIDIAN_PLUGIN_ID] === true;
 
   const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
@@ -261,17 +364,33 @@ export default function KbArticlePage(): JSX.Element {
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeRaw]}
               urlTransform={(url) => url}
-              components={{ img: AttachmentImage, a: AttachmentLink }}
+              components={{
+                img: AttachmentImage,
+                a: ({ href, children }) =>
+                  href?.startsWith("wikilink:") ? (
+                    <WikiLink
+                      title={decodeURIComponent(href.slice("wikilink:".length))}
+                      spaceId={spaceId ?? ""}
+                      category={meta.category}
+                    />
+                  ) : (
+                    <AttachmentLink href={href}>{children}</AttachmentLink>
+                  ),
+              }}
             >
-              {note.content || "*Нет содержания.*"}
+              {preprocessWikiLinks(note.content, obsidianEnabled) || "*Нет содержания.*"}
             </ReactMarkdown>
           </div>
+          {obsidianEnabled && spaceId ? (
+            <BacklinksBlock spaceId={spaceId} title={meta.title} />
+          ) : null}
         </div>
       ) : (
         <ArticleEditor
           key={meta.id}
           initial={note}
           spaceId={spaceId ?? ""}
+          obsidianEnabled={obsidianEnabled}
           onSaved={setNote}
           onCancel={() => setMode("read")}
         />
@@ -405,11 +524,13 @@ function resizeImageInMarkdown(
 function ArticleEditor({
   initial,
   spaceId,
+  obsidianEnabled,
   onSaved,
   onCancel,
 }: {
   initial: Note;
   spaceId: string;
+  obsidianEnabled: boolean;
   onSaved: (note: Note) => void;
   onCancel: () => void;
 }): JSX.Element {
@@ -661,6 +782,7 @@ function ArticleEditor({
               textareaRef={textareaRef}
               value={draft.content}
               onChange={handleContentChange}
+              obsidianEnabled={obsidianEnabled}
             />
             <textarea
               ref={textareaRef}
@@ -687,10 +809,19 @@ function ArticleEditor({
                       }
                     />
                   ),
-                  a: AttachmentLink,
+                  a: ({ href, children }) =>
+                    href?.startsWith("wikilink:") ? (
+                      <WikiLink
+                        title={decodeURIComponent(href.slice("wikilink:".length))}
+                        spaceId={spaceId}
+                        category={draft.category}
+                      />
+                    ) : (
+                      <AttachmentLink href={href}>{children}</AttachmentLink>
+                    ),
                 }}
               >
-                {draft.content || "*Нет содержания.*"}
+                {preprocessWikiLinks(draft.content, obsidianEnabled) || "*Нет содержания.*"}
               </ReactMarkdown>
             </div>
             {resizeTarget && toolbarPosition ? (

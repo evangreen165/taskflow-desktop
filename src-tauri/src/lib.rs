@@ -257,6 +257,8 @@ pub fn run() {
             commands::notes_delete,
             commands::notes_restore_version,
             commands::notes_share,
+            commands::notes_resolve_title,
+            commands::notes_get_backlinks,
             commands::notes_list_categories,
             commands::notes_create_category,
             commands::notes_delete_category,

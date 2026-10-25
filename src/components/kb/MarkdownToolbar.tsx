@@ -6,6 +6,8 @@ interface MarkdownToolbarProps {
   textareaRef: RefObject<HTMLTextAreaElement>;
   value: string;
   onChange: (value: string) => void;
+  /** Show the `[[…]]` internal-link button (Obsidian plugin enabled). */
+  obsidianEnabled?: boolean;
 }
 
 interface InsertResult {
@@ -97,6 +99,7 @@ export default function MarkdownToolbar({
   textareaRef,
   value,
   onChange,
+  obsidianEnabled = false,
 }: MarkdownToolbarProps): JSX.Element {
   function apply(transform: (value: string, start: number, end: number) => InsertResult): void {
     const element = textareaRef.current;
@@ -120,6 +123,14 @@ export default function MarkdownToolbar({
 
   function list(ordered: boolean): void {
     apply((val, start, end) => applyList(val, start, end, ordered));
+  }
+
+  function insertWikiLink(): void {
+    apply((val, start, end) => {
+      const next = val.slice(0, start) + "[[]]" + val.slice(end);
+      const cursor = start + 2;
+      return { next, selectionStart: cursor, selectionEnd: cursor };
+    });
   }
 
   function insertTable(): void {
@@ -189,6 +200,11 @@ export default function MarkdownToolbar({
         <button type="button" title="Ссылка" onClick={() => wrap("[", "](https://)", "текст")}>
           🔗 Ссылка
         </button>
+        {obsidianEnabled ? (
+          <button type="button" title="Внутренняя ссылка [[Название]]" onClick={insertWikiLink}>
+            [[ ]] Ссылка
+          </button>
+        ) : null}
         <button type="button" title="Таблица" onClick={insertTable}>
           📊 Таблица
         </button>

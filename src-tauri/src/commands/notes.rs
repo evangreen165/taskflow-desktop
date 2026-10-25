@@ -468,6 +468,75 @@ pub fn notes_share(
     notes_share_impl(&state, note_id, space_id, target_space_ids)
 }
 
+/// Resolves a note id from its exact title (case-insensitive). `None` when no
+/// note in the space has that title.
+pub fn notes_resolve_title_impl(
+    state: &AppState,
+    space_id: String,
+    title: String,
+) -> Result<Option<String>, AppError> {
+    let session = require_space_perm(state, &space_id, "article.view")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    let target = title.trim().to_lowercase();
+    if target.is_empty() {
+        return Ok(None);
+    }
+    for meta in notes::list_meta(&space_dir)? {
+        if meta.title.trim().to_lowercase() == target {
+            return Ok(Some(meta.id));
+        }
+    }
+    Ok(None)
+}
+
+#[tauri::command(rename = "notesResolveTitle")]
+pub fn notes_resolve_title(
+    state: State<'_, AppState>,
+    space_id: String,
+    title: String,
+) -> Result<Option<String>, AppError> {
+    notes_resolve_title_impl(&state, space_id, title)
+}
+
+/// Returns the notes in the space whose content contains `[[noteTitle]]`.
+pub fn notes_get_backlinks_impl(
+    state: &AppState,
+    space_id: String,
+    note_title: String,
+) -> Result<Vec<NoteMeta>, AppError> {
+    let session = require_space_perm(state, &space_id, "article.view")?;
+    let root = state.root()?;
+    crate::spaces::require_access(&root, &space_id, &session)?;
+    let space_dir = crate::spaces::space_dir(&root, &space_id)?;
+    let needle = format!("[[{}]]", note_title.trim()).to_lowercase();
+    if needle == "[[]]" {
+        return Ok(Vec::new());
+    }
+    let mut backlinks = Vec::new();
+    for meta in notes::list_meta(&space_dir)? {
+        if meta.title.trim().eq_ignore_ascii_case(note_title.trim()) {
+            continue;
+        }
+        if let Ok(content) = notes::read_content(&space_dir, &meta.id) {
+            if content.to_lowercase().contains(&needle) {
+                backlinks.push(meta);
+            }
+        }
+    }
+    Ok(backlinks)
+}
+
+#[tauri::command(rename = "notesGetBacklinks")]
+pub fn notes_get_backlinks(
+    state: State<'_, AppState>,
+    space_id: String,
+    note_title: String,
+) -> Result<Vec<NoteMeta>, AppError> {
+    notes_get_backlinks_impl(&state, space_id, note_title)
+}
+
 #[cfg(test)]
 pub fn notes_list_categories_impl(
     state: &AppState,
