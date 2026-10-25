@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -41,9 +41,12 @@ const TOOLTIP_STYLE = {
   fontSize: 12,
 };
 
+type ChartMode = "status" | "executor";
+
 /**
- * Dashboard analytics for the current space: tasks by status (pie) and active
- * task workload per assignee (bar).
+ * Dashboard analytics for the current space. One chart at a time (status donut
+ * or assignee workload) so it fills the widget; switchable from the segmented
+ * control at the top.
  */
 export default function AnalyticsWidget({
   tasks,
@@ -55,6 +58,7 @@ export default function AnalyticsWidget({
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const storeTasks = useTaskStore((s) => s.tasks);
   const fetchTasks = useTaskStore((s) => s.fetchTasks);
+  const [mode, setMode] = useState<ChartMode>("status");
 
   /**
    * Charts must not flash empty after tab switches: the widget remounts while
@@ -110,40 +114,59 @@ export default function AnalyticsWidget({
 
   return (
     <div className={styles.analytics}>
-      <section className={styles.block}>
-        <h3 className={styles.title}>Задачи по статусам</h3>
-        {statusData.length === 0 ? (
-          <div className={styles.empty}>Нет задач в выбранных статусах.</div>
-        ) : (
-          <ResponsiveContainer width="100%" height={300} minWidth={200}>
-            <PieChart>
-              <Pie
-                data={statusData}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={32}
-                outerRadius={58}
-                paddingAngle={2}
-                stroke="none"
-                isAnimationActive={true}
-              >
-                {statusData.map((entry) => (
-                  <Cell key={entry.status} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-              <Legend wrapperStyle={{ fontSize: 11, color: "var(--text-muted)" }} />
-            </PieChart>
-          </ResponsiveContainer>
-        )}
-      </section>
+      <div className={styles.toolbar}>
+        <div className={styles.segmented} role="tablist" aria-label="Тип графика">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "status"}
+            className={mode === "status" ? styles.segActive : ""}
+            onClick={() => setMode("status")}
+          >
+            По статусам
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "executor"}
+            className={mode === "executor" ? styles.segActive : ""}
+            onClick={() => setMode("executor")}
+          >
+            По исполнителям
+          </button>
+        </div>
+      </div>
 
-      <section className={styles.block}>
-        <h3 className={styles.title}>Загрузка исполнителей</h3>
-        {workloadData.length === 0 ? (
+      <div className={styles.chartWrap}>
+        {mode === "status" ? (
+          statusData.length === 0 ? (
+            <div className={styles.empty}>Нет задач в выбранных статусах.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={statusData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={50}
+                  outerRadius={80}
+                  paddingAngle={2}
+                  stroke="none"
+                  isAnimationActive={true}
+                >
+                  {statusData.map((entry) => (
+                    <Cell key={entry.status} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Legend wrapperStyle={{ fontSize: 12, color: "var(--text-muted)" }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )
+        ) : workloadData.length === 0 ? (
           <div className={styles.empty}>Нет активных задач с исполнителями.</div>
         ) : (
-          <ResponsiveContainer width="100%" height={300} minWidth={200}>
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={workloadData} margin={{ top: 4, right: 8, bottom: 0, left: -18 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis
@@ -166,7 +189,7 @@ export default function AnalyticsWidget({
             </BarChart>
           </ResponsiveContainer>
         )}
-      </section>
+      </div>
     </div>
   );
 }

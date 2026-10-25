@@ -1,5 +1,5 @@
 import Avatar from "@/components/Avatar";
-import { avatarColorFor, formatDueDate, isOverdue, PRIORITY_LABELS } from "@/lib/taskMeta";
+import { avatarColorFor, formatDueDateTime, isOverdue, PRIORITY_LABELS } from "@/lib/taskMeta";
 import type { Task } from "@/services/tasks";
 import type { UserSummary } from "@/services/users";
 
@@ -13,7 +13,8 @@ interface TaskCardProps {
 }
 
 export default function TaskCard({ task, users }: TaskCardProps): JSX.Element {
-  const due = formatDueDate(task.dueDate);
+  const dueInfo = formatDueDateTime(task.dueDate);
+  const due = dueInfo ? (dueInfo.time ? `${dueInfo.date}, ${dueInfo.time}` : dueInfo.date) : null;
   const overdue = isOverdue(task.dueDate, task.status);
   const assignees = task.assignees.map(
     (id) =>

@@ -2,6 +2,26 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.9.6] - 2026-10-25
+
+### Fixed
+
+- **Task due time**: `taskToDraft` no longer truncates the due value to a date,
+  the `datetime-local` input keeps the selected time, and `fromDateInput` saves
+  the full ISO string. Task cards and the list now show `📅 25 окт, 14:30` when
+  a time is set (date-only values and local 00:00 stay `📅 25 окт`)
+- **Audit log**: space events are recorded (`space.create`, `space.update`,
+  `space.delete`); `s:` system actors render as human-readable Russian
+  («Создание воркспейса», «Миграция данных», «Активация воркспейса»)
+
+### Changed
+
+- **Analytics widget redesigned**: a single chart fills the widget with a
+  segmented toggle «По статусам» / «По исполнителям»; the status donut is
+  larger (`innerRadius={50}`, `outerRadius={80}`) and the chart uses
+  `ResponsiveContainer width="100%" height="100%"`
+- Version bumped to `0.9.6`
+
 ## [0.9.5] - 2026-10-25
 
 ### Added

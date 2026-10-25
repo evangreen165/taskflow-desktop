@@ -4,9 +4,10 @@ use serde::Serialize;
 
 use taskflow_macros::write_command;
 
+use crate::audit;
 use crate::error::AppError;
 use crate::roles;
-use crate::session::Session;
+use crate::session::{ActorId, Session};
 use crate::spaces::{self, Space};
 use crate::users;
 use crate::AppState;
@@ -146,7 +147,15 @@ pub fn spaces_create_impl(
 ) -> Result<Space, AppError> {
     state.require_writable()?;
     let session = state.require_perm("space.create")?;
-    spaces::create(&state.root()?, &session.user_id, &name, &description)
+    let space = spaces::create(&state.root()?, &session.user_id, &name, &description)?;
+    audit::emit(
+        &ActorId::User(session.user_id.clone()),
+        "space.create",
+        "space",
+        &space.id,
+        serde_json::json!({ "name": space.name }),
+    );
+    Ok(space)
 }
 
 #[write_command(rename = "spacesCreate")]
@@ -181,6 +190,13 @@ pub fn spaces_update_impl(
         }
     }
     let updated = spaces::update(&root, &id, &name, &description, members)?;
+    audit::emit(
+        &ActorId::User(session.user_id.clone()),
+        "space.update",
+        "space",
+        &updated.id,
+        serde_json::json!({ "name": updated.name }),
+    );
     if let Err(err) = crate::notifications::on_space_updated(&root, &session.user_id, &space, &updated)
     {
         tracing::warn!(error = %err.message, "failed to create space-added notifications");
@@ -215,7 +231,15 @@ pub fn spaces_delete_impl(state: &AppState, id: String) -> Result<(), AppError> 
             ));
         }
     }
-    spaces::delete(&root, &id)
+    spaces::delete(&root, &id)?;
+    audit::emit(
+        &ActorId::User(session.user_id.clone()),
+        "space.delete",
+        "space",
+        &id,
+        serde_json::json!({ "name": space.name }),
+    );
+    Ok(())
 }
 
 #[write_command(rename = "spacesDelete")]

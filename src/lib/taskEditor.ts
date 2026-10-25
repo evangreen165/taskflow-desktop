@@ -23,9 +23,38 @@ export function toDateInput(iso: string | null): string {
   return iso ? iso.slice(0, 10) : "";
 }
 
+/**
+ * Converts a stored ISO due value to a `datetime-local` input value
+ * (`YYYY-MM-DDTHH:mm`, local time). Date-only legacy values map to `T00:00`.
+ */
+export function toDateTimeInput(iso: string | null): string {
+  if (!iso) {
+    return "";
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    return `${iso}T00:00`;
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+}
+
+/**
+ * Converts a `datetime-local` value (local, `YYYY-MM-DDTHH:mm`) to the full ISO
+ * string that is persisted, so the selected time is not truncated.
+ */
 export function fromDateInput(value: string): string | null {
   const trimmed = value.trim();
-  return trimmed === "" ? null : trimmed;
+  if (!trimmed) {
+    return null;
+  }
+  const date = new Date(trimmed);
+  return Number.isNaN(date.getTime()) ? trimmed : date.toISOString();
 }
 
 export function taskToDraft(task: Task): TaskDraft {
@@ -34,7 +63,7 @@ export function taskToDraft(task: Task): TaskDraft {
     description: task.description,
     status: task.status,
     priority: task.priority,
-    dueDate: toDateInput(task.dueDate),
+    dueDate: toDateTimeInput(task.dueDate),
     assignees: [...task.assignees],
     checklist: task.checklist.map((item) => ({ ...item })),
     comments: task.comments.map((comment) => ({ ...comment })),

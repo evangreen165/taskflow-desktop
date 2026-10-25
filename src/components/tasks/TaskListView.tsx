@@ -1,5 +1,5 @@
 import Avatar from "@/components/Avatar";
-import { formatDueDate, PRIORITY_LABELS, priorityColor, statusLabel } from "@/lib/taskMeta";
+import { formatDueDateTime, PRIORITY_LABELS, priorityColor, statusLabel } from "@/lib/taskMeta";
 import type { Task, TaskStatus } from "@/services/tasks";
 import type { UserSummary } from "@/services/users";
 
@@ -26,7 +26,12 @@ export default function TaskListView({ tasks, users, onSelect }: TaskListViewPro
   return (
     <div className={styles.list}>
       {tasks.map((task) => {
-        const due = formatDueDate(task.dueDate);
+        const dueInfo = formatDueDateTime(task.dueDate);
+        const due = dueInfo
+          ? dueInfo.time
+            ? `${dueInfo.date}, ${dueInfo.time}`
+            : dueInfo.date
+          : null;
         const assignees = task.assignees.map(
           (id) => users[id] ?? { id, displayName: "?", avatarColor: "#5b5bd6", avatarSha256: null },
         );

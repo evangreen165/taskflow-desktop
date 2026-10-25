@@ -1113,6 +1113,13 @@ function RolesTab(): JSX.Element {
 
 const AUDIT_PAGE_SIZE = 50;
 
+/** Human-readable labels for `s:<reason>` system actors in the audit journal. */
+const SYSTEM_ACTOR_LABELS: Record<string, string> = {
+  init: "Создание воркспейса",
+  migrate: "Миграция данных",
+  activate: "Активация воркспейса",
+};
+
 function AuditTab(): JSX.Element {
   const [items, setItems] = useState<AuditEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -1170,7 +1177,8 @@ function AuditTab(): JSX.Element {
       return userNames[id] ?? id.slice(0, 8);
     }
     if (userId.startsWith("s:")) {
-      return `Система (${userId.slice(2)})`;
+      const reason = userId.slice(2);
+      return `Система (${SYSTEM_ACTOR_LABELS[reason] ?? reason})`;
     }
     return userId || "—";
   }

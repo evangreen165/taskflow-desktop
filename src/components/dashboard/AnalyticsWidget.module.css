@@ -29,3 +29,43 @@
   font-size: 12.5px;
   text-align: center;
 }
+
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.segmented button {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.segmented button:hover {
+  color: var(--text);
+}
+
+.segActive {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow-sm);
+}
+
+/* The single chart fills the remaining widget height. */
+.chartWrap {
+  flex: 1;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+}

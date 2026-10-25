@@ -7,6 +7,7 @@ import {
   statusChanged,
   taskToDraft,
   toDateInput,
+  toDateTimeInput,
   type TaskDraft,
 } from "@/lib/taskEditor";
 import type { Task } from "@/services/tasks";
@@ -40,8 +41,18 @@ describe("date helpers", () => {
   it("converts ISO to date input and back", () => {
     expect(toDateInput("2026-10-18T12:00:00Z")).toBe("2026-10-18");
     expect(toDateInput(null)).toBe("");
-    expect(fromDateInput("2026-10-18")).toBe("2026-10-18");
+    expect(fromDateInput("2026-10-18")).toBe("2026-10-18T00:00:00.000Z");
     expect(fromDateInput("   ")).toBeNull();
+  });
+
+  it("keeps the time in datetime-local values", () => {
+    expect(toDateTimeInput("2026-10-18")).toBe("2026-10-18T00:00");
+    expect(toDateTimeInput(null)).toBe("");
+    const iso = fromDateInput("2026-10-18T14:30");
+    expect(iso).not.toBeNull();
+    expect(iso?.endsWith("Z")).toBe(true);
+    // Round-trips back to the same local wall-clock time.
+    expect(toDateTimeInput(iso ?? null)).toBe("2026-10-18T14:30");
   });
 });
 

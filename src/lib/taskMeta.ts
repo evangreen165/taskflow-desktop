@@ -48,7 +48,47 @@ export function formatDueDate(iso: string | null): string | null {
   if (Number.isNaN(date.getTime())) {
     return null;
   }
+  return shortDate(date);
+}
+
+function shortDate(date: Date): string {
   return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "short" }).format(date);
+}
+
+export interface DueDisplay {
+  date: string;
+  /** `null` for date-only values and local midnight (00:00). */
+  time: string | null;
+}
+
+/**
+ * Formats a due value for cards: date plus time when one was set. Date-only
+ * legacy values (`YYYY-MM-DD`) and local 00:00 are treated as date-only.
+ */
+export function formatDueDateTime(iso: string | null): DueDisplay | null {
+  if (!iso) {
+    return null;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const date = new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    return { date: shortDate(date), time: null };
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  return {
+    date: shortDate(date),
+    time:
+      hours === 0 && minutes === 0
+        ? null
+        : `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
+  };
 }
 
 /** A task is overdue when its due date is in the past and it is not done. */
