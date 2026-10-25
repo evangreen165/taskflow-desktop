@@ -1,22 +1,78 @@
 ﻿import { useEffect, useRef, useState, type ReactNode } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import Avatar from "@/components/Avatar";
+import NoAccess from "@/components/auth/NoAccess";
+import RequirePerm from "@/components/auth/RequirePerm";
+import TabsBar from "@/components/layout/TabsBar";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import PluginFrame from "@/components/plugins/PluginFrame";
 import CommandPalette from "@/components/search/CommandPalette";
 import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
 import { usePermissions } from "@/hooks/usePermissions";
+import AdminPage from "@/pages/admin/AdminPage";
+import CalendarPage from "@/pages/calendar/CalendarPage";
+import DashboardPage from "@/pages/dashboard/DashboardPage";
+import KbArticlePage from "@/pages/kb/KbArticlePage";
+import KbPage from "@/pages/kb/KbPage";
+import PluginsPage from "@/pages/plugins/PluginsPage";
+import PluginViewerPage from "@/pages/plugins/PluginViewerPage";
+import ProfilePage from "@/pages/profile/ProfilePage";
+import SettingsPage from "@/pages/settings/SettingsPage";
+import TasksPage from "@/pages/tasks/TasksPage";
 import { PluginsService, type PluginManifest } from "@/services/plugins";
 import { SpacesService } from "@/services/spaces";
 import { UsersService, type UserSummary } from "@/services/users";
+import { WorkspaceService } from "@/services/workspace";
 import { useAppStore } from "@/stores/useAppStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNotificationStore } from "@/stores/useNotificationStore";
 import { usePluginStore } from "@/stores/usePluginStore";
 import { isOwnPersonalSpace, isPersonalSpace, useSpaceStore } from "@/stores/useSpaceStore";
+import { useTabStore } from "@/stores/useTabStore";
 
 import styles from "./WorkspaceLayout.module.css";
+
+function tabTitle(pathname: string): string {
+  if (pathname.startsWith("/app/dashboard")) return "Главная";
+  if (pathname.startsWith("/app/tasks")) return "Задачи";
+  if (pathname.startsWith("/app/calendar")) return "Календарь";
+  if (pathname.startsWith("/app/kb/")) return "Заметка";
+  if (pathname.startsWith("/app/kb")) return "Заметки";
+  if (pathname.startsWith("/app/plugins/")) return "Расширение";
+  if (pathname.startsWith("/app/plugins")) return "Расширения";
+  if (pathname.startsWith("/app/admin")) return "Администрирование";
+  if (pathname.startsWith("/app/profile")) return "Профиль";
+  if (pathname.startsWith("/app/settings")) return "Настройки";
+  return "TaskFlow";
+}
+
+function renderTabContent(path: string): JSX.Element {
+  if (path.startsWith("/app/kb/")) {
+    return <KbArticlePage noteId={path.slice("/app/kb/".length)} />;
+  }
+  if (path.startsWith("/app/kb")) return <KbPage />;
+  if (path.startsWith("/app/dashboard")) return <DashboardPage />;
+  if (path.startsWith("/app/tasks")) return <TasksPage />;
+  if (path.startsWith("/app/calendar")) return <CalendarPage />;
+  if (path.startsWith("/app/plugins/")) {
+    return <PluginViewerPage pluginId={path.slice("/app/plugins/".length)} />;
+  }
+  if (path.startsWith("/app/plugins")) return <PluginsPage />;
+  if (path.startsWith("/app/admin")) {
+    return (
+      <RequirePerm
+        anyOf={["users.manage", "roles.manage", "space.manage", "audit.view"]}
+        fallback={<NoAccess />}
+      >
+        <AdminPage />
+      </RequirePerm>
+    );
+  }
+  if (path.startsWith("/app/profile")) return <ProfilePage />;
+  if (path.startsWith("/app/settings")) return <SettingsPage />;
+  return <DashboardPage />;
+}
 
 function SideNavLink({
   to,
@@ -56,6 +112,15 @@ export default function WorkspaceLayout(): JSX.Element {
   const logout = useAuthStore((s) => s.logout);
   const { can, role, user } = usePermissions();
   const navigate = useNavigate();
+  const location = useLocation();
+  const tabs = useTabStore((s) => s.tabs);
+  const activeTabId = useTabStore((s) => s.activeTabId);
+  const openTab = useTabStore((s) => s.openTab);
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
+  const [tabSettings, setTabSettings] = useState({
+    openNotesInNewTab: true,
+    openTasksInNewTab: false,
+  });
 
   const forced = session?.mustChangePassword ?? false;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -141,6 +206,34 @@ export default function WorkspaceLayout(): JSX.Element {
   useEffect(() => {
     void fetchSpaces();
   }, [fetchSpaces]);
+
+  // Load tab behaviour settings once.
+  useEffect(() => {
+    void WorkspaceService.getTabSettings().then((result) => {
+      if (result.ok) {
+        setTabSettings(result.value);
+      }
+    });
+  }, []);
+
+  // Keep the tab store in sync with the router: every navigation opens or
+  // activates a tab (or reuses the current one per the workspace settings).
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === "/app" || path === "/app/") {
+      navigate("/app/dashboard", { replace: true });
+      return;
+    }
+    if (!path.startsWith("/app")) {
+      return;
+    }
+    const reuse = path.startsWith("/app/kb/")
+      ? !tabSettings.openNotesInNewTab
+      : path.startsWith("/app/tasks")
+        ? !tabSettings.openTasksInNewTab
+        : false;
+    openTab(tabTitle(path), path, reuse);
+  }, [location.pathname, navigate, openTab, tabSettings]);
 
   // Poll notifications so assignments from other users appear without a reload.
   useEffect(() => {
@@ -510,8 +603,13 @@ export default function WorkspaceLayout(): JSX.Element {
             Сменить папку
           </button>
         </header>
+        <TabsBar />
         <div className={styles.content}>
-          <Outlet />
+          {activeTab ? (
+            renderTabContent(activeTab.path)
+          ) : (
+            <div className={styles.muted}>Нет открытых вкладок.</div>
+          )}
         </div>
       </div>
 

@@ -71,7 +71,28 @@ export const WorkspaceService = {
   deleteTemplate(name: string): Promise<Result<Record<string, string>>> {
     return invokeCommand<Record<string, string>>("workspaceDeleteTemplate", { name });
   },
+
+  getTabSettings(): Promise<Result<TabSettings>> {
+    return invokeCommand<TabSettings>("workspaceGetTabSettings");
+  },
+
+  setTabSettings(settings: TabSettings): Promise<Result<TabSettings>> {
+    return invokeCommand<TabSettings>("workspaceSetTabSettings", { settings });
+  },
+
+  getKanbanOrder(): Promise<Result<string[]>> {
+    return invokeCommand<string[]>("workspaceGetKanbanOrder");
+  },
+
+  setKanbanOrder(order: string[]): Promise<Result<string[]>> {
+    return invokeCommand<string[]>("workspaceSetKanbanOrder", { order });
+  },
 };
+
+export interface TabSettings {
+  openNotesInNewTab: boolean;
+  openTasksInNewTab: boolean;
+}
 
 export interface TaskSettings {
   trashRetentionDays: number;

@@ -347,6 +347,50 @@ pub async fn workspace_delete_template(
         .map_err(|e| AppError::new("IO", format!("template delete failed: {e}")))?
 }
 
+/// Tab behaviour settings.
+#[tauri::command(rename = "workspaceGetTabSettings")]
+pub fn workspace_get_tab_settings(
+    state: State<'_, AppState>,
+) -> Result<workspace::TabSettings, AppError> {
+    state.require_auth()?;
+    workspace::tab_settings(&state.root()?)
+}
+
+/// Persists tab behaviour settings. Requires `workspace.settings`.
+#[tauri::command(rename = "workspaceSetTabSettings")]
+#[tracing::instrument(skip(state))]
+pub async fn workspace_set_tab_settings(
+    state: State<'_, AppState>,
+    settings: workspace::TabSettings,
+) -> Result<workspace::TabSettings, AppError> {
+    state.require_perm("workspace.settings")?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || workspace::set_tab_settings(&root, &settings))
+        .await
+        .map_err(|e| AppError::new("IO", format!("tab settings write failed: {e}")))?
+}
+
+/// Persisted Kanban column order.
+#[tauri::command(rename = "workspaceGetKanbanOrder")]
+pub fn workspace_get_kanban_order(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
+    state.require_auth()?;
+    workspace::kanban_column_order(&state.root()?)
+}
+
+/// Persists the Kanban column order (any authenticated user).
+#[tauri::command(rename = "workspaceSetKanbanOrder")]
+#[tracing::instrument(skip(state))]
+pub async fn workspace_set_kanban_order(
+    state: State<'_, AppState>,
+    order: Vec<String>,
+) -> Result<Vec<String>, AppError> {
+    state.require_auth()?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || workspace::set_kanban_column_order(&root, order))
+        .await
+        .map_err(|e| AppError::new("IO", format!("kanban order write failed: {e}")))?
+}
+
 /// Opens an external URL (http/https) in the default browser, or a local
 /// file/folder path (including `file://` URLs) in the OS file explorer.
 #[tauri::command(rename = "openExternal")]

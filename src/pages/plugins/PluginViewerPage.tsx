@@ -4,8 +4,11 @@ import PluginFrame from "@/components/plugins/PluginFrame";
 
 import styles from "./PluginViewerPage.module.css";
 
-export default function PluginViewerPage(): JSX.Element {
-  const { pluginId } = useParams<{ pluginId: string }>();
+export default function PluginViewerPage({
+  pluginId: pluginIdProp,
+}: { pluginId?: string } = {}): JSX.Element {
+  const { pluginId: routePluginId } = useParams<{ pluginId: string }>();
+  const pluginId = pluginIdProp ?? routePluginId;
   const navigate = useNavigate();
 
   return (

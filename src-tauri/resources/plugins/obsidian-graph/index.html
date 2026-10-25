@@ -35,9 +35,13 @@
         font-weight: 650;
         margin: 0;
       }
-      button {
+      button,
+      input,
+      select {
         font: inherit;
         font-size: 12.5px;
+      }
+      button {
         font-weight: 600;
         padding: 6px 12px;
         border-radius: 8px;
@@ -50,17 +54,56 @@
         background: #eef2ff;
         border-color: #8b5cf6;
       }
+      #stage {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+      }
+      #graph {
+        position: absolute;
+        inset: 0;
+      }
+      #graph canvas {
+        outline: none;
+      }
+      #filters {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 220px;
+        padding: 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.95);
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+      }
+      #filters label {
+        font-size: 11px;
+        font-weight: 650;
+        color: #6b7280;
+      }
+      #filters input,
+      #filters select {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        background: #fff;
+        color: #1f2937;
+        outline: none;
+      }
+      #filters input:focus,
+      #filters select:focus {
+        border-color: #8b5cf6;
+      }
       #status {
         padding: 12px 16px;
         color: #6b7280;
         font-size: 13px;
-      }
-      #graph {
-        flex: 1;
-        min-height: 0;
-      }
-      #graph canvas {
-        outline: none;
       }
     </style>
   </head>
@@ -70,8 +113,22 @@
         <h1>🕸️ Wiki &amp; Graph</h1>
         <button id="reload" type="button">Обновить</button>
       </header>
+      <div id="stage">
+        <div id="filters">
+          <label for="f-search">Поиск</label>
+          <input id="f-search" type="search" placeholder="Название заметки…" />
+          <label for="f-category">Категория</label>
+          <select id="f-category">
+            <option value="">Все категории</option>
+          </select>
+          <label for="f-tag">Тег</label>
+          <select id="f-tag">
+            <option value="">Все теги</option>
+          </select>
+        </div>
+        <div id="graph"></div>
+      </div>
       <div id="status">Загрузка…</div>
-      <div id="graph"></div>
     </div>
 
     <script>
@@ -79,6 +136,14 @@
         const WIKI_RE = /\[\[([^\]\n]+)\]\]/g;
         const statusEl = document.getElementById("status");
         const graphEl = document.getElementById("graph");
+        const searchEl = document.getElementById("f-search");
+        const categoryEl = document.getElementById("f-category");
+        const tagEl = document.getElementById("f-tag");
+
+        let nodesDS = null;
+        let edgesDS = null;
+        let allNodes = [];
+        let allEdges = [];
 
         function callPlugin(action, payload = {}) {
           return new Promise((resolve, reject) => {
@@ -106,6 +171,41 @@
           statusEl.textContent = text;
         }
 
+        function applyFilters() {
+          if (!nodesDS || !edgesDS) {
+            return;
+          }
+          const query = searchEl.value.trim().toLowerCase();
+          const category = categoryEl.value;
+          const tag = tagEl.value;
+          const visible = allNodes.filter((node) => {
+            if (query && !String(node.label).toLowerCase().includes(query)) return false;
+            if (category && node.group !== category) return false;
+            if (tag && !(node.tags || []).includes(tag)) return false;
+            return true;
+          });
+          const ids = new Set(visible.map((node) => node.id));
+          const edges = allEdges.filter((edge) => ids.has(edge.from) && ids.has(edge.to));
+          nodesDS.clear();
+          edgesDS.clear();
+          nodesDS.add(visible);
+          edgesDS.add(edges);
+        }
+
+        function fillSelect(select, values, placeholder) {
+          select.innerHTML = "";
+          const base = document.createElement("option");
+          base.value = "";
+          base.textContent = placeholder;
+          select.appendChild(base);
+          for (const value of values) {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            select.appendChild(option);
+          }
+        }
+
         async function build() {
           graphEl.innerHTML = "";
           showStatus("Загрузка заметок…");
@@ -124,12 +224,13 @@
               byTitle.set(String(note.title || "").trim().toLowerCase(), note);
             }
 
-            const nodes = notes.map((note) => ({
+            allNodes = notes.map((note) => ({
               id: note.id,
               label: note.title,
               group: note.category || "Без категории",
+              tags: Array.isArray(note.tags) ? note.tags : [],
             }));
-            const edges = [];
+            allEdges = [];
             const seen = new Set();
 
             for (const note of notes) {
@@ -152,14 +253,21 @@
                   continue;
                 }
                 seen.add(key);
-                edges.push({ from: note.id, to: target.id, arrows: "to" });
+                allEdges.push({ from: note.id, to: target.id, arrows: "to" });
               }
             }
 
+            const categories = [...new Set(allNodes.map((node) => node.group))].sort();
+            const tags = [...new Set(allNodes.flatMap((node) => node.tags))].sort();
+            fillSelect(categoryEl, categories, "Все категории");
+            fillSelect(tagEl, tags, "Все теги");
+
             statusEl.style.display = "none";
+            nodesDS = new vis.DataSet(allNodes);
+            edgesDS = new vis.DataSet(allEdges);
             const network = new vis.Network(
               graphEl,
-              { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) },
+              { nodes: nodesDS, edges: edgesDS },
               {
                 nodes: {
                   shape: "dot",
@@ -191,7 +299,16 @@
           }
         }
 
-        document.getElementById("reload").addEventListener("click", () => void build());
+        searchEl.addEventListener("input", applyFilters);
+        categoryEl.addEventListener("change", applyFilters);
+        tagEl.addEventListener("change", applyFilters);
+        document.getElementById("reload").addEventListener("click", () => {
+          allNodes = [];
+          allEdges = [];
+          nodesDS = null;
+          edgesDS = null;
+          void build();
+        });
         void build();
       })();
     </script>

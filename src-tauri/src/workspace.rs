@@ -84,6 +84,58 @@ pub struct WorkspaceConfig {
     /// User-defined Markdown templates (name → content).
     #[serde(default)]
     pub custom_templates: std::collections::HashMap<String, String>,
+    /// Open notes in a new tab (default true).
+    #[serde(default = "default_true")]
+    pub open_notes_in_new_tab: bool,
+    /// Open tasks in a new tab (default false).
+    #[serde(default)]
+    pub open_tasks_in_new_tab: bool,
+    /// Persisted Kanban column order (status ids).
+    #[serde(default = "default_kanban_order")]
+    pub kanban_column_order: Vec<String>,
+}
+
+fn default_kanban_order() -> Vec<String> {
+    ["new", "in_progress", "review", "done", "rejected", "trash"]
+        .iter()
+        .map(|value| value.to_string())
+        .collect()
+}
+
+/// Tab behaviour settings exposed to the UI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabSettings {
+    pub open_notes_in_new_tab: bool,
+    pub open_tasks_in_new_tab: bool,
+}
+
+pub fn tab_settings(root: &Path) -> Result<TabSettings, AppError> {
+    let cfg = read_cfg(root)?;
+    Ok(TabSettings {
+        open_notes_in_new_tab: cfg.open_notes_in_new_tab,
+        open_tasks_in_new_tab: cfg.open_tasks_in_new_tab,
+    })
+}
+
+pub fn set_tab_settings(root: &Path, settings: &TabSettings) -> Result<TabSettings, AppError> {
+    let mut cfg = read_cfg(root)?;
+    cfg.open_notes_in_new_tab = settings.open_notes_in_new_tab;
+    cfg.open_tasks_in_new_tab = settings.open_tasks_in_new_tab;
+    fsops::write_json_atomic(&root.join("config.json"), &cfg)?;
+    Ok(settings.clone())
+}
+
+/// Persisted Kanban column order.
+pub fn kanban_column_order(root: &Path) -> Result<Vec<String>, AppError> {
+    Ok(read_cfg(root)?.kanban_column_order)
+}
+
+pub fn set_kanban_column_order(root: &Path, order: Vec<String>) -> Result<Vec<String>, AppError> {
+    let mut cfg = read_cfg(root)?;
+    cfg.kanban_column_order = order;
+    fsops::write_json_atomic(&root.join("config.json"), &cfg)?;
+    Ok(cfg.kanban_column_order)
 }
 
 fn default_true() -> bool {
@@ -324,6 +376,9 @@ pub fn init(root: &Path, name: &str) -> Result<WorkspaceInfo, AppError> {
         due_soon_notify_minutes: 60,
         daily_note_format: default_daily_note_format(),
         custom_templates: Default::default(),
+        open_notes_in_new_tab: true,
+        open_tasks_in_new_tab: false,
+        kanban_column_order: default_kanban_order(),
     };
     let mut bytes = serde_json::to_vec_pretty(&cfg)?;
     bytes.push(b'\n');

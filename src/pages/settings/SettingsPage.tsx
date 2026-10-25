@@ -62,6 +62,11 @@ export default function SettingsPage(): JSX.Element {
   const [templates, setTemplates] = useState<Record<string, string>>({});
   const [templateBusy, setTemplateBusy] = useState(false);
   const [templatesModalOpen, setTemplatesModalOpen] = useState(false);
+  const [tabSettings, setTabSettings] = useState({
+    openNotesInNewTab: true,
+    openTasksInNewTab: false,
+  });
+  const [tabBusy, setTabBusy] = useState(false);
 
   // Load the extension-system settings, installed plugins, and (for admins)
   // the session lifetime once.
@@ -100,6 +105,11 @@ export default function SettingsPage(): JSX.Element {
       void WorkspaceService.getDailyNoteFormat().then((result) => {
         if (!cancelled && result.ok) {
           setDailyFormat(result.value);
+        }
+      });
+      void WorkspaceService.getTabSettings().then((result) => {
+        if (!cancelled && result.ok) {
+          setTabSettings(result.value);
         }
       });
     }
@@ -189,6 +199,21 @@ export default function SettingsPage(): JSX.Element {
     }
     setTemplates(result.value);
     pushToast("Шаблон удалён", "success");
+  }
+
+  async function saveTabSettings(next: {
+    openNotesInNewTab: boolean;
+    openTasksInNewTab: boolean;
+  }): Promise<void> {
+    setTabSettings(next);
+    setTabBusy(true);
+    const result = await WorkspaceService.setTabSettings(next);
+    setTabBusy(false);
+    if (!result.ok) {
+      pushToast(result.error.message, "error");
+      return;
+    }
+    setTabSettings(result.value);
   }
 
   function handleClearCache(): void {
@@ -437,6 +462,34 @@ export default function SettingsPage(): JSX.Element {
                   {dailyBusy ? "Сохранение…" : "Сохранить"}
                 </button>
               </div>
+            </div>
+          ) : null}
+
+          {can("workspace.settings") ? (
+            <div className={styles.sessionBlock}>
+              <h3>Вкладки</h3>
+              <label className={styles.settingRow}>
+                <input
+                  type="checkbox"
+                  checked={tabSettings.openNotesInNewTab}
+                  disabled={tabBusy}
+                  onChange={(event) =>
+                    void saveTabSettings({ ...tabSettings, openNotesInNewTab: event.target.checked })
+                  }
+                />
+                <span>Открывать заметки в новой вкладке</span>
+              </label>
+              <label className={styles.settingRow}>
+                <input
+                  type="checkbox"
+                  checked={tabSettings.openTasksInNewTab}
+                  disabled={tabBusy}
+                  onChange={(event) =>
+                    void saveTabSettings({ ...tabSettings, openTasksInNewTab: event.target.checked })
+                  }
+                />
+                <span>Открывать задачи в новой вкладке</span>
+              </label>
             </div>
           ) : null}
 

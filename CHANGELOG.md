@@ -2,6 +2,26 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.10.7] - 2026-10-25
+
+### Added
+
+- **Graph filters** (Wiki & Graph plugin): search input, category dropdown and
+  tag dropdown that filter the `vis-network` nodes/edges dynamically
+- **Tab system**: `useTabStore` + `TabsBar` below the topbar; the workspace
+  main area renders the active tab's page instead of a router outlet; tabs can
+  be switched and closed
+- **Tab settings**: `openNotesInNewTab` (default true) / `openTasksInNewTab`
+  (default false) in `config.json`, checkboxes in Settings → Общие; navigation
+  opens a new tab or reuses the current one accordingly
+- **Kanban column reordering**: `kanbanColumnOrder` in `config.json` with
+  get/set commands; the board wraps columns in a `SortableContext` (horizontal)
+  and persists the new order when a column header is dragged
+
+### Changed
+
+- Version bumped to `0.10.7`
+
 ## [0.10.5] - 2026-10-25
 
 ### Added

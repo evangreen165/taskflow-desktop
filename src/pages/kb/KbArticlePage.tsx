@@ -287,8 +287,9 @@ function BacklinksBlock({ spaceId, title }: { spaceId: string; title: string }):
   );
 }
 
-export default function KbArticlePage(): JSX.Element {
-  const { id } = useParams();
+export default function KbArticlePage({ noteId }: { noteId?: string } = {}): JSX.Element {
+  const { id: routeId } = useParams();
+  const id = noteId ?? routeId;
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const navigate = useNavigate();
   const { can } = usePermissions();
