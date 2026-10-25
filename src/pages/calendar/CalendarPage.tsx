@@ -26,10 +26,10 @@ import {
   subWeeks,
 } from "date-fns";
 import { ru } from "date-fns/locale";
-import { useNavigate } from "react-router-dom";
 
 import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import { messageForCode } from "@/lib/errorMessages";
+import { appNavigate } from "@/lib/navigate";
 import { priorityColor } from "@/lib/taskMeta";
 import { NotesService, type NoteListItem } from "@/services/notes";
 import { TasksService, type Task } from "@/services/tasks";
@@ -108,7 +108,6 @@ function dayKey(day: Date): string {
 export default function CalendarPage(): JSX.Element {
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const pushToast = useToastStore((s) => s.push);
-  const navigate = useNavigate();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const [view, setView] = useState<CalendarView>("month");
@@ -172,13 +171,13 @@ export default function CalendarPage(): JSX.Element {
     const title = formatDailyTitle(new Date(`${selectedDay}T00:00:00`), dailyFormat);
     const resolved = await NotesService.resolveTitle(spaceId, title);
     if (resolved.ok && resolved.value) {
-      navigate(`/app/kb/${resolved.value}`);
+      appNavigate(`/app/kb/${resolved.value}`);
       return;
     }
     await NotesService.createCategory(spaceId, "Дневник");
     const created = await NotesService.create(spaceId, { title, category: "Дневник" });
     if (created.ok) {
-      navigate(`/app/kb/${created.value.meta.id}`);
+      appNavigate(`/app/kb/${created.value.meta.id}`);
     } else {
       pushToast(created.error.message, "error");
     }
@@ -449,7 +448,7 @@ export default function CalendarPage(): JSX.Element {
                           key={note.id}
                           type="button"
                           className={styles.dayNoteLink}
-                          onClick={() => navigate(`/app/kb/${note.id}`)}
+                          onClick={() => appNavigate(`/app/kb/${note.id}`)}
                         >
                           📝 {note.title}
                         </button>

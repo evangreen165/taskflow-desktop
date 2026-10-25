@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
+import { appNavigate } from "@/lib/navigate";
 import { LlmService } from "@/services/llm";
 import { NotesService } from "@/services/notes";
 import { PluginsService } from "@/services/plugins";
@@ -27,7 +27,6 @@ const PLUGIN_ERROR = "plugin:error";
  */
 export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const navigate = useNavigate();
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
   const pushToast = useToastStore((s) => s.push);
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
@@ -173,7 +172,7 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
           if (typeof path !== "string" || !path.startsWith("/app")) {
             throw new Error("Параметр path обязателен (должен начинаться с /app)");
           }
-          navigate(path);
+          appNavigate(path);
           return null;
         }
         case "getTheme": {
@@ -218,7 +217,7 @@ export default function PluginFrame({ pluginId }: { pluginId: string }): JSX.Ele
           throw new Error(`Неизвестное действие плагина: ${action}`);
       }
     },
-    [spaceId, pushToast, pluginId, navigate],
+    [spaceId, pushToast, pluginId],
   );
 
   /**

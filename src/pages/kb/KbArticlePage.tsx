@@ -1,6 +1,6 @@
 ﻿import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
@@ -11,6 +11,7 @@ import { useIsPersonalSpaceOwner } from "@/hooks/useIsPersonalSpaceOwner";
 import { useNoteEditor } from "@/hooks/useNoteEditor";
 import { usePermissions } from "@/hooks/usePermissions";
 import { categoryIcon, formatDate, NOTE_STATUS_LABELS } from "@/lib/kbMeta";
+import { appNavigate } from "@/lib/navigate";
 import { AttachmentsService } from "@/services/attachments";
 import { NotesService, type Note, type NoteListItem, type NoteMeta } from "@/services/notes";
 import { useNoteStore } from "@/stores/useNoteStore";
@@ -212,7 +213,6 @@ function WikiLink({
   spaceId: string;
   category: string;
 }): JSX.Element {
-  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
 
   async function openLink(event: React.MouseEvent<HTMLAnchorElement>): Promise<void> {
@@ -224,7 +224,7 @@ function WikiLink({
     const result = await NotesService.resolveTitle(spaceId, title);
     setBusy(false);
     if (result.ok && result.value) {
-      navigate(`/app/kb/${result.value}`);
+      appNavigate(`/app/kb/${result.value}`);
       return;
     }
     if (result.ok && result.value === null) {
@@ -236,7 +236,7 @@ function WikiLink({
         category: category || "Импорт",
       });
       if (created.ok) {
-        navigate(`/app/kb/${created.value.meta.id}`);
+        appNavigate(`/app/kb/${created.value.meta.id}`);
       }
     }
   }
@@ -249,7 +249,6 @@ function WikiLink({
 }
 
 function BacklinksBlock({ spaceId, title }: { spaceId: string; title: string }): JSX.Element | null {
-  const navigate = useNavigate();
   const [items, setItems] = useState<NoteMeta[] | null>(null);
 
   useEffect(() => {
@@ -276,7 +275,7 @@ function BacklinksBlock({ spaceId, title }: { spaceId: string; title: string }):
             <button
               type="button"
               className={styles.backlink}
-              onClick={() => navigate(`/app/kb/${note.id}`)}
+              onClick={() => appNavigate(`/app/kb/${note.id}`)}
             >
               {note.title}
             </button>
@@ -291,7 +290,6 @@ export default function KbArticlePage({ noteId }: { noteId?: string } = {}): JSX
   const { id: routeId } = useParams();
   const id = noteId ?? routeId;
   const spaceId = useSpaceStore((s) => s.currentSpaceId);
-  const navigate = useNavigate();
   const { can } = usePermissions();
   const personalOwner = useIsPersonalSpaceOwner();
   const canEditArticle = can("article.edit") || personalOwner;
@@ -374,7 +372,7 @@ export default function KbArticlePage({ noteId }: { noteId?: string } = {}): JSX
       <div className={styles.page}>
         <div className={styles.notFound}>
           <h1>Статья не найдена</h1>
-          <button className="btn-primary" type="button" onClick={() => navigate("/app/kb")}>
+          <button className="btn-primary" type="button" onClick={() => appNavigate("/app/kb")}>
             Назад в Заметки
           </button>
         </div>
@@ -411,7 +409,7 @@ export default function KbArticlePage({ noteId }: { noteId?: string } = {}): JSX
     }
     setConfirmDelete(false);
     pushToast("Статья удалена", "success");
-    navigate("/app/kb");
+    appNavigate("/app/kb");
   }
 
   async function openHistory(): Promise<void> {
@@ -453,7 +451,7 @@ export default function KbArticlePage({ noteId }: { noteId?: string } = {}): JSX
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <button className={styles.back} type="button" onClick={() => navigate("/app/kb")}>
+        <button className={styles.back} type="button" onClick={() => appNavigate("/app/kb")}>
           ← Заметки
         </button>
         <div className={styles.headerMeta}>

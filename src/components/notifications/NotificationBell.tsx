@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
+import { appNavigate } from "@/lib/navigate";
 import type { Notification, NotificationType } from "@/services/notifications";
 import { useNotificationStore } from "@/stores/useNotificationStore";
 import { useSpaceStore } from "@/stores/useSpaceStore";
@@ -44,7 +44,6 @@ export default function NotificationBell(): JSX.Element {
   const markRead = useNotificationStore((s) => s.markRead);
   const markAllRead = useNotificationStore((s) => s.markAllRead);
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
-  const navigate = useNavigate();
 
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -88,7 +87,7 @@ export default function NotificationBell(): JSX.Element {
         setCurrentSpace(space);
       }
     }
-    navigate(notification.linkTo);
+    appNavigate(notification.linkTo);
   }
 
   return (

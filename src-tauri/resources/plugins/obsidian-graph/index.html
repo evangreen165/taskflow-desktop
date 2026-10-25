@@ -62,6 +62,7 @@
       #graph {
         position: absolute;
         inset: 0;
+        background: #0f172a;
       }
       #graph canvas {
         outline: none;
@@ -172,24 +173,22 @@
         }
 
         function applyFilters() {
-          if (!nodesDS || !edgesDS) {
+          if (!nodesDS) {
             return;
           }
           const query = searchEl.value.trim().toLowerCase();
           const category = categoryEl.value;
           const tag = tagEl.value;
-          const visible = allNodes.filter((node) => {
-            if (query && !String(node.label).toLowerCase().includes(query)) return false;
-            if (category && node.group !== category) return false;
-            if (tag && !(node.tags || []).includes(tag)) return false;
-            return true;
+          // Hide/show via DataSet.update instead of rebuilding the network
+          // (rebuilding causes flicker). Edges to hidden nodes hide themselves.
+          const updates = allNodes.map((node) => {
+            const visible =
+              (!query || String(node.label).toLowerCase().includes(query)) &&
+              (!category || node.group === category) &&
+              (!tag || (node.tags || []).includes(tag));
+            return { id: node.id, hidden: !visible };
           });
-          const ids = new Set(visible.map((node) => node.id));
-          const edges = allEdges.filter((edge) => ids.has(edge.from) && ids.has(edge.to));
-          nodesDS.clear();
-          edgesDS.clear();
-          nodesDS.add(visible);
-          edgesDS.add(edges);
+          nodesDS.update(updates);
         }
 
         function fillSelect(select, values, placeholder) {
@@ -272,12 +271,16 @@
                 nodes: {
                   shape: "dot",
                   size: 14,
-                  font: { color: "#1f2937", size: 13 },
+                  font: { size: 14, color: "#ffffff" },
                   borderWidth: 1,
-                  color: { background: "#eef2ff", border: "#8b5cf6" },
+                  color: {
+                    background: "#1e293b",
+                    border: "#8b5cf6",
+                    highlight: { background: "#8b5cf6", border: "#c4b5fd" },
+                  },
                 },
                 edges: {
-                  color: { color: "#9ca3af", highlight: "#8b5cf6" },
+                  color: { color: "#475569", highlight: "#8b5cf6" },
                   smooth: true,
                   arrows: { to: { enabled: true, scaleFactor: 0.6 } },
                 },

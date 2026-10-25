@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Command } from "cmdk";
-import { useNavigate } from "react-router-dom";
+
+import { appNavigate } from "@/lib/navigate";
 
 import { categoryIcon } from "@/lib/kbMeta";
 import { SearchService, type GlobalSearchResults } from "@/services/search";
@@ -21,7 +22,6 @@ interface CommandPaletteProps {
  * access. Keystrokes are debounced before hitting the backend.
  */
 export default function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX.Element {
-  const navigate = useNavigate();
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
   const recents = useRecentStore((s) => s.items);
 
@@ -72,9 +72,9 @@ export default function CommandPalette({ open, onOpenChange }: CommandPalettePro
     }
     onOpenChange(false);
     if (kind === "task") {
-      navigate(`/app/tasks?task=${encodeURIComponent(id)}`);
+      appNavigate(`/app/tasks?task=${encodeURIComponent(id)}`);
     } else {
-      navigate(`/app/kb/${encodeURIComponent(id)}`);
+      appNavigate(`/app/kb/${encodeURIComponent(id)}`);
     }
   }
 

@@ -2,6 +2,24 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.10.8] - 2026-10-25
+
+### Fixed
+
+- **Tab architecture**: removed the router-sync effect (Back/Forward no longer
+  spawn tabs). Navigation now goes through `appNavigate`, which owns the tab
+  store: note paths obey `openNotesInNewTab` (new tab vs. replace the active
+  one), task deep links obey `openTasksInNewTab`, and standard pages reuse an
+  existing tab or open one. Sidebar links and plugin navigation are tab-based.
+- **Graph plugin**: bumped to 1.0.2 (so installed workspaces update), dark
+  canvas with white 14px labels, `hover: true`, and filters now hide/show nodes
+  via `nodesDataSet.update({ hidden })` instead of rebuilding the network
+  (no flicker)
+
+### Changed
+
+- Version bumped to `0.10.8`
+
 ## [0.10.7] - 2026-10-25
 
 ### Added

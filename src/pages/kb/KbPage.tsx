@@ -1,6 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useNavigate } from "react-router-dom";
 
 import KbCard from "@/components/kb/KbCard";
 import NewNoteModal from "@/components/kb/NewNoteModal";
@@ -8,6 +7,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import { useIsPersonalSpaceOwner } from "@/hooks/useIsPersonalSpaceOwner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EMPTY_KB_FILTER, filterNoteItems, type KbFilter } from "@/lib/kbMeta";
+import { appNavigate } from "@/lib/navigate";
 import { NotesService } from "@/services/notes";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNoteStore } from "@/stores/useNoteStore";
@@ -33,7 +33,6 @@ export default function KbPage(): JSX.Element {
   const personalOwner = useIsPersonalSpaceOwner();
   const canWriteNotes = can("article.create") || personalOwner;
   const pushToast = useToastStore((s) => s.push);
-  const navigate = useNavigate();
 
   const [filter, setFilter] = useState<KbFilter>(EMPTY_KB_FILTER);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -296,7 +295,7 @@ export default function KbPage(): JSX.Element {
                 key={item.id}
                 item={item}
                 author={users[item.authorId]}
-                onOpen={() => navigate(`/app/kb/${item.id}`)}
+                onOpen={() => appNavigate(`/app/kb/${item.id}`)}
               />
             ))}
           </div>
@@ -308,7 +307,7 @@ export default function KbPage(): JSX.Element {
           spaceId={spaceId}
           categories={categories}
           onClose={() => setModalOpen(false)}
-          onCreated={(note) => navigate(`/app/kb/${note.meta.id}`)}
+          onCreated={(note) => appNavigate(`/app/kb/${note.meta.id}`)}
         />
       ) : null}
     </div>

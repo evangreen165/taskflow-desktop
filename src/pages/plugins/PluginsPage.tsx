@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import Skeleton from "@/components/ui/Skeleton";
+import { appNavigate } from "@/lib/navigate";
 import { PluginsService, type PluginManifest } from "@/services/plugins";
 
 import styles from "./PluginsPage.module.css";
 
 export default function PluginsPage(): JSX.Element {
-  const navigate = useNavigate();
   const [plugins, setPlugins] = useState<PluginManifest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +62,7 @@ export default function PluginsPage(): JSX.Element {
               <button
                 className="btn-primary"
                 type="button"
-                onClick={() => navigate(`/app/plugins/${encodeURIComponent(plugin.id)}`)}
+                onClick={() => appNavigate(`/app/plugins/${encodeURIComponent(plugin.id)}`)}
               >
                 Открыть
               </button>

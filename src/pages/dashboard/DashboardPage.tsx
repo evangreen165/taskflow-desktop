@@ -1,5 +1,4 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import GridLayout, { useContainerWidth, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -8,6 +7,7 @@ import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import Skeleton from "@/components/ui/Skeleton";
 import { usePermissions } from "@/hooks/usePermissions";
 import { categoryIcon, formatDate } from "@/lib/kbMeta";
+import { appNavigate } from "@/lib/navigate";
 import { formatDueDate, PRIORITY_LABELS, priorityColor, statusLabel } from "@/lib/taskMeta";
 import { DashboardService, type DashboardSummary } from "@/services/dashboard";
 import type { NoteMeta } from "@/services/notes";
@@ -26,7 +26,6 @@ export default function DashboardPage(): JSX.Element {
   const directory = useUserDirectory((s) => s.users);
   const ensureUsers = useUserDirectory((s) => s.ensure);
   const { can } = usePermissions();
-  const navigate = useNavigate();
   const config = useDashboardStore((s) => s.config);
   const setLayout = useDashboardStore((s) => s.setLayout);
   const toggleVisible = useDashboardStore((s) => s.toggleVisible);
@@ -182,7 +181,7 @@ export default function DashboardPage(): JSX.Element {
                       directory={directory}
                       canViewNotes={canViewNotes}
                       onOpenTask={setSelectedTaskId}
-                      onOpenNote={(id) => navigate(`/app/kb/${id}`)}
+                      onOpenNote={(id) => appNavigate(`/app/kb/${id}`)}
                     />
                   </div>
                 </div>

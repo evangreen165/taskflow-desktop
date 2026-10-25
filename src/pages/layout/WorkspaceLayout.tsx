@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState, type ReactNode } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import Avatar from "@/components/Avatar";
 import NoAccess from "@/components/auth/NoAccess";
@@ -10,6 +10,7 @@ import PluginFrame from "@/components/plugins/PluginFrame";
 import CommandPalette from "@/components/search/CommandPalette";
 import ChangeFolderModal from "@/components/workspace/ChangeFolderModal";
 import { usePermissions } from "@/hooks/usePermissions";
+import { appNavigate, tabTitleForPath } from "@/lib/navigate";
 import AdminPage from "@/pages/admin/AdminPage";
 import CalendarPage from "@/pages/calendar/CalendarPage";
 import DashboardPage from "@/pages/dashboard/DashboardPage";
@@ -32,20 +33,6 @@ import { isOwnPersonalSpace, isPersonalSpace, useSpaceStore } from "@/stores/use
 import { useTabStore } from "@/stores/useTabStore";
 
 import styles from "./WorkspaceLayout.module.css";
-
-function tabTitle(pathname: string): string {
-  if (pathname.startsWith("/app/dashboard")) return "Главная";
-  if (pathname.startsWith("/app/tasks")) return "Задачи";
-  if (pathname.startsWith("/app/calendar")) return "Календарь";
-  if (pathname.startsWith("/app/kb/")) return "Заметка";
-  if (pathname.startsWith("/app/kb")) return "Заметки";
-  if (pathname.startsWith("/app/plugins/")) return "Расширение";
-  if (pathname.startsWith("/app/plugins")) return "Расширения";
-  if (pathname.startsWith("/app/admin")) return "Администрирование";
-  if (pathname.startsWith("/app/profile")) return "Профиль";
-  if (pathname.startsWith("/app/settings")) return "Настройки";
-  return "TaskFlow";
-}
 
 function renderTabContent(path: string): JSX.Element {
   if (path.startsWith("/app/kb/")) {
@@ -85,6 +72,10 @@ function SideNavLink({
   title?: string;
   children: ReactNode;
 }): JSX.Element {
+  const activePath = useTabStore(
+    (s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.path ?? "",
+  );
+  const isActive = activePath === to || activePath.startsWith(`${to}/`);
   if (disabled) {
     return (
       <span
@@ -96,13 +87,14 @@ function SideNavLink({
     );
   }
   return (
-    <NavLink
-      to={to}
+    <button
+      type="button"
       title={title}
-      className={({ isActive }) => `${styles.navItem} ${isActive ? styles.active : ""}`}
+      className={`${styles.navItem} ${isActive ? styles.active : ""}`}
+      onClick={() => appNavigate(to)}
     >
       {children}
-    </NavLink>
+    </button>
   );
 }
 
@@ -111,16 +103,11 @@ export default function WorkspaceLayout(): JSX.Element {
   const session = useAuthStore((s) => s.session);
   const logout = useAuthStore((s) => s.logout);
   const { can, role, user } = usePermissions();
-  const navigate = useNavigate();
   const location = useLocation();
   const tabs = useTabStore((s) => s.tabs);
   const activeTabId = useTabStore((s) => s.activeTabId);
-  const openTab = useTabStore((s) => s.openTab);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
-  const [tabSettings, setTabSettings] = useState({
-    openNotesInNewTab: true,
-    openTasksInNewTab: false,
-  });
+  const initializedTabsRef = useRef(false);
 
   const forced = session?.mustChangePassword ?? false;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -207,33 +194,34 @@ export default function WorkspaceLayout(): JSX.Element {
     void fetchSpaces();
   }, [fetchSpaces]);
 
-  // Load tab behaviour settings once.
+  // Load tab behaviour settings once and push them into the tab store.
   useEffect(() => {
     void WorkspaceService.getTabSettings().then((result) => {
       if (result.ok) {
-        setTabSettings(result.value);
+        useTabStore
+          .getState()
+          .setTabSettings(result.value.openNotesInNewTab, result.value.openTasksInNewTab);
       }
     });
   }, []);
 
-  // Keep the tab store in sync with the router: every navigation opens or
-  // activates a tab (or reuses the current one per the workspace settings).
+  // Initialise the active tab from the URL once (deep link / F5). After this,
+  // only the tab store and `appNavigate` drive navigation — the router is not
+  // observed, so Back/Forward cannot spawn tabs.
   useEffect(() => {
+    if (initializedTabsRef.current) {
+      return;
+    }
+    initializedTabsRef.current = true;
     const path = location.pathname;
     if (path === "/app" || path === "/app/") {
-      navigate("/app/dashboard", { replace: true });
+      appNavigate("/app/dashboard", { replace: true });
       return;
     }
-    if (!path.startsWith("/app")) {
-      return;
+    if (path.startsWith("/app")) {
+      useTabStore.getState().openTab(tabTitleForPath(path), path);
     }
-    const reuse = path.startsWith("/app/kb/")
-      ? !tabSettings.openNotesInNewTab
-      : path.startsWith("/app/tasks")
-        ? !tabSettings.openTasksInNewTab
-        : false;
-    openTab(tabTitle(path), path, reuse);
-  }, [location.pathname, navigate, openTab, tabSettings]);
+  }, [location.pathname]);
 
   // Poll notifications so assignments from other users appear without a reload.
   useEffect(() => {
@@ -354,7 +342,7 @@ export default function WorkspaceLayout(): JSX.Element {
 
   async function handleLogout(): Promise<void> {
     await logout();
-    navigate("/login", { replace: true });
+    appNavigate("/login", { replace: true });
   }
 
   return (
@@ -420,7 +408,7 @@ export default function WorkspaceLayout(): JSX.Element {
                   type="button"
                   className={styles.pluginNavButton}
                   title={plugin.name}
-                  onClick={() => openPlugin(plugin.id)}
+                  onClick={() => appNavigate(`/app/plugins/${plugin.id}`)}
                 >
                   <span aria-hidden="true">
                     {plugin.id === "obsidian-graph" ? "🕸️" : "🧩"}
@@ -458,7 +446,7 @@ export default function WorkspaceLayout(): JSX.Element {
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
-                    navigate("/app/profile");
+                    appNavigate("/app/profile");
                   }}
                 >
                   Мой профиль
@@ -468,7 +456,7 @@ export default function WorkspaceLayout(): JSX.Element {
                   role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
-                    navigate("/app/settings");
+                    appNavigate("/app/settings");
                   }}
                 >
                   Настройки приложения
