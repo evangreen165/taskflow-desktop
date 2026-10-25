@@ -2,6 +2,28 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.10.2] - 2026-10-25
+
+### Added
+
+- **Daily-note calendar integration** (gated by the `obsidian-graph` plugin):
+  day cells show a 📝 marker when a note was created on that date or a daily
+  note matches the format; the day panel lists «Заметки этого дня» (click to
+  open); the «📓 Дневник на этот день» button is only shown when the plugin is
+  enabled
+- **Callouts**: `> [!NOTE]` / `[!WARNING]` / `[!TIP]` / `[!IMPORTANT]` render
+  as styled callout blocks (icons + accent colors); the toolbar has a 💡 button
+  that inserts a NOTE template
+- **Hierarchical tags**: the KB sidebar groups slash-separated tags
+  (`#работа/проект` under `#работа`); clicking a group filters the notes
+  matching the tag or its children (`работа/*`)
+- **Templates**: a «📋 Шаблоны» toolbar dropdown with «Встреча», «База знаний»
+  and «Дневник» templates inserted at the cursor
+
+### Changed
+
+- Version bumped to `0.10.2`
+
 ## [0.10.1] - 2026-10-25
 
 ### Added

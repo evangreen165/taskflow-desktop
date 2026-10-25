@@ -204,3 +204,13 @@
   overflow-y: auto;
   padding-bottom: 8px;
 }
+
+.tagGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tagChild {
+  padding-left: 12px;
+}

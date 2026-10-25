@@ -36,6 +36,7 @@ export default function KbPage(): JSX.Element {
   const navigate = useNavigate();
 
   const [filter, setFilter] = useState<KbFilter>(EMPTY_KB_FILTER);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [newCategoryOpen, setNewCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -54,12 +55,44 @@ export default function KbPage(): JSX.Element {
     }
   }, [notes, ensureUsers]);
 
-  const visible = useMemo(
-    () => filterNoteItems(notes, filter, currentUserId),
-    [notes, filter, currentUserId],
-  );
+  const visible = useMemo(() => {
+    const base = filterNoteItems(notes, filter, currentUserId);
+    if (!tagFilter) {
+      return base;
+    }
+    return base.filter((note) =>
+      note.tags.some((tag) => tag === tagFilter || tag.startsWith(`${tagFilter}/`)),
+    );
+  }, [notes, filter, currentUserId, tagFilter]);
+
+  // Hierarchical tag tree: `работа/проект` groups under `работа`.
+  const tagTree = useMemo(() => {
+    const all = new Set<string>();
+    for (const note of notes) {
+      for (const raw of note.tags) {
+        const tag = raw.trim();
+        if (tag) {
+          all.add(tag);
+        }
+      }
+    }
+    const roots = new Map<string, string[]>();
+    for (const tag of all) {
+      const root = tag.split("/")[0] || tag;
+      const children = roots.get(root) ?? [];
+      if (tag !== root) {
+        children.push(tag);
+      }
+      roots.set(root, children);
+    }
+    return [...roots.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [notes]);
+
   const filterActive =
-    filter.category !== null || filter.status !== "all" || filter.search.trim() !== "";
+    filter.category !== null ||
+    filter.status !== "all" ||
+    filter.search.trim() !== "" ||
+    tagFilter !== null;
 
   async function submitCategory(): Promise<void> {
     const name = newCategoryName.trim();
@@ -164,6 +197,30 @@ export default function KbPage(): JSX.Element {
           </div>
         ))}
 
+        {tagTree.length > 0 ? (
+          <>
+            <div className={styles.sidebarTitle}>Теги</div>
+            {tagTree.map(([root, children]) => (
+              <div key={root} className={styles.tagGroup}>
+                <FilterButton
+                  label={`#${root}`}
+                  active={tagFilter === root}
+                  onClick={() => setTagFilter(tagFilter === root ? null : root)}
+                />
+                {children.map((tag) => (
+                  <div key={tag} className={styles.tagChild}>
+                    <FilterButton
+                      label={`#${tag}`}
+                      active={tagFilter === tag}
+                      onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+                    />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </>
+        ) : null}
+
         <div className={styles.sidebarTitle}>Статус</div>
         <FilterButton
           label="Все"
@@ -192,7 +249,14 @@ export default function KbPage(): JSX.Element {
             onChange={(event) => setFilter({ ...filter, search: event.target.value })}
           />
           {filterActive ? (
-            <button className="btn-ghost" type="button" onClick={() => setFilter(EMPTY_KB_FILTER)}>
+            <button
+              className="btn-ghost"
+              type="button"
+              onClick={() => {
+                setFilter(EMPTY_KB_FILTER);
+                setTagFilter(null);
+              }}
+            >
               Сбросить
             </button>
           ) : null}

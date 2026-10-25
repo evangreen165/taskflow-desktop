@@ -42,3 +42,29 @@
   border-color: var(--border);
   color: var(--text);
 }
+
+.templatesWrap {
+  position: relative;
+  border-right: none;
+}
+
+.templatesMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 70;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+}
+
+.templatesMenu button {
+  text-align: left;
+  width: 100%;
+}

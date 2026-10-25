@@ -31,13 +31,29 @@ import { useNavigate } from "react-router-dom";
 import TaskDetailPanel from "@/components/tasks/TaskDetailPanel";
 import { messageForCode } from "@/lib/errorMessages";
 import { priorityColor } from "@/lib/taskMeta";
-import { NotesService } from "@/services/notes";
+import { NotesService, type NoteListItem } from "@/services/notes";
 import { TasksService, type Task } from "@/services/tasks";
 import { WorkspaceService } from "@/services/workspace";
+import { usePluginStore } from "@/stores/usePluginStore";
 import { useSpaceStore } from "@/stores/useSpaceStore";
 import { useToastStore } from "@/stores/useToastStore";
 
 import styles from "./CalendarPage.module.css";
+
+const OBSIDIAN_PLUGIN_ID = "obsidian-graph";
+
+/** Maps the user-facing `YYYY/YY/DD/D` tokens to date-fns tokens. */
+function toDateFnsFormat(format: string): string {
+  return format
+    .replace(/YYYY/g, "yyyy")
+    .replace(/YY/g, "yy")
+    .replace(/DD/g, "dd")
+    .replace(/D/g, "d");
+}
+
+function formatDailyTitle(day: Date, fmt: string): string {
+  return format(day, toDateFnsFormat(fmt), { locale: ru });
+}
 
 const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const UNSCHEDULED_DROP_ID = "unscheduled";
@@ -102,6 +118,10 @@ export default function CalendarPage(): JSX.Element {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [dailyFormat, setDailyFormat] = useState("YYYY-MM-DD");
+  const extensionsEnabled = usePluginStore((s) => s.extensionsEnabled);
+  const pluginStates = usePluginStore((s) => s.pluginStates);
+  const obsidianEnabled = extensionsEnabled && pluginStates[OBSIDIAN_PLUGIN_ID] === true;
+  const [notes, setNotes] = useState<NoteListItem[]>([]);
 
   useEffect(() => {
     void WorkspaceService.getDailyNoteFormat().then((result) => {
@@ -111,16 +131,40 @@ export default function CalendarPage(): JSX.Element {
     });
   }, []);
 
+  useEffect(() => {
+    if (!obsidianEnabled || !spaceId) {
+      setNotes([]);
+      return;
+    }
+    let cancelled = false;
+    void NotesService.list(spaceId, {}).then((result) => {
+      if (!cancelled && result.ok) {
+        setNotes(result.value);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [obsidianEnabled, spaceId]);
+
+  /** Notes created on a given day (plus the daily note matching the format). */
+  function notesForDate(day: Date): NoteListItem[] {
+    if (!obsidianEnabled) {
+      return [];
+    }
+    const key = format(day, "yyyy-MM-dd");
+    const dailyTitle = formatDailyTitle(day, dailyFormat).toLowerCase();
+    return notes.filter(
+      (note) =>
+        note.createdAt.slice(0, 10) === key || note.title.trim().toLowerCase() === dailyTitle,
+    );
+  }
+
   async function openDailyNote(): Promise<void> {
     if (!selectedDay || !spaceId) {
       return;
     }
-    const fmt = dailyFormat
-      .replace(/YYYY/g, "yyyy")
-      .replace(/YY/g, "yy")
-      .replace(/DD/g, "dd")
-      .replace(/D/g, "d");
-    const title = format(new Date(`${selectedDay}T00:00:00`), fmt, { locale: ru });
+    const title = formatDailyTitle(new Date(`${selectedDay}T00:00:00`), dailyFormat);
     const resolved = await NotesService.resolveTitle(spaceId, title);
     if (resolved.ok && resolved.value) {
       navigate(`/app/kb/${resolved.value}`);
@@ -323,6 +367,7 @@ export default function CalendarPage(): JSX.Element {
                         day={day}
                         inMonth={isSameMonth(day, cursor)}
                         tasks={tasksFor(tasks, day)}
+                        hasNote={notesForDate(day).length > 0}
                         onOpen={(task) => setSelectedTaskId(task.id)}
                         onSelectDay={() => setSelectedDay(dayKey(day))}
                       />
@@ -336,6 +381,7 @@ export default function CalendarPage(): JSX.Element {
                     inMonth
                     week
                     tasks={tasksFor(tasks, day)}
+                    hasNote={notesForDate(day).length > 0}
                     onOpen={(task) => setSelectedTaskId(task.id)}
                     onSelectDay={() => setSelectedDay(dayKey(day))}
                   />
@@ -378,13 +424,35 @@ export default function CalendarPage(): JSX.Element {
                   ✕
                 </button>
               </div>
-              <button
-                type="button"
-                className={styles.dailyNoteBtn}
-                onClick={() => void openDailyNote()}
-              >
-                📓 Дневник на этот день
-              </button>
+              {obsidianEnabled ? (
+                <>
+                  <button
+                    type="button"
+                    className={styles.dailyNoteBtn}
+                    onClick={() => void openDailyNote()}
+                  >
+                    📓 Дневник на этот день
+                  </button>
+                  <div className={styles.dayNotes}>
+                    <h4>Заметки этого дня</h4>
+                    {selectedDay && notesForDate(new Date(`${selectedDay}T00:00:00`)).length === 0 ? (
+                      <p className={styles.muted}>Нет заметок.</p>
+                    ) : (
+                      selectedDay &&
+                      notesForDate(new Date(`${selectedDay}T00:00:00`)).map((note) => (
+                        <button
+                          key={note.id}
+                          type="button"
+                          className={styles.dayNoteLink}
+                          onClick={() => navigate(`/app/kb/${note.id}`)}
+                        >
+                          📝 {note.title}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </>
+              ) : null}
               <p className={styles.mutedHint}>
                 Перетащите задачу на день календаря или в «Без срока».
               </p>
@@ -430,6 +498,7 @@ function DayCell({
   inMonth,
   week,
   tasks,
+  hasNote,
   onOpen,
   onSelectDay,
 }: {
@@ -437,6 +506,7 @@ function DayCell({
   inMonth: boolean;
   week?: boolean;
   tasks: Task[];
+  hasNote?: boolean;
   onOpen: (task: Task) => void;
   onSelectDay: () => void;
 }): JSX.Element {
@@ -454,6 +524,11 @@ function DayCell({
       title="Открыть задачи дня"
     >
       <span className={styles.dayNumber}>{format(day, "d")}</span>
+      {hasNote ? (
+        <span className={styles.noteDot} title="Есть заметка на этот день">
+          📝
+        </span>
+      ) : null}
       {visible.map((task) => (
         <DraggableTask key={task.id} task={task} onOpen={() => onOpen(task)} />
       ))}

@@ -675,3 +675,40 @@
   color: var(--text-muted);
   font-size: 11px;
 }
+
+:global(.callout) {
+  margin: 14px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--border);
+  border-radius: 8px;
+}
+
+:global(.callout-title) {
+  font-weight: 650;
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+
+:global(.callout p) {
+  margin: 4px 0;
+}
+
+:global(.callout-note) {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+}
+
+:global(.callout-warning) {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+}
+
+:global(.callout-tip) {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: #10b981;
+}
+
+:global(.callout-important) {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: #8b5cf6;
+}

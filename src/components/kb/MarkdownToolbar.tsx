@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { RefObject } from "react";
 
 import styles from "./MarkdownToolbar.module.css";
@@ -101,6 +102,27 @@ export default function MarkdownToolbar({
   onChange,
   obsidianEnabled = false,
 }: MarkdownToolbarProps): JSX.Element {
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const templates = [
+    {
+      id: "meeting",
+      label: "Встреча",
+      text: `## Встреча — ${today}\n\n**Участники:** \n**Цель:** \n\n### Повестка\n- \n\n### Решения\n- \n`,
+    },
+    {
+      id: "kb",
+      label: "База знаний",
+      text: `# Тема\n\n## Обзор\n\n## Ключевые понятия\n\n## Примеры\n\n## Ссылки\n- \n`,
+    },
+    {
+      id: "daily",
+      label: "Дневник",
+      text: `# Дневник — ${today}\n\n## ✅ Плюсы дня\n- \n\n## ⚠️ Минусы дня\n- \n\n## 💡 Мысли\n- \n`,
+    },
+  ];
+
   function apply(transform: (value: string, start: number, end: number) => InsertResult): void {
     const element = textareaRef.current;
     const start = element?.selectionStart ?? value.length;
@@ -131,6 +153,24 @@ export default function MarkdownToolbar({
       const cursor = start + 2;
       return { next, selectionStart: cursor, selectionEnd: cursor };
     });
+  }
+
+  function insertCallout(): void {
+    apply((val, start, end) => {
+      const template = "> [!NOTE]\n> Текст";
+      const next = val.slice(0, start) + template + val.slice(end);
+      const cursor = start + template.length;
+      return { next, selectionStart: cursor, selectionEnd: cursor };
+    });
+  }
+
+  function insertTemplate(text: string): void {
+    apply((val, start, end) => {
+      const next = val.slice(0, start) + text + val.slice(end);
+      const cursor = start + text.length;
+      return { next, selectionStart: cursor, selectionEnd: cursor };
+    });
+    setTemplatesOpen(false);
   }
 
   function insertTable(): void {
@@ -194,6 +234,9 @@ export default function MarkdownToolbar({
         <button type="button" title="Блок кода" onClick={() => wrap("\n```\n", "\n```\n", "код")}>
           {"</>"}
         </button>
+        <button type="button" title="Блок внимания (callout)" onClick={insertCallout}>
+          💡
+        </button>
       </div>
 
       <div className={styles.group}>
@@ -208,6 +251,32 @@ export default function MarkdownToolbar({
         <button type="button" title="Таблица" onClick={insertTable}>
           📊 Таблица
         </button>
+      </div>
+
+      <div className={`${styles.group} ${styles.templatesWrap}`}>
+        <button
+          type="button"
+          title="Шаблоны"
+          onClick={() => setTemplatesOpen((open) => !open)}
+        >
+          📋 Шаблоны
+        </button>
+        {templatesOpen ? (
+          <div className={styles.templatesMenu}>
+            {templates.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  insertTemplate(template.text);
+                }}
+              >
+                {template.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

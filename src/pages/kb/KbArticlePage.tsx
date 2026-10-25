@@ -76,6 +76,61 @@ function caretCoordinates(
   };
 }
 
+const CALLOUT_META: Record<string, { icon: string; label: string }> = {
+  note: { icon: "🔵", label: "NOTE" },
+  warning: { icon: "🔴", label: "WARNING" },
+  tip: { icon: "🟢", label: "TIP" },
+  important: { icon: "🟣", label: "IMPORTANT" },
+};
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Converts Obsidian callout blockquotes (`> [!NOTE]`) into styled raw HTML
+ * divs (rendered by `rehype-raw`). The body is escaped plain text.
+ */
+function preprocessCallouts(content: string): string {
+  const lines = content.split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? "";
+    const match = line.match(/^>\s*\[!(NOTE|WARNING|TIP|IMPORTANT)\]\s*(.*)$/i);
+    if (!match) {
+      out.push(line);
+      continue;
+    }
+    const type = (match[1] ?? "note").toLowerCase();
+    const customTitle = (match[2] ?? "").trim();
+    const meta = CALLOUT_META[type] ?? { icon: "🔵", label: "NOTE" };
+    const body: string[] = [];
+    let j = i + 1;
+    while (j < lines.length && /^>/.test(lines[j] ?? "")) {
+      body.push((lines[j] ?? "").replace(/^>\s?/, ""));
+      j += 1;
+    }
+    const inner = body
+      .filter((bodyLine, index, arr) => !(bodyLine.trim() === "" && index === arr.length - 1))
+      .map((bodyLine) =>
+        bodyLine.trim() === "" ? "" : `<p>${escapeHtml(bodyLine)}</p>`,
+      )
+      .join("");
+    const title = customTitle || meta.label;
+    out.push(
+      `<div class="callout callout-${type}"><p class="callout-title">${meta.icon} ${escapeHtml(
+        title,
+      )}</p>${inner}</div>`,
+    );
+    i = j - 1;
+  }
+  return out.join("\n");
+}
+
 function WikiLink({
   title,
   spaceId,
@@ -417,7 +472,8 @@ export default function KbArticlePage(): JSX.Element {
                   ),
               }}
             >
-              {preprocessWikiLinks(note.content, obsidianEnabled) || "*Нет содержания.*"}
+              {preprocessCallouts(preprocessWikiLinks(note.content, obsidianEnabled)) ||
+                "*Нет содержания.*"}
             </ReactMarkdown>
           </div>
           {obsidianEnabled && spaceId ? (
@@ -963,7 +1019,8 @@ function ArticleEditor({
                     ),
                 }}
               >
-                {preprocessWikiLinks(draft.content, obsidianEnabled) || "*Нет содержания.*"}
+                {preprocessCallouts(preprocessWikiLinks(draft.content, obsidianEnabled)) ||
+                  "*Нет содержания.*"}
               </ReactMarkdown>
             </div>
             {resizeTarget && toolbarPosition ? (
