@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
@@ -363,16 +363,36 @@ export default function KbArticlePage(): JSX.Element {
   );
 }
 
-/** Replaces an existing resized `<img>` or the plain Markdown image for `sha`. */
+/** Builds the Markdown/HTML for an image with the chosen width and alignment. */
+function buildImageMarkup(
+  sha: string,
+  width: string,
+  align: "left" | "center" | "right",
+): string {
+  if (align === "center") {
+    return `<div align="center"><img src="attachment://${sha}" width="${width}" /></div>`;
+  }
+  const float = align === "left" ? "left" : "right";
+  return `<div><img src="attachment://${sha}" width="${width}" style="float: ${float};" /></div>`;
+}
+
+/** Replaces an existing wrapped image, a bare `<img>`, or the Markdown image. */
 function resizeImageInMarkdown(
   content: string,
   sha: string,
   width: string,
-  style: string,
+  align: "left" | "center" | "right",
 ): string {
+  const replacement = buildImageMarkup(sha, width, align);
+  const wrapped = new RegExp(
+    `<div[^>]*>\\s*<img[^>]*src="attachment://${sha}"[^>]*>\\s*</div>`,
+    "i",
+  );
   const imgTag = new RegExp(`<img[^>]*src="attachment://${sha}"[^>]*>`);
   const mdImg = new RegExp(`!\\[[^\\]]*\\]\\(attachment://${sha}\\)`);
-  const replacement = `<img src="attachment://${sha}" width="${width}" style="${style}" />`;
+  if (wrapped.test(content)) {
+    return content.replace(wrapped, replacement);
+  }
   if (imgTag.test(content)) {
     return content.replace(imgTag, replacement);
   }
@@ -462,10 +482,11 @@ function ArticleEditor({
     setContent(next);
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = textareaRef.current;
     const saved = caretRef.current;
     if (element && saved) {
+      element.focus();
       element.setSelectionRange(saved.start, saved.end);
       element.scrollTop = saved.scrollTop;
       caretRef.current = null;
@@ -513,18 +534,11 @@ function ArticleEditor({
     }
   }
 
-  const alignStyle = (align: "left" | "center" | "right"): string =>
-    align === "left"
-      ? "float: left;"
-      : align === "right"
-        ? "float: right;"
-        : "display: block; margin: 0 auto;";
-
   function applyImageFormat(width: string, align: "left" | "center" | "right"): void {
     if (!resizeTarget) {
       return;
     }
-    setContent(resizeImageInMarkdown(draft.content, resizeTarget.sha, width, alignStyle(align)));
+    setContent(resizeImageInMarkdown(draft.content, resizeTarget.sha, width, align));
     setResizeTarget(null);
   }
 
@@ -646,7 +660,7 @@ function ArticleEditor({
             <MarkdownToolbar
               textareaRef={textareaRef}
               value={draft.content}
-              onChange={setContent}
+              onChange={handleContentChange}
             />
             <textarea
               ref={textareaRef}

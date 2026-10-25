@@ -2,6 +2,26 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.9.9] - 2026-10-25
+
+### Fixed
+
+- **Image alignment**: «Центр» now writes
+  `<div align="center"><img … /></div>`; «Слева»/«Справа» wrap the image in a
+  `<div>` with `style="float: left/right;"` on the `<img>` so it clears
+  correctly. `rehype-raw` renders the HTML in both read and preview modes
+- **Editor scroll jump**: the caret and `scrollTop` are saved before any
+  content update and restored in `useLayoutEffect` (also for toolbar actions),
+  so typing and formatting no longer jump the editor to the bottom
+- **Calendar DnD to «Без срока»**: the day panel is in-flow with `z-index: 40`
+  and the unscheduled sidebar is `position: relative; z-index: 50;
+  pointer-events: auto`, so it stays visible and accepts drops while the panel
+  is open (collision detection still prioritises it)
+
+### Changed
+
+- Version bumped to `0.9.9`
+
 ## [0.9.8] - 2026-10-25
 
 ### Fixed
