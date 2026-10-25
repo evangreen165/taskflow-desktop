@@ -6,6 +6,7 @@ import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 
 import { AttachmentImage, AttachmentLink } from "@/components/kb/MarkdownAttachments";
+import MarkdownToolbar from "@/components/kb/MarkdownToolbar";
 import { useIsPersonalSpaceOwner } from "@/hooks/useIsPersonalSpaceOwner";
 import { useNoteEditor } from "@/hooks/useNoteEditor";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -588,6 +589,11 @@ function ArticleEditor({
                 📎 Прикрепить файл
               </button>
             </div>
+            <MarkdownToolbar
+              textareaRef={textareaRef}
+              value={draft.content}
+              onChange={setContent}
+            />
             <textarea
               ref={textareaRef}
               className={styles.mdInput}

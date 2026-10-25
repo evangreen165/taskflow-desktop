@@ -208,3 +208,56 @@
     max-height: 180px;
   }
 }
+
+.dayPanel {
+  width: 300px;
+  flex-shrink: 0;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overflow-y: auto;
+  animation: dayPanelIn 0.18s ease;
+}
+
+@keyframes dayPanelIn {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.dayPanelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dayPanelHead h3 {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.dayPanelClose {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.dayPanelClose:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}

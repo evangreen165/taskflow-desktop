@@ -27,7 +27,12 @@ export default function KbCard({ item, author, onOpen }: KbCardProps): JSX.Eleme
         ) : null}
       </div>
 
-      <div className={styles.title}>{item.title}</div>
+      <div className={styles.title}>
+        {item.title}
+        {item.category ? (
+          <span className={styles.categoryBadge}>{item.category}</span>
+        ) : null}
+      </div>
       <div className={styles.preview}>{preview}</div>
 
       {item.tags.length > 0 ? (

@@ -2,6 +2,25 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.9.7] - 2026-10-25
+
+### Added
+
+- **Rich Markdown toolbar** for the article editor (`MarkdownToolbar`): bold,
+  italic, strike, H1–H3, bullet/ordered lists, quote, code block, link, and a
+  3×3 table template. Buttons wrap the textarea selection (or insert a
+  placeholder with the cursor in the middle) via `selectionStart`/`selectionEnd`;
+  the Editor/Preview tabs are unchanged
+- **Calendar day panel**: clicking a day opens a slide-in side panel listing
+  all tasks for that date. It is rendered inside the same `DndContext` as the
+  grid, so tasks can be dragged from the panel onto another day, and from the
+  calendar into the «Без срока» sidebar while it is open
+- Category badge on knowledge-base cards (matching the article page)
+
+### Changed
+
+- Version bumped to `0.9.7`
+
 ## [0.9.6] - 2026-10-25
 
 ### Fixed

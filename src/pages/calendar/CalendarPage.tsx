@@ -96,6 +96,7 @@ export default function CalendarPage(): JSX.Element {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const range = useMemo(() => {
     if (view === "week") {
@@ -197,6 +198,9 @@ export default function CalendarPage(): JSX.Element {
 
   const selectedTask: Task | null =
     selectedTaskId !== null ? (tasks.find((task) => task.id === selectedTaskId) ?? null) : null;
+  const dayTasks = selectedDay
+    ? tasksFor(tasks, new Date(`${selectedDay}T00:00:00`))
+    : [];
   const unscheduledDrop = useDroppable({ id: UNSCHEDULED_DROP_ID });
 
   const title =
@@ -280,6 +284,7 @@ export default function CalendarPage(): JSX.Element {
                         inMonth={isSameMonth(day, cursor)}
                         tasks={tasksFor(tasks, day)}
                         onOpen={(task) => setSelectedTaskId(task.id)}
+                        onSelectDay={() => setSelectedDay(dayKey(day))}
                       />
                     ))}
                   </div>
@@ -292,6 +297,7 @@ export default function CalendarPage(): JSX.Element {
                     week
                     tasks={tasksFor(tasks, day)}
                     onOpen={(task) => setSelectedTaskId(task.id)}
+                    onSelectDay={() => setSelectedDay(dayKey(day))}
                   />
                 ))}
           </div>
@@ -314,6 +320,40 @@ export default function CalendarPage(): JSX.Element {
               ))
             )}
           </aside>
+
+          {selectedDay ? (
+            <aside className={styles.dayPanel} aria-label="Задачи на день">
+              <div className={styles.dayPanelHead}>
+                <h3>
+                  {capitalize(
+                    format(new Date(`${selectedDay}T00:00:00`), "d MMMM yyyy", { locale: ru }),
+                  )}
+                </h3>
+                <button
+                  type="button"
+                  className={styles.dayPanelClose}
+                  title="Закрыть"
+                  onClick={() => setSelectedDay(null)}
+                >
+                  ✕
+                </button>
+              </div>
+              <p className={styles.mutedHint}>
+                Перетащите задачу на день календаря или в «Без срока».
+              </p>
+              {dayTasks.length === 0 ? (
+                <p className={styles.muted}>Нет задач на этот день.</p>
+              ) : (
+                dayTasks.map((task) => (
+                  <DraggableTask
+                    key={task.id}
+                    task={task}
+                    onOpen={() => setSelectedTaskId(task.id)}
+                  />
+                ))
+              )}
+            </aside>
+          ) : null}
         </div>
       </DndContext>
 
@@ -343,12 +383,14 @@ function DayCell({
   week,
   tasks,
   onOpen,
+  onSelectDay,
 }: {
   day: Date;
   inMonth: boolean;
   week?: boolean;
   tasks: Task[];
   onOpen: (task: Task) => void;
+  onSelectDay: () => void;
 }): JSX.Element {
   const { setNodeRef, isOver } = useDroppable({ id: dayKey(day) });
   const visible = tasks.slice(0, MAX_CELL_TASKS);
@@ -360,6 +402,8 @@ function DayCell({
       className={`${styles.day} ${inMonth ? "" : styles.dayOther} ${week ? styles.dayWeek : ""} ${
         isOver ? styles.dayOver : ""
       }`}
+      onClick={onSelectDay}
+      title="Открыть задачи дня"
     >
       <span className={styles.dayNumber}>{format(day, "d")}</span>
       {visible.map((task) => (
@@ -397,8 +441,9 @@ function DraggableTask({ task, onOpen }: { task: Task; onOpen: () => void }): JS
       }}
       {...attributes}
       {...listeners}
-      onClick={() => {
+      onClick={(event) => {
         if (!draggedRef.current) {
+          event.stopPropagation();
           onOpen();
         }
       }}
