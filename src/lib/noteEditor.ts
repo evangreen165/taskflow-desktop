@@ -5,6 +5,7 @@ export interface NoteDraft {
   title: string;
   category: string;
   tags: string[];
+  aliases: string[];
   content: string;
 }
 
@@ -13,6 +14,7 @@ export function noteToDraft(note: Note): NoteDraft {
     title: note.meta.title,
     category: note.meta.category,
     tags: [...note.meta.tags],
+    aliases: [...note.meta.aliases],
     content: note.content,
   };
 }
@@ -25,6 +27,7 @@ export interface NotePatch {
   title: string;
   category: string;
   tags: string[];
+  aliases: string[];
   content: string;
 }
 
@@ -34,6 +37,7 @@ export function buildNotePatch(draft: NoteDraft, base: NoteDraft): NotePatch | n
     draft.title === base.title &&
     draft.category === base.category &&
     sameStrings(draft.tags, base.tags) &&
+    sameStrings(draft.aliases, base.aliases) &&
     draft.content === base.content
   ) {
     return null;
@@ -42,6 +46,7 @@ export function buildNotePatch(draft: NoteDraft, base: NoteDraft): NotePatch | n
     title: draft.title,
     category: draft.category,
     tags: draft.tags,
+    aliases: draft.aliases,
     content: draft.content,
   };
 }

@@ -14,6 +14,7 @@ export interface UseNoteEditorResult {
   setTitle: (value: string) => void;
   setCategory: (value: string) => void;
   setTags: (value: string[]) => void;
+  setAliases: (value: string[]) => void;
   setContent: (value: string) => void;
   flush: () => Promise<void>;
   saveNow: () => Promise<void>;
@@ -97,6 +98,7 @@ export function useNoteEditor(
         patch.title,
         patch.category,
         patch.tags,
+        patch.aliases,
         patch.content,
         versionRef.current,
       );
@@ -171,6 +173,10 @@ export function useNoteEditor(
     applyDraft({ ...draftRef.current, tags: value });
   }
 
+  function setAliases(value: string[]): void {
+    applyDraft({ ...draftRef.current, aliases: value });
+  }
+
   function setContent(value: string): void {
     applyDraft({ ...draftRef.current, content: value });
   }
@@ -183,6 +189,7 @@ export function useNoteEditor(
     setTitle,
     setCategory,
     setTags,
+    setAliases,
     setContent,
     flush,
     saveNow,

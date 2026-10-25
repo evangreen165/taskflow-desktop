@@ -148,20 +148,20 @@ export default function CalendarPage(): JSX.Element {
   }, [obsidianEnabled, spaceId]);
 
   /**
-   * Notes belonging to a day, strictly by the note's local creation date.
-   * Titles are ignored (renaming must not move a note) and there is no limit.
+   * Notes belonging to a day: created on that local day OR titled with the
+   * daily format for that specific day (so a past/future daily note shows up).
+   * No title-based filtering of other notes and no limit.
    */
   function notesForDate(day: Date): NoteListItem[] {
     if (!obsidianEnabled) {
       return [];
     }
     const key = format(day, "yyyy-MM-dd");
+    const dailyTitle = formatDailyTitle(day, dailyFormat).toLowerCase();
     return notes.filter((note) => {
       const created = new Date(note.createdAt);
-      if (Number.isNaN(created.getTime())) {
-        return false;
-      }
-      return format(created, "yyyy-MM-dd") === key;
+      const createdKey = Number.isNaN(created.getTime()) ? null : format(created, "yyyy-MM-dd");
+      return createdKey === key || note.title.trim().toLowerCase() === dailyTitle;
     });
   }
 

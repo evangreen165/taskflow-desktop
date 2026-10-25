@@ -8,6 +8,7 @@ export interface NoteMeta {
   title: string;
   category: string;
   tags: string[];
+  aliases: string[];
   authorId: string;
   createdAt: string;
   updatedAt: string;
@@ -74,6 +75,7 @@ export const NotesService = {
     title: string,
     category: string,
     tags: string[],
+    aliases: string[],
     content: string,
     version: number,
   ): Promise<Result<Note>> {
@@ -83,6 +85,7 @@ export const NotesService = {
       title,
       category,
       tags,
+      aliases,
       content,
       expectedVersion: version,
     });

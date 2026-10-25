@@ -642,7 +642,7 @@
   z-index: 80;
   min-width: 220px;
   max-width: 320px;
-  max-height: 240px;
+  max-height: 200px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -711,4 +711,21 @@
 :global(.callout-important) {
   background: rgba(139, 92, 246, 0.12);
   border-color: #8b5cf6;
+}
+
+.noteEmbed {
+  display: block;
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.noteEmbedTitle {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-muted);
 }

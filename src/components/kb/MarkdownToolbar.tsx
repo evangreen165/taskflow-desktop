@@ -268,36 +268,38 @@ export default function MarkdownToolbar({
         <button type="button" title="Блок кода" onClick={() => wrap("\n```\n", "\n```\n", "код")}>
           {"</>"}
         </button>
-        <div className={`${styles.menuWrap} ${styles.calloutWrap}`}>
-          <button
-            type="button"
-            title="Блок внимания (callout)"
-            onClick={() => setCalloutOpen((open) => !open)}
-          >
-            💡
-          </button>
-          {calloutOpen ? (
-            <div className={styles.dropdownMenu}>
-              {[
-                { type: "NOTE", label: "🔵 Note" },
-                { type: "WARNING", label: "🔴 Warning" },
-                { type: "TIP", label: "🟢 Tip" },
-                { type: "IMPORTANT", label: "🟣 Important" },
-              ].map((option) => (
-                <button
-                  key={option.type}
-                  type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    insertCallout(option.type);
-                  }}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        {obsidianEnabled ? (
+          <div className={`${styles.menuWrap} ${styles.calloutWrap}`}>
+            <button
+              type="button"
+              title="Блок внимания (callout)"
+              onClick={() => setCalloutOpen((open) => !open)}
+            >
+              💡
+            </button>
+            {calloutOpen ? (
+              <div className={styles.dropdownMenu}>
+                {[
+                  { type: "NOTE", label: "🔵 Note" },
+                  { type: "WARNING", label: "🔴 Warning" },
+                  { type: "TIP", label: "🟢 Tip" },
+                  { type: "IMPORTANT", label: "🟣 Important" },
+                ].map((option) => (
+                  <button
+                    key={option.type}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      insertCallout(option.type);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className={styles.group}>
@@ -314,13 +316,15 @@ export default function MarkdownToolbar({
         </button>
       </div>
 
-      <div className={`${styles.group} ${styles.templatesWrap}`}>
-        <button ref={templatesBtnRef} type="button" title="Шаблоны" onClick={toggleTemplates}>
-          📋 Шаблоны
-        </button>
-      </div>
+      {obsidianEnabled ? (
+        <div className={`${styles.group} ${styles.templatesWrap}`}>
+          <button ref={templatesBtnRef} type="button" title="Шаблоны" onClick={toggleTemplates}>
+            📋 Шаблоны
+          </button>
+        </div>
+      ) : null}
 
-      {templatesOpen && templatesPos
+      {obsidianEnabled && templatesOpen && templatesPos
         ? createPortal(
             <div
               className={styles.templatesMenu}

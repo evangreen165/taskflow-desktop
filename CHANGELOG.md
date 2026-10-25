@@ -2,6 +2,31 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.10.5] - 2026-10-25
+
+### Added
+
+- **Note embeds** `![[Note Title]]`: rendered inline as a styled box with the
+  embedded note's content (resolved via `notesResolveTitle`); the `[[`
+  autocomplete also triggers on `![[` and inserts an embed
+- **Aliases**: `NoteMeta.aliases` (editable in the article header, saved through
+  `notesUpdate`); `notesResolveTitle` and the autocomplete match both the title
+  and aliases
+
+### Fixed
+
+- **Toolbar gating**: the Callout 💡, Templates 📋 and Wiki-link buttons render
+  only when the plugin is enabled
+- **Daily notes**: a note belongs to a day if it was created on that local day
+  **or** its title matches the daily format for that day, so a daily note for a
+  past/future date appears in the calendar
+- **Autocomplete**: no longer limited to 8 items and scrolls (`max-height:
+  200px; overflow-y: auto`)
+
+### Changed
+
+- Version bumped to `0.10.5`
+
 ## [0.10.4] - 2026-10-25
 
 ### Fixed

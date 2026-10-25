@@ -19,6 +19,9 @@ pub struct NoteMeta {
     pub category: String,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Alternative names usable in `[[…]]` links.
+    #[serde(default)]
+    pub aliases: Vec<String>,
     pub author_id: String,
     pub created_at: String,
     pub updated_at: String,
@@ -286,6 +289,7 @@ pub fn create(
         title,
         category: category.trim().to_string(),
         tags: Vec::new(),
+        aliases: Vec::new(),
         author_id: author_id.to_string(),
         created_at: now.clone(),
         updated_at: now,
@@ -311,6 +315,7 @@ pub fn update(
     title: &str,
     category: &str,
     tags: &[String],
+    aliases: &[String],
     content: &str,
     expected_version: u64,
 ) -> Result<Note, AppError> {
@@ -325,12 +330,29 @@ pub fn update(
     meta.title = validate_title(title)?;
     meta.category = category.trim().to_string();
     meta.tags = tags.to_vec();
+    meta.aliases = normalize_aliases(aliases);
     meta.version += 1;
     meta.updated_at = now_rfc3339();
     fsops::write_json_atomic(&meta_path(root, id)?, &meta)?;
     fsops::write_text_atomic(&content_path(root, id)?, content)?;
     prune_history(&history_dir(root, id)?)?;
     get(root, id)
+}
+
+/// Trims aliases, drops empties and de-duplicates (case-insensitive).
+fn normalize_aliases(aliases: &[String]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for raw in aliases {
+        let alias = raw.trim();
+        if alias.is_empty() {
+            continue;
+        }
+        if seen.insert(alias.to_lowercase()) {
+            out.push(alias.to_string());
+        }
+    }
+    out
 }
 
 pub fn publish(root: &Path, id: &str, expected_version: u64) -> Result<Note, AppError> {
@@ -433,6 +455,7 @@ mod tests {
             "title",
             "category",
             "tags",
+            "aliases",
             "authorId",
             "createdAt",
             "updatedAt",

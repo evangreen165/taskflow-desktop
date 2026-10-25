@@ -299,6 +299,7 @@ pub fn notes_update_impl(
     title: String,
     category: String,
     tags: Vec<String>,
+    aliases: Vec<String>,
     content: String,
     expected_version: u64,
 ) -> Result<Note, AppError> {
@@ -313,6 +314,7 @@ pub fn notes_update_impl(
         &title,
         &category,
         &tags,
+        &aliases,
         &content,
         expected_version,
     )?;
@@ -334,6 +336,7 @@ pub fn notes_update(
     title: String,
     category: String,
     tags: Vec<String>,
+    aliases: Vec<String>,
     content: String,
     expected_version: u64,
 ) -> Result<Note, AppError> {
@@ -344,6 +347,7 @@ pub fn notes_update(
         title,
         category,
         tags,
+        aliases,
         content,
         expected_version,
     )
@@ -484,7 +488,12 @@ pub fn notes_resolve_title_impl(
         return Ok(None);
     }
     for meta in notes::list_meta(&space_dir)? {
-        if meta.title.trim().to_lowercase() == target {
+        if meta.title.trim().to_lowercase() == target
+            || meta
+                .aliases
+                .iter()
+                .any(|alias| alias.trim().to_lowercase() == target)
+        {
             return Ok(Some(meta.id));
         }
     }
@@ -822,6 +831,7 @@ mod tests {
             "V2".to_string(),
             "Процессы".to_string(),
             vec![],
+            vec![],
             "second".to_string(),
             1,
         )
@@ -839,6 +849,7 @@ mod tests {
         let err = notes_update_impl(&fx.state, SPACE.to_string(), note.meta.id.clone(),
             "V2".to_string(),
             "Процессы".to_string(),
+            vec![],
             vec![],
             "second".to_string(),
             99,
@@ -867,6 +878,7 @@ mod tests {
         notes_update_impl(&fx.state, SPACE.to_string(), note.meta.id.clone(),
             "V2".to_string(),
             "Процессы".to_string(),
+            vec![],
             vec![],
             "second".to_string(),
             1,
@@ -902,6 +914,7 @@ mod tests {
             notes_update_impl(&fx.state, SPACE.to_string(), note.meta.id.clone(),
                 format!("Title {i}"),
                 "Процессы".to_string(),
+                vec![],
                 vec![],
                 format!("content {i}"),
                 i,
@@ -1025,6 +1038,7 @@ mod tests {
             note.meta.id.clone(),
             "Private 2".to_string(),
             "Личное".to_string(),
+            vec![],
             vec![],
             "updated".to_string(),
             1,

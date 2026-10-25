@@ -10,6 +10,7 @@ function makeNote(overrides: Partial<Note> = {}): Note {
       title: "Онбординг",
       category: "Процессы",
       tags: ["kb"],
+      aliases: [],
       authorId: "u1",
       createdAt: "2026-10-01T00:00:00Z",
       updatedAt: "2026-10-01T00:00:00Z",
@@ -33,6 +34,7 @@ describe("noteToDraft", () => {
       title: "Онбординг",
       category: "Процессы",
       tags: ["kb"],
+      aliases: [],
       content: "Текст статьи.",
     });
   });
@@ -52,6 +54,7 @@ describe("buildNotePatch", () => {
       title: "Новое",
       category: "Процессы",
       tags: ["kb", "онбординг"],
+      aliases: [],
       content: "Текст статьи.",
     });
   });

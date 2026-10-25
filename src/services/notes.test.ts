@@ -54,13 +54,14 @@ describe("NotesService", () => {
 
   it("update sends spaceId and expectedVersion", async () => {
     invokeMock.mockResolvedValue({ meta: { version: 2 } });
-    await NotesService.update("sp1", "n1", "New", "C", ["kb"], "body", 1);
+    await NotesService.update("sp1", "n1", "New", "C", ["kb"], ["docker"], "body", 1);
     expect(invokeMock).toHaveBeenCalledWith("notesUpdate", {
       spaceId: "sp1",
       id: "n1",
       title: "New",
       category: "C",
       tags: ["kb"],
+      aliases: ["docker"],
       content: "body",
       expectedVersion: 1,
     });

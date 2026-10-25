@@ -131,6 +131,78 @@ function preprocessCallouts(content: string): string {
   return out.join("\n");
 }
 
+/** Rewrites `![[Title]]` into a `noteembed:` link when enabled. */
+function preprocessEmbeds(content: string, enabled: boolean): string {
+  if (!enabled) {
+    return content;
+  }
+  return content.replace(/!\[\[([^\]\n]+)\]\]/g, (_match, rawTitle: string) => {
+    const title = rawTitle.trim();
+    return `[${title}](noteembed:${encodeURIComponent(title)})`;
+  });
+}
+
+function NoteEmbed({ title, spaceId }: { title: string; spaceId: string }): JSX.Element {
+  const [content, setContent] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void NotesService.resolveTitle(spaceId, title).then(async (resolved) => {
+      if (cancelled) {
+        return;
+      }
+      if (resolved.ok && resolved.value) {
+        const note = await NotesService.get(spaceId, resolved.value);
+        if (!cancelled) {
+          if (note.ok) {
+            setContent(note.value.content);
+          } else {
+            setMissing(true);
+          }
+        }
+      } else if (!cancelled) {
+        setMissing(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [spaceId, title]);
+
+  if (missing) {
+    return <span className={styles.noteEmbed}>Заметка «{title}» не найдена</span>;
+  }
+  if (content === null) {
+    return <span className={styles.noteEmbed}>Загрузка «{title}»…</span>;
+  }
+  return (
+    <span className={styles.noteEmbed}>
+      <span className={styles.noteEmbedTitle}>📄 {title}</span>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
+        urlTransform={(url) => url}
+        components={{
+          img: AttachmentImage,
+          a: ({ href, children }) =>
+            href?.startsWith("wikilink:") ? (
+              <WikiLink
+                title={decodeURIComponent(href.slice("wikilink:".length))}
+                spaceId={spaceId}
+                category=""
+              />
+            ) : (
+              <AttachmentLink href={href}>{children}</AttachmentLink>
+            ),
+        }}
+      >
+        {preprocessWikiLinks(content, true)}
+      </ReactMarkdown>
+    </span>
+  );
+}
+
 function WikiLink({
   title,
   spaceId,
@@ -461,7 +533,12 @@ export default function KbArticlePage(): JSX.Element {
               components={{
                 img: AttachmentImage,
                 a: ({ href, children }) =>
-                  href?.startsWith("wikilink:") ? (
+                  href?.startsWith("noteembed:") ? (
+                    <NoteEmbed
+                      title={decodeURIComponent(href.slice("noteembed:".length))}
+                      spaceId={spaceId ?? ""}
+                    />
+                  ) : href?.startsWith("wikilink:") ? (
                     <WikiLink
                       title={decodeURIComponent(href.slice("wikilink:".length))}
                       spaceId={spaceId ?? ""}
@@ -472,8 +549,9 @@ export default function KbArticlePage(): JSX.Element {
                   ),
               }}
             >
-              {preprocessCallouts(preprocessWikiLinks(note.content, obsidianEnabled)) ||
-                "*Нет содержания.*"}
+              {preprocessCallouts(
+                preprocessWikiLinks(preprocessEmbeds(note.content, obsidianEnabled), obsidianEnabled),
+              ) || "*Нет содержания.*"}
             </ReactMarkdown>
           </div>
           {obsidianEnabled && spaceId ? (
@@ -637,6 +715,7 @@ function ArticleEditor({
     setTitle,
     setCategory,
     setTags,
+    setAliases,
     setContent,
     saveNow,
     reload,
@@ -645,6 +724,7 @@ function ArticleEditor({
 
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [tagInput, setTagInput] = useState("");
+  const [aliasInput, setAliasInput] = useState(() => draft.aliases.join(", "));
   const [resizeTarget, setResizeTarget] = useState<{
     sha: string;
     alt: string;
@@ -662,6 +742,7 @@ function ArticleEditor({
     items: NoteListItem[];
     top: number;
     left: number;
+    embed: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -693,12 +774,15 @@ function ArticleEditor({
       return;
     }
     const query = between.trim().toLowerCase();
-    const items = allNotes
-      .filter((note) => note.title.toLowerCase().includes(query))
-      .slice(0, 8);
+    const items = allNotes.filter(
+      (note) =>
+        note.title.toLowerCase().includes(query) ||
+        note.aliases.some((alias) => alias.toLowerCase().includes(query)),
+    );
+    const embed = open > 0 && before[open - 1] === "!";
     const element = textareaRef.current;
     const coords = element ? caretCoordinates(element, value, caret) : { top: 0, left: 0 };
-    setWikiSuggest({ start: open, items, top: coords.top, left: coords.left });
+    setWikiSuggest({ start: embed ? open - 1 : open, items, top: coords.top, left: coords.left, embed });
   }
 
   function insertWikiSuggestion(title: string): void {
@@ -708,13 +792,13 @@ function ArticleEditor({
       return;
     }
     const caret = element.selectionStart;
-    const next =
-      draft.content.slice(0, suggestion.start) + `[[${title}]]` + draft.content.slice(caret);
+    const syntax = suggestion.embed ? `![[${title}]]` : `[[${title}]]`;
+    const next = draft.content.slice(0, suggestion.start) + syntax + draft.content.slice(caret);
     setContent(next);
     setWikiSuggest(null);
     requestAnimationFrame(() => {
       element.focus();
-      const position = suggestion.start + title.length + 4;
+      const position = suggestion.start + syntax.length;
       element.setSelectionRange(position, position);
     });
   }
@@ -912,6 +996,35 @@ function ArticleEditor({
       </div>
 
       <div className={styles.section}>
+        <label>Алиасы (для ссылок [[…]])</label>
+        <input
+          className={styles.tagInput}
+          type="text"
+          placeholder="Через запятую: Docker, Инструкция"
+          value={aliasInput}
+          onChange={(e) => setAliasInput(e.target.value)}
+          onBlur={() =>
+            setAliases(
+              aliasInput
+                .split(",")
+                .map((value) => value.trim())
+                .filter(Boolean),
+            )
+          }
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              setAliases(
+                aliasInput
+                  .split(",")
+                  .map((value) => value.trim())
+                  .filter(Boolean),
+              );
+            }
+          }}
+        />
+      </div>
+
+      <div className={styles.section}>
         <div className={styles.tabs}>
           <button
             type="button"
@@ -1008,7 +1121,12 @@ function ArticleEditor({
                     />
                   ),
                   a: ({ href, children }) =>
-                    href?.startsWith("wikilink:") ? (
+                    href?.startsWith("noteembed:") ? (
+                      <NoteEmbed
+                        title={decodeURIComponent(href.slice("noteembed:".length))}
+                        spaceId={spaceId}
+                      />
+                    ) : href?.startsWith("wikilink:") ? (
                       <WikiLink
                         title={decodeURIComponent(href.slice("wikilink:".length))}
                         spaceId={spaceId}
@@ -1019,8 +1137,9 @@ function ArticleEditor({
                     ),
                 }}
               >
-                {preprocessCallouts(preprocessWikiLinks(draft.content, obsidianEnabled)) ||
-                  "*Нет содержания.*"}
+                {preprocessCallouts(
+                  preprocessWikiLinks(preprocessEmbeds(draft.content, obsidianEnabled), obsidianEnabled),
+                ) || "*Нет содержания.*"}
               </ReactMarkdown>
             </div>
             {resizeTarget && toolbarPosition ? (
