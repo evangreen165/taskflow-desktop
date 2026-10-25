@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
+import { createPortal } from "react-dom";
 
 import { WorkspaceService } from "@/services/workspace";
 
@@ -105,9 +106,19 @@ export default function MarkdownToolbar({
   obsidianEnabled = false,
 }: MarkdownToolbarProps): JSX.Element {
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templatesPos, setTemplatesPos] = useState<{ top: number; left: number } | null>(null);
+  const templatesBtnRef = useRef<HTMLButtonElement | null>(null);
   const [calloutOpen, setCalloutOpen] = useState(false);
   const [customTemplates, setCustomTemplates] = useState<{ name: string; content: string }[]>([]);
   const today = new Date().toISOString().slice(0, 10);
+
+  function toggleTemplates(): void {
+    if (!templatesOpen && templatesBtnRef.current) {
+      const rect = templatesBtnRef.current.getBoundingClientRect();
+      setTemplatesPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setTemplatesOpen((open) => !open);
+  }
 
   // Refresh custom templates whenever the templates menu opens.
   useEffect(() => {
@@ -304,45 +315,53 @@ export default function MarkdownToolbar({
       </div>
 
       <div className={`${styles.group} ${styles.templatesWrap}`}>
-        <button
-          type="button"
-          title="Шаблоны"
-          onClick={() => setTemplatesOpen((open) => !open)}
-        >
+        <button ref={templatesBtnRef} type="button" title="Шаблоны" onClick={toggleTemplates}>
           📋 Шаблоны
         </button>
-        {templatesOpen ? (
-          <div className={styles.templatesMenu}>
-            {templates.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  insertTemplate(template.text);
-                }}
-              >
-                {template.label}
-              </button>
-            ))}
-            {customTemplates.length > 0 ? (
-              <div className={styles.menuSeparator}>Мои шаблоны</div>
-            ) : null}
-            {customTemplates.map((template) => (
-              <button
-                key={`custom-${template.name}`}
-                type="button"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  insertTemplate(template.content);
-                }}
-              >
-                {template.name}
-              </button>
-            ))}
-          </div>
-        ) : null}
       </div>
+
+      {templatesOpen && templatesPos
+        ? createPortal(
+            <div
+              className={styles.templatesMenu}
+              style={{
+                position: "fixed",
+                top: templatesPos.top,
+                left: templatesPos.left,
+                right: "auto",
+              }}
+            >
+              {templates.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    insertTemplate(template.text);
+                  }}
+                >
+                  {template.label}
+                </button>
+              ))}
+              {customTemplates.length > 0 ? (
+                <div className={styles.menuSeparator}>Мои шаблоны</div>
+              ) : null}
+              {customTemplates.map((template) => (
+                <button
+                  key={`custom-${template.name}`}
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    insertTemplate(template.content);
+                  }}
+                >
+                  {template.name}
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

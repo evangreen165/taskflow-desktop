@@ -333,6 +333,20 @@ pub async fn workspace_save_template(
         .map_err(|e| AppError::new("IO", format!("template write failed: {e}")))?
 }
 
+/// Removes a custom template; returns the full map.
+#[tauri::command(rename = "workspaceDeleteTemplate")]
+#[tracing::instrument(skip(state))]
+pub async fn workspace_delete_template(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<std::collections::HashMap<String, String>, AppError> {
+    state.require_auth()?;
+    let root = state.root()?;
+    tokio::task::spawn_blocking(move || workspace::delete_template(&root, &name))
+        .await
+        .map_err(|e| AppError::new("IO", format!("template delete failed: {e}")))?
+}
+
 /// Opens an external URL (http/https) in the default browser, or a local
 /// file/folder path (including `file://` URLs) in the OS file explorer.
 #[tauri::command(rename = "openExternal")]

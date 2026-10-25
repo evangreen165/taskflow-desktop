@@ -141,6 +141,17 @@ pub fn save_template(
     Ok(cfg.custom_templates)
 }
 
+/// Removes a custom template and returns the full map.
+pub fn delete_template(
+    root: &Path,
+    name: &str,
+) -> Result<std::collections::HashMap<String, String>, AppError> {
+    let mut cfg = read_cfg(root)?;
+    cfg.custom_templates.remove(name.trim());
+    fsops::write_json_atomic(&root.join("config.json"), &cfg)?;
+    Ok(cfg.custom_templates)
+}
+
 /// Task-related workspace settings exposed to the UI.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

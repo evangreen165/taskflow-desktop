@@ -329,7 +329,9 @@ export default function WorkspaceLayout(): JSX.Element {
                   title={plugin.name}
                   onClick={() => openPlugin(plugin.id)}
                 >
-                  <span aria-hidden="true">🧩</span>
+                  <span aria-hidden="true">
+                    {plugin.id === "obsidian-graph" ? "🕸️" : "🧩"}
+                  </span>
                   <span className={styles.itemText}>{plugin.name}</span>
                   {pluginBusy[plugin.id] ? (
                     <span className={styles.pluginBusyDot} aria-label="Идёт генерация…" />

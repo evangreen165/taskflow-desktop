@@ -147,19 +147,21 @@ export default function CalendarPage(): JSX.Element {
     };
   }, [obsidianEnabled, spaceId]);
 
-  /** Notes belonging to a day: created that local day OR the daily-format title. */
+  /**
+   * Notes belonging to a day, strictly by the note's local creation date.
+   * Titles are ignored (renaming must not move a note) and there is no limit.
+   */
   function notesForDate(day: Date): NoteListItem[] {
     if (!obsidianEnabled) {
       return [];
     }
     const key = format(day, "yyyy-MM-dd");
-    const dailyTitle = formatDailyTitle(day, dailyFormat).toLowerCase();
     return notes.filter((note) => {
       const created = new Date(note.createdAt);
-      const createdKey = Number.isNaN(created.getTime()) ? null : format(created, "yyyy-MM-dd");
-      return (
-        createdKey === key || note.title.trim().toLowerCase() === dailyTitle
-      );
+      if (Number.isNaN(created.getTime())) {
+        return false;
+      }
+      return format(created, "yyyy-MM-dd") === key;
     });
   }
 

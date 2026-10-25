@@ -2,6 +2,31 @@
 
 All notable changes to TaskFlow are documented in this file.
 
+## [0.10.4] - 2026-10-25
+
+### Fixed
+
+- **Daily notes**: notes are matched to a calendar day strictly by the note's
+  **local** `createdAt` date (no title matching, no limit), so multiple notes
+  per day appear in «Заметки этого дня» and renaming no longer removes a note
+  from its day
+- **Templates dropdown** is rendered through a React portal into `document.body`
+  and positioned from the button's bounding rect, so it is no longer clipped by
+  the editor container
+
+### Added
+
+- **Templates management modal** in Settings → Общие («Управление шаблонами»):
+  list, create (name + large Markdown textarea) and delete templates
+  (`workspaceDeleteTemplate`); the cramped inline form was removed
+
+### Changed
+
+- Rebranded the plugin to **«Wiki & Graph (База знаний)»** (manifest, plugin
+  title, sidebar icon 🕸️) to avoid Obsidian branding; plugin version 1.0.1 so
+  existing workspaces receive the update
+- Version bumped to `0.10.4`
+
 ## [0.10.3] - 2026-10-25
 
 ### Added

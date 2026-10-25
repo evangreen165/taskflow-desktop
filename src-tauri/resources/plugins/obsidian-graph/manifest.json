@@ -1,6 +1,6 @@
 {
   "id": "obsidian-graph",
-  "name": "Obsidian Core (Граф)",
-  "version": "1.0.0",
+  "name": "Wiki & Graph (База знаний)",
+  "version": "1.0.1",
   "ui": { "inject": "sidebar" }
 }

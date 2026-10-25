@@ -61,6 +61,7 @@ export default function SettingsPage(): JSX.Element {
   const [templateContent, setTemplateContent] = useState("");
   const [templates, setTemplates] = useState<Record<string, string>>({});
   const [templateBusy, setTemplateBusy] = useState(false);
+  const [templatesModalOpen, setTemplatesModalOpen] = useState(false);
 
   // Load the extension-system settings, installed plugins, and (for admins)
   // the session lifetime once.
@@ -178,6 +179,16 @@ export default function SettingsPage(): JSX.Element {
     setTemplateName("");
     setTemplateContent("");
     pushToast("Шаблон сохранён", "success");
+  }
+
+  async function removeTemplate(name: string): Promise<void> {
+    const result = await WorkspaceService.deleteTemplate(name);
+    if (!result.ok) {
+      pushToast(result.error.message, "error");
+      return;
+    }
+    setTemplates(result.value);
+    pushToast("Шаблон удалён", "success");
   }
 
   function handleClearCache(): void {
@@ -434,38 +445,13 @@ export default function SettingsPage(): JSX.Element {
             <p className={styles.muted}>
               Пользовательские шаблоны Markdown доступны в редакторе заметок (📋 Шаблоны).
             </p>
-            <input
-              type="text"
-              placeholder="Название шаблона"
-              value={templateName}
-              onChange={(event) => setTemplateName(event.target.value)}
-            />
-            <textarea
-              className={styles.templateArea}
-              placeholder="Markdown-содержимое шаблона"
-              value={templateContent}
-              onChange={(event) => setTemplateContent(event.target.value)}
-            />
             <button
-              className="btn-primary"
+              className="btn-ghost"
               type="button"
-              disabled={templateBusy}
-              onClick={() => void saveTemplate()}
+              onClick={() => setTemplatesModalOpen(true)}
             >
-              {templateBusy ? "Сохранение…" : "Сохранить шаблон"}
+              Управление шаблонами
             </button>
-            {Object.keys(templates).length > 0 ? (
-              <div className={styles.templateList}>
-                <span className={styles.muted}>Сохранённые:</span>
-                {Object.keys(templates)
-                  .sort()
-                  .map((name) => (
-                    <span key={name} className={styles.templateChip}>
-                      {name}
-                    </span>
-                  ))}
-              </div>
-            ) : null}
           </div>
 
           <div className={styles.sessionBlock}>
@@ -654,6 +640,73 @@ export default function SettingsPage(): JSX.Element {
       ) : null}
 
       {changeFolderOpen ? <ChangeFolderModal onClose={() => setChangeFolderOpen(false)} /> : null}
+
+      {templatesModalOpen ? (
+        <div className={styles.modalOverlay} onClick={() => setTemplatesModalOpen(false)}>
+          <div
+            className={styles.modal}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Управление шаблонами"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2>Управление шаблонами</h2>
+
+            <div className={styles.modalList}>
+              {Object.keys(templates).length === 0 ? (
+                <p className={styles.muted}>Нет пользовательских шаблонов.</p>
+              ) : (
+                Object.keys(templates)
+                  .sort()
+                  .map((name) => (
+                    <div key={name} className={styles.modalRow}>
+                      <span>{name}</span>
+                      <button
+                        className="btn-ghost"
+                        type="button"
+                        onClick={() => void removeTemplate(name)}
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  ))
+              )}
+            </div>
+
+            <h3>Новый шаблон</h3>
+            <input
+              type="text"
+              placeholder="Название шаблона"
+              value={templateName}
+              onChange={(event) => setTemplateName(event.target.value)}
+            />
+            <textarea
+              className={styles.templateArea}
+              placeholder="Markdown-содержимое шаблона"
+              value={templateContent}
+              onChange={(event) => setTemplateContent(event.target.value)}
+            />
+
+            <div className={styles.modalActions}>
+              <button
+                className="btn-ghost"
+                type="button"
+                onClick={() => setTemplatesModalOpen(false)}
+              >
+                Закрыть
+              </button>
+              <button
+                className="btn-primary"
+                type="button"
+                disabled={templateBusy}
+                onClick={() => void saveTemplate()}
+              >
+                {templateBusy ? "Сохранение…" : "Сохранить шаблон"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

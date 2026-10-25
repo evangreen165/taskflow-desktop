@@ -67,6 +67,10 @@ export const WorkspaceService = {
   saveTemplate(name: string, content: string): Promise<Result<Record<string, string>>> {
     return invokeCommand<Record<string, string>>("workspaceSaveTemplate", { name, content });
   },
+
+  deleteTemplate(name: string): Promise<Result<Record<string, string>>> {
+    return invokeCommand<Record<string, string>>("workspaceDeleteTemplate", { name });
+  },
 };
 
 export interface TaskSettings {
